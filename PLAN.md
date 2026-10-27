@@ -17,11 +17,13 @@ Loopback requests require a random per-launch secret. Existing authenticated MCP
 
 ## 3. Milestones
 - [x] Inspect upstream and choose runtime architecture.
-- [ ] Implement desktop runtime, authenticated server and release staging.
-- [ ] Run upstream checks and build production assets.
-- [ ] Package executable, portable release and per-user NSIS installer.
-- [ ] Validate installed release, CAD, file operations, offline, persistence and MCP.
-- [ ] Finalize reports, licenses, source, checksums and local commits.
+- [x] Implement desktop runtime, authenticated server and release staging.
+- [x] Run upstream checks and build production assets.
+- [x] Package executable, portable release and per-user NSIS installer.
+- [x] Validate installed release, CAD, file operations, offline, persistence and MCP.
+- [x] Finalize reports, licenses, source, checksums and local commits.
 
 ## 4. STATE HANDOFF
-Dependencies are being installed. See docs/desktop/PROGRESS.md for execution evidence.
+COMPLETE. Final runtime source commit 38c5c1008bac232eac28be89e6993bc49b8f5446.
+Installed app: %LOCALAPPDATA%/Programs/Layerling Desktop/Layerling Desktop.exe.
+Release artifacts: dist/windows. See docs/desktop/BUILD_REPORT.md and validation-final evidence.

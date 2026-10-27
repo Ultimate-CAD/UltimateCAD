@@ -35,10 +35,21 @@
 - One staging attempt raced the independent notices generator; rerunning it serially passed.
   Build/release scripts now run their dependent stages sequentially.
 
-## Next step
+## Installed validation and final release
 Installed application passed all 25 checks, including with developer apps/ temporarily hidden
 and restored. NSIS install, uninstall, profile preservation, existing-install preservation and
 reinstall passed. Six additional installed checks passed: STL drop, exact STEP import, guide,
 Japanese typeface, single instance, saved window size. Closing immediately after window creation
 exposed a shutdown/loadURL race; fixed cancellation handling before the final release build.
-Repackage final binaries, verify that cancellation fix, rerun installed checks and finalize hashes.
+Final runtime source commit: 38c5c1008bac232eac28be89e6993bc49b8f5446.
+- `node desktop/release.mjs --stage-only`: both final Windows targets built successfully.
+- Final installer applied successfully; final installed 25-check run passed with 150% DPI
+  and compatible modified WASM, restoring original bytes afterward.
+- Three immediate-close tests passed after the startup cancellation fix.
+- Six additional installed checks passed again after final installation.
+- Portable executable self-extracted and launched with System32-only PATH; real primitive,
+  OCCT hollow and STL export passed; server exited normally afterward.
+- Source-hidden final installed validation passed; source directory restored.
+- Reports, release notes, source, dependency notices and SHA-256 manifest delivered under
+  dist/windows. No source or release artifacts were published externally.
+Status: COMPLETE. No required implementation work remains.

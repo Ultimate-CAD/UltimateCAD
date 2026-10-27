@@ -127,3 +127,7 @@ summary: كيف ينشئ مساعد ذكاء اصطناعي مثل Gemini أو C
 تقول: "ابنِ لي علبة مستديرة قطرها 60 مم وارتفاعها 40 مم بجدار 2.5 مم، مفتوحة من الأعلى، مع غطاء مسطح عليه كلمة 'Tea' مكتوبة على قوس." فينشئ الذكاء الاصطناعي الأسطوانات، ويفرّغ إحداها، ويضع النص المنحني على الغطاء، ويلتقط صورًا في النهاية ليرى هل يتطابق كل شيء.
 
 > **نصيحة:** أعطِ الذكاء الاصطناعي أبعادًا محددة وأخبره بالغرض من القطعة ("حامل لقضيب 12 مم، يناسب Bambu Lab A1"). فيتخذ عندها قرارات أكثر منطقية. وراقبه وهو يبني: يمكنك التدخل بنفسك في أي وقت، لأنه المحرر نفسه.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeModules = path.join(repositoryRoot, "node_modules");
-const legalRoot = path.join(repositoryRoot, "dist", "windows", "legal");
-const runtimeNodeModules = path.join(repositoryRoot, "dist", "desktop-stage", "runtime", "node_modules");
+const legalRoot = path.join(process.env.LAYERLING_RELEASE_DIR || path.join(repositoryRoot, "dist", "windows"), "legal");
+const runtimeNodeModules = path.join(repositoryRoot, "dist", process.env.LAYERLING_ULTIMATE_BUILD === "1" ? "ultimate-stage" : "desktop-stage", "runtime", "node_modules");
 const licenseNames = /^(license|licence|copying|notice|copyright|third[-_ ]party[-_ ]notice)(\.|$)/i;
 const textExtensions = new Set(["", ".txt", ".md", ".rst", ".html"]);
 

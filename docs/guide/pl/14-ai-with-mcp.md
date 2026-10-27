@@ -127,3 +127,7 @@ Dzięki temu AI może sprawdzać samo siebie: tworzy coś, robi zdjęcie, patrzy
 Mówisz: „Zbuduj mi okrągłe pudełko o średnicy 60 mm i wysokości 40 mm ze ścianką 2,5 mm, otwarte u góry, oraz płaską pokrywkę z napisem »Herbata« na łuku”. AI tworzy walce, drąży jeden z nich, kładzie napis na łuku na pokrywce, a na końcu robi zdjęcia, żeby sprawdzić, czy pasuje.
 
 > **Wskazówka:** podawaj AI konkretne wymiary i mów, do czego służy część („uchwyt na pręt 12 mm, pasuje do Bambu Lab A1”). Wtedy podejmuje rozsądniejsze decyzje. I patrz, jak buduje: w każdej chwili możesz wtrącić się sam, bo to ten sam edytor.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

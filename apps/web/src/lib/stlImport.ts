@@ -121,14 +121,14 @@ export function importExtensionSupported(fileName: string) {
   return SUPPORTED_IMPORT_EXTENSIONS.has(fileExtension(fileName));
 }
 
-export function importedShapeFromStl(fileName: string, buffer: ArrayBuffer): WorkplaneShape {
+export function importedShapeFromStl(fileName: string, buffer: ArrayBuffer, forceZUp = false): WorkplaneShape {
   const rawGeometry = stlLoader.parse(buffer);
   const geometry = rawGeometry.index ? rawGeometry.toNonIndexed() : rawGeometry.clone();
   const position = geometry.getAttribute("position");
   const normal = geometry.getAttribute("normal");
   const rawPositions: number[] = [];
   const rawNormals: number[] = [];
-  const usesLayerlingYUp = stlUsesLayerlingYUp(buffer, position);
+  const usesLayerlingYUp = !forceZUp && stlUsesLayerlingYUp(buffer, position);
 
   for (let i = 0; i < position.count; i += 1) {
     const sourcePosition: [number, number, number] = [position.getX(i), position.getY(i), position.getZ(i)];

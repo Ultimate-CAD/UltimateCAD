@@ -36,9 +36,10 @@ async function prepareImportFiles(files: readonly File[]) {
     }
     try {
       const entries = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-        filter: (entry) => !entry.name.endsWith("/") && /\.(obj|mtl|stl|3mf|svg|step|stp|dxf)$/i.test(entry.name) && !/(^|\/)__MACOSX\//.test(entry.name),
+        filter: (entry) => !entry.name.endsWith("/") && /\.(scad|json|dat|csv|png|obj|mtl|stl|3mf|svg|step|stp|dxf)$/i.test(entry.name) && !/(^|\/)__MACOSX\//.test(entry.name),
       });
-      const inside = Object.entries(entries).map(([name, bytes]) => new File([bytes as BlobPart], name.split("/").pop() || name));
+      const hasScad = Object.keys(entries).some(name => /\.scad$/i.test(name));
+      const inside = Object.entries(entries).map(([name, bytes]) => new File([bytes as BlobPart], hasScad ? name : name.split("/").pop() || name));
       if (!inside.some((entry) => !/\.mtl$/i.test(entry.name))) {
         failures.push({ fileName: file.name, reason: t("status.importZipEmpty") });
         continue;
@@ -101,6 +102,21 @@ export async function importModelFiles(
   };
   if (result.mtlOnly) {
     result.failures.push({ fileName: selected[0]?.name ?? ".mtl", reason: t("status.importMtlAlone") });
+    return result;
+  }
+
+  const scadFiles = files.filter(file => /\.scad$/i.test(file.name));
+  if (scadFiles.length) {
+    const entry = scadFiles.find(file => /(^|\/)main\.scad$/i.test(file.name)) ?? scadFiles[0];
+    try {
+      options.onProgress?.(0, 1, entry, false);
+      const { importOpenScadFile } = await import("@/lib/openScadClient");
+      const shape = await importOpenScadFile(entry, files);
+      if (options.cancelled?.()) return null;
+      result.shapes.push(shape);
+      result.importedFileNames.push(entry.name);
+      result.notes.push("OpenSCAD source and dependency files are preserved with this mesh.");
+    } catch (error) { result.failures.push({ fileName: entry.name, reason: error instanceof Error ? error.message : String(error) }); }
     return result;
   }
 

@@ -43,7 +43,10 @@
     "desktop:stage": "node desktop/build.mjs --stage-only",
     "desktop:package": "electron-builder --config desktop/electron-builder.cjs",
     "desktop:release": "node desktop/release.mjs",
-    "desktop:test": "node desktop/validate.mjs"
+    "desktop:test": "node desktop/validate.mjs",
+    "ultimate:build": "node desktop/build-ultimate.mjs --no-package",
+    "ultimate:release": "node desktop/build-ultimate.mjs",
+    "ultimate:validate": "node desktop/validate-openscad.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.1",

@@ -127,3 +127,7 @@ In questo modo l’IA può controllare il proprio lavoro: crea una forma, acquis
 Puoi chiedere: «Costruisci una scatola cilindrica di 60 mm di diametro e 40 mm di altezza, con pareti spesse 2,5 mm e aperta in cima, più un coperchio piatto con la scritta “Tea” disposta ad arco». L’IA crea i cilindri, svuota quello interno, dispone il testo curvo sul coperchio e alla fine acquisisce alcune immagini per verificare che tutto combaci.
 
 > **Suggerimento:** indica all’IA misure precise e spiega a cosa serve il pezzo («supporto per un’asta da 12 mm, compatibile con Bambu Lab A1»). Potrà così fare scelte più sensate. E segui la costruzione: puoi intervenire in qualsiasi momento, perché l’IA lavora nello stesso editor.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

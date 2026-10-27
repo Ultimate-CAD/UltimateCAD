@@ -127,3 +127,7 @@ AI 使用的是與你相同的功能，走的也是你在編輯器中操作時�
 你說：「幫我做一個直徑 60 mm、高 40 mm、壁厚 2.5 mm、頂部開口的圓盒，再加一個平的蓋子，上面用弧形排列寫出『Tea』。」AI 會建立圓柱、把其中一個抽殼、把彎曲的文字放到蓋子上，最後拍幾張圖片看看合不合。
 
 > **提示：** 給 AI 具體的尺寸，並告訴它零件的用途（「12 mm 圓桿的固定座，適用 Bambu Lab A1」）。這樣它做的決定會更合理。也看著它建立：你隨時都能自己接手，因為用的是同一個編輯器。
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

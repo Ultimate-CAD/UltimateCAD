@@ -7,6 +7,7 @@ import { normalizePlacementWorkplane, placementWorkplaneIsBase, type PlacementWo
 import { importedShapeFromObj } from "@/lib/objImport";
 import { normalizeProjectAsset, sha256Hex } from "@/lib/projectAssets";
 import { canonicalizeShape } from "@/lib/workplaneShapes";
+import { validateOpenScadDocument } from "@/lib/openScadTypes";
 import { normalizeSketchStroke, SKETCH_STROKE_JOINS } from "@/lib/sketchStroke";
 import { normalizeTextEdge } from "@/lib/textEdge";
 import { isTextKeyring } from "@/lib/textGeometry";
@@ -1318,6 +1319,7 @@ function validateBentTubeDefinition(definition: Record<string, unknown>, label: 
 }
 
 function validateShapeDefinition(definition: Record<string, unknown>, label: string) {
+  if (definition.openScad !== undefined) validateOpenScadDocument(definition.openScad);
   const id = stringValue(definition.id, `${label}.id`);
   // An emptied name is a name too: the editor shows the shape's default name for it, so a design
   // renamed to nothing must still open (it is what the object list stores when its field is cleared).

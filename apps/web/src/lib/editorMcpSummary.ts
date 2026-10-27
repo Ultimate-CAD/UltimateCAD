@@ -117,6 +117,7 @@ function mcpShapeSettings(shape: WorkplaneShape): Record<string, string | number
 
 export function mcpShapeSummary(shape: WorkplaneShape): LayerlingMcpShapeSummary {
   return {
+    ...(shape.openScad ? { openScad: { fileName: shape.openScad.fileName, parameters: shape.openScad.parameters, expressions: shape.openScad.expressions, engineVersion: shape.openScad.engineVersion, meshKey: shape.openScad.meshKey } } : {}),
     id: shape.id,
     name: shape.name,
     kind: shape.kind,

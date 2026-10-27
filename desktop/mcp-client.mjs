@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-const profile = process.env.LAYERLING_DESKTOP_PROFILE || join(process.env.APPDATA, 'Layerling Desktop');
+const product = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).name === 'layerling-ultimate' ? 'Layerling Ultimate' : 'Layerling Desktop';
+const profile = process.env.LAYERLING_DESKTOP_PROFILE || join(process.env.APPDATA, product);
 try {
   const connection = JSON.parse(readFileSync(join(profile, 'connection.json'), 'utf8'));
   const url = new URL(connection.url);

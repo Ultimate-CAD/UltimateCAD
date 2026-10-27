@@ -262,8 +262,8 @@ export function splitShapesByPlaneOffThread(targets: readonly WorkplaneShape[], 
  * file held the page for over a second. The import window shows its own progress, so this says
  * nothing of its own.
  */
-export function importedShapeFromStlOffThread(fileName: string, buffer: ArrayBuffer): Promise<WorkplaneShape> {
-  return runGeometryTask("stl", { fileName, buffer }, async () => importedShapeFromStl(fileName, buffer), () => {
+export function importedShapeFromStlOffThread(fileName: string, buffer: ArrayBuffer, forceZUp = false): Promise<WorkplaneShape> {
+  return runGeometryTask("stl", { fileName, buffer, forceZUp }, async () => importedShapeFromStl(fileName, buffer, forceZUp), () => {
     throw new Error(t("status.computeTimedOut"));
   }, undefined, true);
 }

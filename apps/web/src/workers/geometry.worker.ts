@@ -40,8 +40,8 @@ self.onmessage = async (event: MessageEvent<GeometryWorkerRequest>) => {
       const { shape, plane } = args as { shape: WorkplaneShape; plane: Pick<ModelSplitPlane, "axis" | "normal" | "position"> };
       result = await splitShapeIfCrossed(shape, plane);
     } else if (request.task === "stl") {
-      const { fileName, buffer } = args as { fileName: string; buffer: ArrayBuffer };
-      result = importedShapeFromStl(fileName, buffer);
+      const { fileName, buffer, forceZUp } = args as { fileName: string; buffer: ArrayBuffer; forceZUp?: boolean };
+      result = importedShapeFromStl(fileName, buffer, forceZUp);
     } else if (request.task === "obj") {
       const { fileName, text, mtlSources } = args as { fileName: string; text: string; mtlSources: string[] };
       result = importedShapesFromObj(fileName, text, mtlSources);

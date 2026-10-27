@@ -3,11 +3,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
 const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
-app.setName('Layerling Desktop');
-app.setAppUserModelId('org.layerling.desktop');
+const ultimate = app.getName().toLowerCase().includes('ultimate') || process.env.LAYERLING_ULTIMATE_BUILD === '1';
+const productName = ultimate ? 'Layerling Ultimate' : 'Layerling Desktop';
+app.setName(productName);
+app.setAppUserModelId(ultimate ? 'org.layerling.ultimate' : 'org.layerling.desktop');
 // Explicit profile override is used by isolated release verification, never by renderer input.
-app.setPath('userData', path.resolve(process.env.LAYERLING_DESKTOP_PROFILE || path.join(app.getPath('appData'), 'Layerling Desktop')));
+app.setPath('userData', path.resolve(process.env.LAYERLING_DESKTOP_PROFILE || path.join(app.getPath('appData'), productName)));
 const profile = app.getPath('userData');
 fs.mkdirSync(profile, { recursive: true });
 const log = message => fs.appendFileSync(path.join(profile, 'desktop.log'), `${new Date().toISOString()} ${message}\n`);
@@ -32,7 +35,14 @@ function freePort(wanted) {
 }
 function cleanup() {
   quitting = true;
-  if (server) { server.kill(); server = null; }
+  if (server) {
+    // Also terminate a native OpenSCAD render below the managed utility process.
+    // Killing only the Node parent can leave a console launcher/CGAL child alive.
+    if (ultimate && Number.isInteger(server.pid) && server.pid > 0) {
+      spawnSync(path.join(process.env.SystemRoot || 'C:/Windows', 'System32/taskkill.exe'), ['/PID', String(server.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
+    }
+    server.kill(); server = null;
+  }
   fs.rmSync(connectionPath, { force: true });
 }
 async function start() {
@@ -49,6 +59,8 @@ async function start() {
     env: { ...process.env, NODE_ENV: 'production', PORT: String(port), HOSTNAME: '127.0.0.1',
       LAYERLING_RUNTIME: runtime, LAYERLING_MCP_REMOTE: 'true', LAYERLING_MCP_TOKEN: token,
       LAYERLING_SHARED_PROJECTS_DIR: path.join(profile, 'Projects'), LAYERLING_DESKTOP_DATA: profile,
+      LAYERLING_OPENSCAD_EXECUTABLE: ultimate ? path.join(resources, 'openscad/openscad.com') : process.env.LAYERLING_OPENSCAD_EXECUTABLE,
+      OPENSCADPATH: ultimate ? path.join(resources, 'openscad/libraries') : process.env.OPENSCADPATH,
       NEXT_TELEMETRY_DISABLED: '1' },
   });
   server.stdout.on('data', data => log(data.toString().trim()));
@@ -97,9 +109,9 @@ async function start() {
   const bounds = readJson('window.json', { width: 1440, height: 960 });
   window = new BrowserWindow({ width: Math.max(900, Math.min(3840, Number(bounds.width) || 1440)),
     height: Math.max(650, Math.min(2160, Number(bounds.height) || 960)), show: false,
-    title: 'Layerling Desktop', icon: path.join(resources, 'icon.png'),
+    title: productName, icon: path.join(resources, 'icon.png'),
     webPreferences: { partition: 'persist:layerling', nodeIntegration: false, contextIsolation: true,
-      sandbox: true, webSecurity: true, spellcheck: false, devTools: !app.isPackaged || process.env.LAYERLING_DESKTOP_TEST === '1' },
+      sandbox: true, webSecurity: true, spellcheck: false, preload: path.join(__dirname, 'preload.cjs'), devTools: !app.isPackaged || process.env.LAYERLING_DESKTOP_TEST === '1' },
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     // Internal guide/project windows retain the same hardened settings.

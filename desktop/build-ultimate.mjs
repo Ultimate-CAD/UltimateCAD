@@ -1,0 +1,24 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, cpSync, existsSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+const root = path.resolve(import.meta.dirname, '..'); process.chdir(root);
+const output = path.join(root, 'dist/ultimate/windows');
+if (!process.argv.includes('--no-package')) {
+  const status = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
+  if (status.status !== 0 || status.stdout.trim()) throw new Error('Commit the verified Ultimate sources before creating an installer.');
+}
+const env = { ...process.env, LAYERLING_ULTIMATE_BUILD: '1', LAYERLING_RELEASE_DIR: output, NEXT_TELEMETRY_DISABLED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false', ELECTRON_BUILDER_COMPRESSION_LEVEL: process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL || '5' };
+const run = (file, args) => { const result = spawnSync(file, args, { stdio: 'inherit', windowsHide: true, env }); if (result.error) throw result.error; if (result.status !== 0) process.exit(result.status || 1); };
+mkdirSync(path.join(output, 'sources'), { recursive: true });
+if (existsSync('dist/windows/legal')) cpSync('dist/windows/legal', path.join(output, 'legal'), { recursive: true });
+run(process.execPath, ['desktop/stage-openscad.mjs']);
+run(process.execPath, ['desktop/build.mjs', ...(process.argv.includes('--stage-only') ? ['--stage-only'] : [])]);
+writeFileSync(path.join(output, 'legal/OpenSCAD-NOTICE.md'), '# OpenSCAD native engine\n\nPrivate workstation build. OpenSCAD 2021.01, GPL-2.0-or-later.\nSource: https://github.com/openscad/openscad/tree/openscad-2021.01\nCustomizer extractor: 3D-Print-Artist-Studio f63f0791344f3c51c7e4244829f1415a95319987 (upstream package declares MIT).\nNo distribution or hosted service is authorized.\n');
+const git = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
+const revision = git.stdout.trim();
+run('git', ['archive', '--format=zip', '--prefix=layerling-ultimate/', `--output=${path.join(output, 'sources/Layerling-Ultimate-Source.zip')}`, revision]);
+writeFileSync(path.join(output, 'release-metadata.json'), JSON.stringify({ product: 'Layerling Ultimate', sourceCommit: revision, branch: 'codex/openscad-parametric-engine', privateWorkstationOnly: true, engine: JSON.parse(readFileSync('dist/ultimate-engine/engine-manifest.json')) }, null, 2));
+if (!process.argv.includes('--no-package')) run(process.execPath, ['node_modules/electron-builder/cli.js', '--config', 'desktop/electron-builder-ultimate.cjs', ...(process.argv.includes('--dir') ? ['--dir'] : [])]);
+const hashes = readdirSync(output).filter(n => /\.(exe|json)$/.test(n)).map(n => `${createHash('sha256').update(readFileSync(path.join(output, n))).digest('hex')}  ${n}`);
+writeFileSync(path.join(output, 'SHA256SUMS.txt'), hashes.join('\n') + '\n');

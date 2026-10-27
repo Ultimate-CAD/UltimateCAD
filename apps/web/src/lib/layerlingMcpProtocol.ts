@@ -10,6 +10,7 @@ export const LAYERLING_MCP_POLL_RETRY_MS = 1_000;
 export type LayerlingMcpViewFace = "current" | "home" | "top" | "bottom" | "front" | "back" | "right" | "left" | `${string}-${string}`;
 
 export type LayerlingMcpShapeSummary = {
+  openScad?: { fileName: string; parameters: import("@/lib/openScadTypes").OpenScadDocument["parameters"]; expressions: Record<string, string>; engineVersion?: string; meshKey?: string };
   id: string;
   name: string;
   kind: ShapeKind;
@@ -88,6 +89,9 @@ export type LayerlingMcpEditorSummary = {
 };
 
 export type LayerlingMcpCommandName =
+  | "openscad_get"
+  | "openscad_create"
+  | "openscad_update"
   | "get_scene"
   | "list_objects"
   | "select_objects"

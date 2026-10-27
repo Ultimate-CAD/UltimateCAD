@@ -256,6 +256,7 @@ export function SecondaryToolbar({
   onUngroup,
   onUndo,
   onTopPanel,
+  onOpenScad,
   onAddShape,
   onShortcuts,
   onInteractiveHelp,
@@ -394,6 +395,7 @@ export function SecondaryToolbar({
   onUngroup: () => void;
   onUndo: () => void;
   onTopPanel: (panel: TopPanel) => void;
+  onOpenScad?: () => void;
   onAddShape: (shape: ShapeAsset) => void;
   onShortcuts: () => void;
   onInteractiveHelp: () => void;
@@ -1106,6 +1108,7 @@ export function SecondaryToolbar({
       <div className="toolbar-section toolbar-actions-section" data-group="manage">
         <div className="toolbar-section-label">{t("editor.group.manage")}</div>
         <div className="action-buttons">
+          {onOpenScad ? <button className="action-icon-button" aria-label="OpenSCAD workbench" title="OpenSCAD parametric workbench" onClick={onOpenScad} disabled={historyViewActive}><span style={{ fontSize: 11, fontWeight: 800 }}>SCAD</span></button> : null}
           {simpleMode ? null : <NoteToolButton active={noteMode} shortcut={COMMAND_SHORTCUTS.note} onClick={onNoteTool} disabled={historyViewActive} />}
           {simpleMode ? null : <button className="action-icon-button" aria-label={t("editor.import")} title={`${t("editor.import")} (${COMMAND_SHORTCUTS.import})`} onClick={() => onTopPanel("import")} disabled={historyViewActive}>
             <ToolbarImportIcon />

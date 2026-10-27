@@ -1046,7 +1046,7 @@ export default function Home() {
     serverNewDesignsRef.current === "always" || (newDesignsChoiceRef.current ?? serverNewDesignsRef.current === "on")
   ), []);
   // Left open on an iPad, which greys out files of types it does not know (#219).
-  const dashboardImportAccept = useFileAccept(`.lyl,.skf,.zip,.stl,.obj,.mtl,.3mf,.step,.stp,.svg,.dxf,image/svg+xml,${PICTURE_FILE_ACCEPT}`);
+  const dashboardImportAccept = useFileAccept(`.scad,.lyl,.skf,.zip,.stl,.obj,.mtl,.3mf,.step,.stp,.svg,.dxf,image/svg+xml,${PICTURE_FILE_ACCEPT}`);
   const dashboardImportInputRef = useRef<HTMLInputElement | null>(null);
   const backupRestoreInputRef = useRef<HTMLInputElement | null>(null);
   const nextProjectRevisionRef = useRef(0);
@@ -2531,7 +2531,7 @@ export default function Home() {
   const pickDashboardImport = async () => {
     if (lylFileAccessSupported()) {
       try {
-        const picked = await pickFilesToImport([".lyl", ".skf", ".zip", ".stl", ".obj", ".mtl", ".3mf", ".step", ".stp", ".svg", ".dxf", ".png", ".jpg", ".jpeg"]);
+        const picked = await pickFilesToImport([".scad", ".lyl", ".skf", ".zip", ".stl", ".obj", ".mtl", ".3mf", ".step", ".stp", ".svg", ".dxf", ".png", ".jpg", ".jpeg"]);
         if (picked?.length) await importFilesFromDashboard(picked.map((entry) => entry.file), picked.length === 1 ? picked[0].handle : undefined);
         return;
       } catch {

@@ -123,3 +123,7 @@ Umetna inteligenca se tako lahko sama preverja: nekaj ustvari, posname sliko, po
 Rečeš: »Zgradi mi okroglo škatlo s premerom 60 mm, višino 40 mm in steno 2,5 mm, zgoraj odprto, poleg tega ploski pokrov, na katerem je v loku napisano ›Čaj‹.« Umetna inteligenca ustvari valje, enega izdolbe, ukrivljeno besedilo postavi na pokrov in na koncu posname slike, da vidi, ali ustreza.
 
 > **Namig:** Umetni inteligenci daj konkretne mere in ji povej, čemu je del namenjen (»držalo za palico 12 mm, ustreza Bambu Lab A1«). Potem sprejema smiselnejše odločitve. In ji pri gradnji gledaj: kadarkoli lahko posežeš sam, saj je to isti urejevalnik.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

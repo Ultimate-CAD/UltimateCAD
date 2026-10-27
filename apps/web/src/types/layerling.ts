@@ -754,6 +754,8 @@ export type CadPrimitiveFrame = {
 export type TextEdge = { kind: "round" | "chamfer"; size: number };
 
 export type WorkplaneShape = {
+  /** Preserved source and state for native OpenSCAD tessellation; never exact B-rep geometry. */
+  openScad?: import("@/lib/openScadTypes").OpenScadDocument;
   id: string;
   name: string;
   kind: ShapeKind;

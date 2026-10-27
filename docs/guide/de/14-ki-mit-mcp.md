@@ -127,3 +127,7 @@ Die KI kann sich damit selbst kontrollieren: Sie legt etwas an, macht ein Bild, 
 Du sagst: „Baue mir eine runde Dose mit 60 mm Durchmesser, 40 mm Höhe und 2,5 mm Wand, oben offen, dazu einen flachen Deckel, auf dem ‚Tee‘ im Bogen steht.“ Die KI legt Zylinder an, höhlt einen aus, setzt den gebogenen Text auf den Deckel und nimmt zum Schluss Bilder auf, damit sie sieht, ob es passt.
 
 > **Tipp:** Gib der KI konkrete Maße und sag ihr, wofür das Teil gedacht ist („Halter für eine 12-mm-Stange, passt auf ein Bambu Lab A1“). Dann trifft sie sinnvollere Entscheidungen. Und schau ihr beim Bauen zu: Du kannst jederzeit selbst eingreifen, denn es ist derselbe Editor.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

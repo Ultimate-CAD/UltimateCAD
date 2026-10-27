@@ -14,7 +14,8 @@ if (!process.argv.includes('--stage-only')) {
   run('scripts/build-guide.mjs', []);
   run('node_modules/next/dist/bin/next', ['build', 'apps/web'], { LAYERLING_DESKTOP_BUILD: 'true' });
 }
-const stage = path.join(root, 'dist/desktop-stage');
+const ultimate = process.env.LAYERLING_ULTIMATE_BUILD === '1';
+const stage = path.join(root, ultimate ? 'dist/ultimate-stage' : 'dist/desktop-stage');
 // Only delete our generated staging directory, never user data or the release directory.
 if (existsSync(stage)) rmSync(stage, { recursive: true });
 mkdirSync(path.join(stage, 'app/mcp'), { recursive: true });
@@ -29,9 +30,9 @@ const web = path.join(stage, 'runtime/apps/web');
 cpSync('apps/web/.next/static', path.join(web, '.next/static'), { recursive: true });
 cpSync('apps/web/public', path.join(web, 'public'), { recursive: true });
 // The runner lives beside the app but Next resolves from its traced web directory.
-for (const name of ['main.cjs', 'server.cjs', 'mcp-client.mjs']) cpSync(`desktop/${name}`, path.join(stage, 'app', name));
+for (const name of ['main.cjs', 'server.cjs', 'preload.cjs', 'mcp-client.mjs']) cpSync(`desktop/${name}`, path.join(stage, 'app', name));
 for (const name of ['layerling-mcp-server.mjs', 'layerling-mcp-tools.mjs', 'layerling-mcp-open.mjs']) cpSync(`scripts/${name}`, path.join(stage, 'app/mcp', name));
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: 'layerling-desktop', version: pkg.version, main: 'main.cjs', description: pkg.description, author: pkg.author, license: pkg.license }, null, 2));
+writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: ultimate ? 'layerling-ultimate' : 'layerling-desktop', productName: ultimate ? 'Layerling Ultimate' : 'Layerling Desktop', version: ultimate ? `${pkg.version}-scad.1` : pkg.version, main: 'main.cjs', description: pkg.description, author: pkg.author, license: pkg.license }, null, 2));
 run('desktop/licenses.mjs', []);
 console.log('Desktop runtime staged:', stage);

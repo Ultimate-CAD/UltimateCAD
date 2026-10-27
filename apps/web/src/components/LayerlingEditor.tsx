@@ -112,6 +112,10 @@ import { PROJECT_THUMBNAIL_IDLE_MS, projectThumbnailSceneChanged, type ProjectTh
 import { importedShapeFromObj } from "@/lib/objImport";
 import { takeImportSvgWidth } from "@/lib/importPreferences";
 import { importFailureSummary, importModelFiles } from "@/lib/modelImport";
+import { OpenScadWorkbench } from "@/components/workplane/OpenScadWorkbench";
+import { renderScadShape } from "@/lib/openScadClient";
+import { newOpenScadDocument, validateOpenScadDocument, type OpenScadDocument } from "@/lib/openScadTypes";
+import { parseCustomizer } from "@/lib/openscad/vendor/scadParser.cjs";
 import { dedupeProjectAssets } from "@/lib/projectAssets";
 import { useCustomShapes } from "@/lib/useCustomShapes";
 import { packBackup } from "@/lib/projectBackup";
@@ -2690,6 +2694,7 @@ export function LayerlingEditor({
   const [snapGrid, setSnapGrid] = useState<GridSize>(() => normalizeSnapGrid(initialSnap));
   const [workplaneMode, setWorkplaneMode] = useState(false);
   const [topPanel, setTopPanel] = useState<TopPanel>(null);
+  const [openScadWorkbench, setOpenScadWorkbench] = useState(false);
   /** The icon tag window: an SVG file, its width and OK (the library's Icon tag). */
   const [iconTagPanelOpen, setIconTagPanelOpen] = useState(false);
   const [qrCodePanelOpen, setQrCodePanelOpen] = useState(false);
@@ -2906,7 +2911,7 @@ export function LayerlingEditor({
   // Left open on an iPad, which greys out files of types it does not know (#219).
   const projectFileAccept = useFileAccept(".lyl,.skf");
   const myShapesFileAccept = useFileAccept(".zip,.lyl,.skf");
-  const importFileAccept = useFileAccept(`.stl,.obj,.mtl,.zip,.3mf,.step,.stp,.svg,.dxf,image/svg+xml,${PICTURE_FILE_ACCEPT}`);
+  const importFileAccept = useFileAccept(`.scad,.stl,.obj,.mtl,.zip,.3mf,.step,.stp,.svg,.dxf,image/svg+xml,${PICTURE_FILE_ACCEPT}`);
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
   const insertProjectFileInputRef = useRef<HTMLInputElement | null>(null);
   const sketchImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -4395,6 +4400,28 @@ export function LayerlingEditor({
     },
     [appendHistorySnapshot, notes, selectedIds, setOpenGroupLevels, syncProjectShapes],
   );
+
+  const applyOpenScad = useCallback(async (document: OpenScadDocument, targetId: string | null, signal: AbortSignal) => {
+    const previous = targetId ? shapesRef.current.find(shape => shape.id === targetId) : null;
+    if (targetId && !previous?.openScad) throw new Error("OpenSCAD object no longer exists");
+    if (previous?.locked || historyViewStateRef.current) throw new Error("Unlock the object and leave History view before editing OpenSCAD");
+    const project = projectInfoRef.current.projectId;
+    const applied = await renderScadShape(document, previous, signal);
+    if (signal.aborted) throw new DOMException("Render canceled", "AbortError");
+    if (projectInfoRef.current.projectId !== project) throw new Error("Project changed while OpenSCAD was rendering");
+    const latest = previous ? shapesRef.current.find(shape => shape.id === previous.id) : null;
+    if (previous && (!latest || latest.openScad !== previous.openScad)) throw new Error("SCAD source changed while rendering; regenerate the current source");
+    if (latest) applied.shape = { ...applied.shape, x: latest.x, z: latest.z, elevation: latest.elevation, rotation: latest.rotation, rotationX: latest.rotationX, rotationZ: latest.rotationZ };
+    commitShapes(previous ? shapesRef.current.map(shape => shape.id === previous.id ? applied.shape : shape) : [...shapesRef.current, applied.shape], applied.shape.id, applied.result.cached ? "OpenSCAD geometry reused from cache" : "OpenSCAD geometry regenerated");
+    return applied;
+  }, [commitShapes]);
+  const keepOpenScadSource = useCallback((document: OpenScadDocument, targetId: string) => {
+    validateOpenScadDocument(document);
+    const target = shapesRef.current.find(shape => shape.id === targetId);
+    if (!target?.openScad || target.locked || historyViewStateRef.current) return;
+    const needsRegeneration = JSON.stringify([target.openScad.source, target.openScad.parameters, target.openScad.expressions, target.openScad.files]) !== JSON.stringify([document.source, document.parameters, document.expressions, document.files]);
+    commitShapes(shapesRef.current.map(shape => shape.id === targetId ? { ...shape, openScad: { ...document, needsRegeneration: needsRegeneration || document.needsRegeneration } } : shape), targetId, "OpenSCAD source saved in project");
+  }, [commitShapes]);
 
   /**
    * Notizen aendern sich wie Koerper: ueber den Verlauf. Deshalb liegt hier
@@ -9576,6 +9603,28 @@ export function LayerlingEditor({
       if (command.action === "get_scene") {
         return mcpSceneSnapshot(params.includeRawShapes === true);
       }
+      if (command.action === "openscad_get") {
+        const target = findShape(params.id);
+        if (!target?.openScad) throw new Error("Object is not backed by OpenSCAD");
+        return { object: mcpShapeSummary(target), document: target.openScad, customizer: parseCustomizer(target.openScad.source), representation: "triangle-mesh" };
+      }
+      if (command.action === "openscad_create" || command.action === "openscad_update") {
+        const target = command.action === "openscad_update" ? findShape(params.id) : null;
+        if (command.action === "openscad_update" && !target?.openScad) throw new Error("Object is not backed by OpenSCAD");
+        let document: OpenScadDocument = target?.openScad ? { ...target.openScad } : newOpenScadDocument(typeof params.source === "string" ? params.source : undefined, typeof params.fileName === "string" ? params.fileName : undefined);
+        for (const field of ["source", "fileName", "sourceDirectory"] as const) if (typeof params[field] === "string") document = { ...document, [field]: params[field] };
+        for (const field of ["parameters", "expressions", "files"] as const) if (params[field] && typeof params[field] === "object" && !Array.isArray(params[field])) document = { ...document, [field]: { ...document[field], ...params[field] as object } };
+        if (Array.isArray(params.libraryPaths)) document.libraryPaths = params.libraryPaths.filter((p): p is string => typeof p === "string");
+        if (typeof params.preset === "string") {
+          const preset = document.presets[params.preset];
+          if (!preset) throw new Error("Unknown OpenSCAD configuration");
+          document = { ...document, parameters: { ...preset.parameters }, expressions: { ...preset.expressions } };
+        }
+        if (typeof params.savePresetAs === "string" && params.savePresetAs.trim()) document.presets = { ...document.presets, [params.savePresetAs.trim()]: { parameters: { ...document.parameters }, expressions: { ...document.expressions } } };
+        validateOpenScadDocument(document);
+        const applied = await applyOpenScad(document, target?.id ?? null, new AbortController().signal);
+        return { object: mcpShapeSummary(applied.shape), cached: applied.result.cached, key: applied.result.key, durationMs: applied.result.durationMs, diagnostics: applied.result.diagnostics };
+      }
 
       const historyResult = historyViewMcpCommand(command.action, params, {
         entries: () => historyRef.current,
@@ -11604,6 +11653,7 @@ export function LayerlingEditor({
     workspaceSettings.width,
     workspaceSettings.depth,
     applyCadModifierForMcp,
+    applyOpenScad,
     cancelOpenGroup,
     commitShapes,
     finishOpenGroup,
@@ -13441,6 +13491,7 @@ export function LayerlingEditor({
   return (
     <div className={`layerling-editor ${historyViewState ? "history-view-active" : ""}`}>
       <SecondaryToolbar
+        onOpenScad={() => setOpenScadWorkbench(open => !open)}
         toolbarMode={toolbarMode}
         projectName={projectName}
         onProjectNameChange={onProjectNameChange}
@@ -13888,6 +13939,7 @@ export function LayerlingEditor({
           onClose={closeShapeContextMenu}
         />
       ) : null}
+      {openScadWorkbench ? <OpenScadWorkbench shape={selectedShape ?? (shapes.filter(shape => shape.openScad).length === 1 ? shapes.find(shape => shape.openScad)! : null)} onApply={applyOpenScad} onKeepSource={keepOpenScadSource} onClose={() => setOpenScadWorkbench(false)} /> : null}
       <AppFooter variant="editor" version={LYL_CREATED_WITH_VERSION} onBugReport={() => void saveBugReport()} />
       {historyViewState && toolbarMode === "geometry" ? (
         <HistoryViewOverlay

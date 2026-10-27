@@ -123,3 +123,7 @@ Claude Desktop не читает файлы проекта. Впишите се�
 Вы говорите: «Сделай мне круглую коробку 60 мм в диаметре, 40 мм высотой, со стенкой 2,5 мм, открытую сверху, и плоскую крышку с надписью „Tea“ по дуге». ИИ создаёт цилиндры, у одного создаёт оболочку, ставит на крышку текст по дуге и в конце делает снимки, чтобы проверить, всё ли подходит.
 
 > Совет: Давайте ИИ конкретные размеры и говорите, для чего деталь («держатель для стержня 12 мм, подходит для Bambu Lab A1»). Тогда он принимает более разумные решения. И смотрите, как он строит: вы в любой момент можете вмешаться сами, потому что это тот же редактор.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

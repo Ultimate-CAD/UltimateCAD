@@ -123,3 +123,7 @@ Az MI ugyanazokkal a funkciókkal dolgozik, mint te, ugyanazon az úton, mint a 
 Ezt mondod: „Építs nekem egy 60 mm átmérőjű, 40 mm magas kerek dobozt 2,5 mm-es fallal, felül nyitva, és egy lapos fedelet, rajta ívben a »Tea« felirattal.” Az MI létrehozza a hengereket, kiüregeli az egyiket, a fedélre teszi az íves szöveget, a végén pedig képeket készít, hogy lássa, illeszkedik-e.
 
 > **Tipp:** Adj az MI-nek konkrét méreteket, és mondd meg, mire való az alkatrész („tartó egy 12 mm-es rúdhoz, férjen el egy Bambu Lab A1-en”). Így értelmesebb döntéseket hoz. És figyeld, ahogy épít: bármikor magad is közbeléphetsz, mert ugyanaz a szerkesztő.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

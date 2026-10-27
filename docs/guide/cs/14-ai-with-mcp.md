@@ -123,3 +123,7 @@ AI tak může kontrolovat vlastní práci: něco vytvoří, pořídí snímek, v
 Můžete zadat: „Vytvoř kulatou krabičku o průměru 60 mm a výšce 40 mm, se stěnou 2,5 mm a otevřeným vrškem. Přidej ploché víčko s nápisem Čaj po oblouku.“ AI vytvoří válce, v jednom udělá dutinu, na víčko umístí obloukový text a snímky zkontroluje výsledek.
 
 > **Tip:** Zadávejte konkrétní rozměry a účel dílu, například „držák na tyč 12 mm, musí se vejít na Bambu Lab A1“. AI tak může lépe rozhodovat. Sledujte postup: kdykoliv můžete zasáhnout, protože pracujete ve stejném editoru.
+
+## OpenSCAD projects (Ultimate)
+
+Ultimate includes three local OpenSCAD MCP tools. `layerling_openscad_get` reads the current SCAD source, Customizer schema, parameter values and presets. `layerling_openscad_create` creates a native SCAD project, and `layerling_openscad_update` edits its source, parameters or presets. OpenSCAD evaluates the project on this computer; its result is a triangle mesh in Layerling, not an editable solid feature tree. Keep the SCAD project to continue changing its design.

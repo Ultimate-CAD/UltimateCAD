@@ -21,11 +21,12 @@ triangle mesh with explicit OpenSCAD provenance, never an exact OCCT B-rep.
 
 ## Milestones
 - [x] Inspect four upstream implementations; record source pins.
-- [ ] Engine service + native cancellation, timeout and dependency-aware cache tests.
-- [ ] Workbench controls, source editor, import, presets, history and MCP.
-- [ ] Bundle native engine in a separate Ultimate installer and profile.
-- [ ] Packaged end-to-end persistence, edits, export, offline and benchmark validation.
+- [x] Engine service + native cancellation, timeout and dependency-aware cache tests.
+- [x] Workbench controls, source editor, import, presets, history and MCP.
+- [x] Bundle native engine in a separate Ultimate installer and profile.
+- [x] Packaged end-to-end persistence, edits, export, offline and benchmark validation.
 
 ## State handoff
-Native engine work and main UI integration are in progress. Existing desktop release copied
-to .codex-run/preserved-desktop-release; no existing installation changed.
+Packaged validation completes with 22 passing checks and graceful shutdown. See PROGRESS.md
+for release evidence and expression-resolution limits. Existing desktop release copied to
+.codex-run/preserved-desktop-release; no existing installation changed.

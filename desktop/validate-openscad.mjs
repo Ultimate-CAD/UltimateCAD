@@ -1,8 +1,10 @@
 import { _electron as electron } from 'playwright-core';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { testStdioMcp } from './mcp-smoke.mjs';
 const executable = path.resolve(process.argv[2] || 'dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe');
@@ -10,8 +12,11 @@ const output = path.resolve(process.env.LAYERLING_SCAD_VALIDATION_DIR || 'dist/u
 const profile = path.join(output, 'private profile with spaces');
 const fixture = path.resolve('tests/fixtures/openscad/parametric-box-upstream.scad');
 mkdirSync(output, { recursive: true });
-let app, page, connection, editorId;
-const checks = [], errors = [];
+let app, page, connection, editorId, mainProcess;
+const runId = randomUUID(), startedAt = new Date().toISOString();
+const checks = [], errors = [], shutdowns = [];
+const executeFile = promisify(execFile);
+const normalizeSource = value => value.replace(/\r\n?/g, '\n');
 const pass = (name, detail) => { checks.push({ name, result: 'PASS', detail }); console.log('PASS', name, detail || ''); };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function launch() {
@@ -19,10 +24,60 @@ async function launch() {
     ELECTRON_RUN_AS_NODE: undefined, PATH: process.env.SystemRoot + '\\System32',
     ProgramFiles: path.join(output, 'no development OpenSCAD installation'),
     LAYERLING_DESKTOP_PROFILE: profile, LAYERLING_DESKTOP_TEST: '1' } });
+  mainProcess = await app.evaluate(() => ({ pid: process.pid, parentPid: process.ppid, executable: process.execPath }));
+  assert.equal(mainProcess.executable.toLowerCase(), executable.toLowerCase());
+  assert.ok(Number.isInteger(mainProcess.pid) && mainProcess.pid > 0);
   page = await app.firstWindow({ timeout: 90000 }); page.setDefaultTimeout(30000);
   page.on('pageerror', error => errors.push(error.message));
   await page.getByRole('button', { name: 'Create new 3D design', exact: true }).waitFor({ timeout: 60000 });
   connection = JSON.parse(readFileSync(path.join(profile, 'connection.json'), 'utf8'));
+}
+async function bounded(promise, ms, message) {
+  let timer;
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })]); }
+  finally { clearTimeout(timer); }
+}
+async function closeApplication() {
+  if (!app) return;
+  const closing = app, identity = mainProcess;
+  app = null;
+  const tracePath = path.join(output, `shutdown-${runId}-${shutdowns.length}.jsonl`);
+  const result = { pid: identity.pid, mode: 'graceful', startedAt: new Date().toISOString(), tracePath };
+  shutdowns.push(result);
+  console.log('CLOSE begin', identity.pid);
+  try {
+    // app.quit may be canceled by the renderer's in-flight autosave guard. Retry
+    // gracefully in the main process, without disabling that guard or losing saves.
+    await bounded(closing.evaluate(({ app, BrowserWindow }, tracePath) => {
+      const fs = process.getBuiltinModule('fs');
+      const trace = event => fs.appendFileSync(tracePath, JSON.stringify({ event, at: new Date().toISOString() }) + '\n');
+      app.on('before-quit', () => trace('before-quit'));
+      app.on('will-quit', () => trace('will-quit'));
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.on('will-prevent-unload', () => trace('will-prevent-unload'));
+      let attempts = 0;
+      const retry = setInterval(() => { if (++attempts > 8) return clearInterval(retry); trace('quit-retry'); app.quit(); }, 1000);
+    }, tracePath), 5000, 'Could not prepare graceful shutdown');
+    await bounded(closing.close(), 12000, 'Electron graceful close timed out');
+  } catch (error) {
+    result.mode = 'forced-owned-tree'; result.reason = error.message;
+    // Verify this launch's main process immediately before a scoped fallback.
+    // A missing/inaccessible identity fails cleanup instead of killing by name.
+    const { stdout } = await executeFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      `Get-CimInstance Win32_Process -Filter 'ProcessId=${identity.pid}' | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress`], { windowsHide: true, timeout: 5000 });
+    const live = stdout.trim() ? JSON.parse(stdout) : null;
+    if (live) {
+      assert.equal(live.ProcessId, identity.pid);
+      assert.equal(live.ParentProcessId, identity.parentPid, 'Refusing cleanup after process ownership changed');
+      assert.equal(live.ExecutablePath?.toLowerCase(), executable.toLowerCase(), 'Refusing cleanup of an unverified process');
+      assert.ok(live.CommandLine?.toLowerCase().includes(executable.toLowerCase()), 'Refusing cleanup without the launch command');
+      await executeFile(path.join(process.env.SystemRoot, 'System32/taskkill.exe'), ['/PID', String(identity.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 });
+    }
+    throw new Error(`Packaged application required shutdown fallback: ${error.message}`);
+  } finally {
+    result.finishedAt = new Date().toISOString();
+    result.events = existsSync(tracePath) ? readFileSync(tracePath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+    console.log('CLOSE complete', identity.pid, result.mode, result.events.map(item => item.event).join(','));
+  }
 }
 async function ready() {
   for (let n = 0; n < 300; n++) {
@@ -100,6 +155,7 @@ try {
   await page.getByLabel('SCAD width expression',{exact:true}).fill('depth*2');
   const equation = await waitForDocument(id,result=>result.document.expressions.width==='depth*2','Equation override did not regenerate');
   assert.ok(Math.abs(equation.object.dimensions.width-80)<0.02); pass('Native dimensional equation override recomputes dependent geometry');
+  await page.getByLabel('SCAD preset name').evaluate(input => input.closest('details').open = true);
   await page.getByLabel('SCAD preset name').fill('wide-equation');
   await page.getByRole('button',{name:'Save preset',exact:true}).click();
   await waitForDocument(id,result=>Boolean(result.document.presets['wide-equation']),'Preset not persisted');
@@ -111,7 +167,7 @@ try {
   const saved = await command('save_project',{history:'all'});
   const projectFile=path.join(output,'scad-roundtrip.lyl');writeFileSync(projectFile,Buffer.from(saved.base64,'base64'));
   assert.ok(saved.bytes>0);pass('Whole Layerling project saved with native and SCAD representations',saved.bytes);
-  await app.close();app=null;await launch();
+  await closeApplication();await launch();
   await page.locator('input[type=file][accept*=".lyl"]').first().setInputFiles(projectFile);await ready();
   const restored=await command('openscad_get',{id});
   assert.equal(restored.document.source,initial.document.source);assert.equal(restored.document.parameters.width,76);assert.equal(restored.document.expressions.width,'depth*2');assert.ok(restored.document.presets['wide-equation']);
@@ -120,7 +176,7 @@ try {
   await page.getByRole('button',{name:'OpenSCAD workbench',exact:true}).click();
   const modified=restored.document.source.replace('wall = 2;','wall = 3;');assert.notEqual(modified,restored.document.source);
   await page.getByLabel('SCAD source',{exact:true}).fill(modified);
-  const edited=await waitForDocument(id,result=>result.document.source===modified,'Direct source edit did not regenerate');
+  const edited=await waitForDocument(id,result=>normalizeSource(result.document.source)===normalizeSource(modified) && result.document.meshKey!==restored.document.meshKey,'Direct source edit did not regenerate');
   assert.equal(edited.object.id,id);assert.notEqual(edited.document.meshKey,restored.document.meshKey);
   pass('Direct script edit regenerates without replacing object identity');
   const exported=await command('export_mesh',{format:'stl',ids:[id]});
@@ -151,6 +207,11 @@ try {
   console.error(error);checks.push({name:'Validation failure',result:'FAIL',detail:error.stack});process.exitCode=1;
   if(page){await page.screenshot({path:path.join(output,'failure.png')}).catch(()=>{});writeFileSync(path.join(output,'failure-dom.txt'),await page.locator('body').innerText().catch(()=>''));}
 } finally {
-  if(app)await app.close().catch(()=>{});
-  writeFileSync(path.join(output,'results.json'),JSON.stringify({executable,checks,errors},null,2));
+  // Replace any older report before cleanup; an interrupted run is visibly incomplete.
+  const report = finishedAt => writeFileSync(path.join(output,'results.json'),JSON.stringify({runId,startedAt,finishedAt,executable,checks,errors,shutdowns},null,2));
+  report(null);
+  try { await closeApplication(); }
+  catch(error) { console.error(error);checks.push({name:'Packaged application shutdown',result:'FAIL',detail:error.stack});process.exitCode=1; }
+  report(new Date().toISOString());
+  console.log('REPORT',path.join(output,'results.json'));
 }

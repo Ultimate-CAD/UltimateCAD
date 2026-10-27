@@ -71,6 +71,18 @@ describe("native OpenSCAD service", () => {
     expect(height).toBeCloseTo(1, 4);
   });
 
+  it("resolves an expression against a parameter declared later in the SCAD source", async () => {
+    const result = await render("width = 60;\ndepth = 40;\ncube([width, depth, 1]);", {
+      parameters: { depth: 45 },
+      expressions: { width: "depth*2" },
+    });
+    assertBinaryStl(result.stlBase64);
+    const [width, depth, height] = stlBounds(result.stlBase64);
+    expect(width).toBeCloseTo(90, 4);
+    expect(depth).toBeCloseTo(45, 4);
+    expect(height).toBeCloseTo(1, 4);
+  });
+
   it("resolves include/use assets and returns snapshots with dependency hashes", async () => {
     const result = await render("use <modules.scad>\ninclude <plate.scad>\nfixture_bar(plate_length, 5);", {
       libraryPaths: [fixtureRoot],

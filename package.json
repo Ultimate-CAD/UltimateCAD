@@ -38,7 +38,12 @@
     "printers:update": "node scripts/generate-printer-presets.mjs",
     "printers:check": "node scripts/check-printer-updates.mjs",
     "ci": "npm run typecheck && npm run test",
-    "mcp:layerling": "node scripts/layerling-mcp-server.mjs"
+    "mcp:layerling": "node scripts/layerling-mcp-server.mjs",
+    "desktop:build": "node desktop/build.mjs",
+    "desktop:stage": "node desktop/build.mjs --stage-only",
+    "desktop:package": "electron-builder --config desktop/electron-builder.cjs",
+    "desktop:release": "node desktop/release.mjs",
+    "desktop:test": "node desktop/validate.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.1",
@@ -62,8 +67,11 @@
     "@types/node": "^22.15.18",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0",
     "jsdom": "^30.1.2",
     "jsqr": "^1.4.0",
+    "playwright-core": "1.64.1",
     "typescript": "^5.8.3",
     "vitest": "^4.1.12"
   },

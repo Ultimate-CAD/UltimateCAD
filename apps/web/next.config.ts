@@ -24,6 +24,7 @@ try {
 const appVersion: string = JSON.parse(readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")).version;
 
 const nextConfig: NextConfig = {
+  ...(process.env.LAYERLING_DESKTOP_BUILD === "true" ? { output: "standalone" as const } : {}),
   outputFileTracingRoot: path.resolve(process.cwd()),
   devIndicators: false,
   // Keep the live development compiler isolated from `next build`. Sharing

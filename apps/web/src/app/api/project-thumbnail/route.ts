@@ -5,7 +5,9 @@ import { originMatchesRequest } from "@/lib/sameOrigin";
 
 export const revalidate = false;
 
-const THUMBNAIL_DIR = path.join(process.cwd(), ".codex", "project-thumbnails");
+const THUMBNAIL_DIR = process.env.LAYERLING_DESKTOP_DATA
+  ? path.join(process.env.LAYERLING_DESKTOP_DATA, "project-thumbnails")
+  : path.join(process.cwd(), ".codex", "project-thumbnails");
 const PNG_DATA_URL_PREFIX = "data:image/png;base64,";
 const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
 const MAX_THUMBNAIL_REQUEST_BYTES = Math.ceil((MAX_THUMBNAIL_BYTES * 4) / 3) + PNG_DATA_URL_PREFIX.length + 2048;

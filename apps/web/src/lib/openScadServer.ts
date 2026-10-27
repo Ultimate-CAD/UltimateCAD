@@ -85,6 +85,66 @@ function sourceWithOverrides(source: string, parameters: Record<string, unknown>
     if (typeof expression !== "string" || expression.length > 16_384) throw new Error(`Invalid OpenSCAD expression for '${name}'`);
     if (expression.trim()) overrides.set(name, expression);
   }
+  // OpenSCAD evaluates dependent variables in declaration order.
+  // Lower references to later-defined parameters in the temporary
+  // evaluation source; never modify the persisted user source.
+  const forwardDeclarations = new Map<string, { position: number; rhs: string }>();
+
+  for (const item of scan(source)) {
+    if (item.kind !== "statement" || item.end === undefined) continue;
+
+    const match = /^([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([\s\S]*?)(?:;\s*|$)/.exec(item.code ?? "");
+    if (!match || forwardDeclarations.has(match[1])) continue;
+
+    forwardDeclarations.set(match[1], {
+      position: item.start,
+      rhs: match[2].trim(),
+    });
+  }
+
+  function resolveForwardReferences(
+    expression: string,
+    ownerPosition: number,
+    visiting: Set<string>,
+  ): string {
+    return expression.replace(
+      /"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*|[A-Za-z_$][A-Za-z0-9_$]*/g,
+      (token, offset: number) => {
+        if (token.startsWith('"') || token.startsWith("/")) return token;
+        if (offset > 0 && /[0-9.]/.test(expression[offset - 1])) return token;
+
+        const dependency = forwardDeclarations.get(token);
+        if (!dependency || dependency.position <= ownerPosition) return token;
+
+        if (visiting.has(token)) {
+          throw new Error(`Circular OpenSCAD parameter dependency: ${[...visiting, token].join(" -> ")}`);
+        }
+
+        const value = overrides.get(token) ?? dependency.rhs;
+        const resolved = resolveForwardReferences(
+          value,
+          ownerPosition,
+          new Set([...visiting, token]),
+        );
+        return `(${resolved})`;
+      },
+    );
+  }
+
+  for (const [name, expression] of Object.entries(expressions)) {
+    const declaration = forwardDeclarations.get(name);
+    if (!declaration || !expression.trim()) continue;
+
+    overrides.set(
+      name,
+      resolveForwardReferences(
+        expression,
+        declaration.position,
+        new Set([name]),
+      ),
+    );
+  }
+
   if (!overrides.size) return source;
 
   const edits: Array<{ start: number; end: number; name: string }> = [];

@@ -6,7 +6,8 @@ const root = path.resolve(import.meta.dirname, '..');
 process.chdir(root);
 const run = (file, args) => {
   const result = spawnSync(file, args, { cwd: root, stdio: 'inherit', windowsHide: true,
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false' } });
+    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false',
+      ELECTRON_BUILDER_COMPRESSION_LEVEL: process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL || '5' } });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status || 1);
 };

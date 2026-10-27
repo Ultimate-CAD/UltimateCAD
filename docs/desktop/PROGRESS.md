@@ -36,5 +36,9 @@
   Build/release scripts now run their dependent stages sequentially.
 
 ## Next step
-Commit implementation, produce final installers with embedded corresponding source, install
-outside the repository, rerun release validation, verify uninstallation and finalize hashes.
+Installed application passed all 25 checks, including with developer apps/ temporarily hidden
+and restored. NSIS install, uninstall, profile preservation, existing-install preservation and
+reinstall passed. Six additional installed checks passed: STL drop, exact STEP import, guide,
+Japanese typeface, single instance, saved window size. Closing immediately after window creation
+exposed a shutdown/loadURL race; fixed cancellation handling before the final release build.
+Repackage final binaries, verify that cancellation fix, rerun installed checks and finalize hashes.

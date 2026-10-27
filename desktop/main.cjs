@@ -139,5 +139,11 @@ else {
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', cleanup);
   app.on('quit', cleanup);
-  app.whenReady().then(start).catch(error => { log(error.stack || error); cleanup(); dialog.showErrorBox('Layerling could not start', String(error.message || error)); app.quit(); });
+  app.whenReady().then(start).catch(error => {
+    // Closing a just-created window cancels loadURL. It is an ordinary shutdown,
+    // not a startup failure that should display a blocking error dialog.
+    if (quitting) return;
+    log(error.stack || error); cleanup();
+    dialog.showErrorBox('Layerling could not start', String(error.message || error)); app.quit();
+  });
 }

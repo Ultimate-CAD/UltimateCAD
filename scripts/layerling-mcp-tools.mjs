@@ -282,6 +282,23 @@ export const shapeSettingSchema = {
 
 export const tools = [
   {
+    name: "layerling_openscad_get",
+    description: "Read a SCAD-backed object's preserved script, Customizer schema, overrides, presets and dependency files. Geometry is a tessellated OpenSCAD mesh, separate from exact OCCT bodies.",
+    inputSchema: { ...editorTargetSchema, required: ["id"], properties: { ...editorTargetSchema.properties, id: { type: "string" } } },
+  },
+  ...["create", "update"].map(operation => ({
+    name: `layerling_openscad_${operation}`,
+    description: `${operation === "create" ? "Create" : "Update in place"} a native OpenSCAD script-driven model. Regenerates locally and commits one undoable geometry/source edit; updates keep object identity. Overrides are evaluated by OpenSCAD in the original source scope, so equations can reference other variables and functions. Source preserves reusable modules, functions and CSG. Library folders and dependency files support include/use/import. Parameters, presets and source persist in .lyl. Requires the bundled Ultimate engine.`,
+    inputSchema: { ...editorTargetSchema, ...(operation === "update" ? { required: ["id"] } : { required: ["source"] }), properties: {
+      ...editorTargetSchema.properties, id: { type: "string" }, source: { type: "string" }, fileName: { type: "string" },
+      parameters: { type: "object", description: "Overrides by variable name: number, boolean, string or numeric vector." },
+      expressions: { type: "object", additionalProperties: { type: "string" }, description: "Native SCAD equations by variable name; empty text clears an equation." },
+      files: { type: "object", description: "Relative file paths mapped to {encoding: utf8|base64, data: string}." },
+      libraryPaths: { type: "array", items: { type: "string" } }, sourceDirectory: { type: "string" },
+      preset: { type: "string" }, savePresetAs: { type: "string" },
+    } },
+  })),
+  {
     name: "layerling_list_editors",
     description: "List Layerling editor tabs that are currently open and heartbeating, including editorNumber and projectName.",
     inputSchema: { type: "object", properties: {} },

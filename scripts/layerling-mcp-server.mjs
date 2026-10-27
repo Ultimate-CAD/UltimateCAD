@@ -100,6 +100,12 @@ async function callTool(name, args) {
       return bridgeCommand("delete_objects", args);
     case "layerling_create_shape":
       return bridgeCommand("create_shape", args);
+    case "layerling_openscad_get":
+      return bridgeCommand("openscad_get", args);
+    case "layerling_openscad_create":
+      return bridgeCommand("openscad_create", args, 180000);
+    case "layerling_openscad_update":
+      return bridgeCommand("openscad_update", args, 180000);
     case "layerling_import_mesh":
       return bridgeCommand("import_mesh", args, 60000);
     case "layerling_update_object":

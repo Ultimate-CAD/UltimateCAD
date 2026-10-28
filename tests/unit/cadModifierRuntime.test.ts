@@ -4,7 +4,6 @@ import {
   CAD_MODIFIER_MAX_PREPARE_TIMEOUT_MS,
   CAD_MODIFIER_REQUEST_TIMEOUT_MS,
   CAD_MODIFIER_RUNTIME_BASE,
-  CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT,
   cadModifierBaseDeflection,
   cadModifierCandidateEdge,
   cadModifierPrepareCostMs,
@@ -51,52 +50,25 @@ describe("CAD modifier runtime state", () => {
     expect(edgeModifierSelectionStatus(true, 2, 12)).toBe("2 of 12 sharp edges selected");
   });
 
-  it("keeps exact CAD preparation short and gives imported meshes a bounded triangle-aware budget", () => {
-    expect(CAD_MODIFIER_REQUEST_TIMEOUT_MS).toBeGreaterThanOrEqual(20_000);
-    expect(CAD_MODIFIER_REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(60_000);
+  it("uses the normal request timeout and bounded linear mesh preparation allowance", () => {
+    expect(CAD_MODIFIER_REQUEST_TIMEOUT_MS).toBe(120_000);
+    expect(CAD_MODIFIER_MAX_PREPARE_TIMEOUT_MS).toBe(600_000);
     expect(cadModifierPrepareTimeoutMs(0)).toBe(CAD_MODIFIER_REQUEST_TIMEOUT_MS);
     expect(cadModifierPrepareTimeoutMs(Number.NaN)).toBe(CAD_MODIFIER_REQUEST_TIMEOUT_MS);
-    // Alles, was die Wache ueberhaupt noch sieht, liegt unter der Grenze - und
-    // dort deckt der Sockel von einer Minute die gemessenen Kosten mehrfach ab.
-    expect(cadModifierPrepareTimeoutMs(2_208)).toBe(60_000);
-    expect(cadModifierPrepareTimeoutMs(CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT)).toBe(60_000);
-    expect(cadModifierPrepareCostMs(CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT) * 2.5).toBeLessThan(60_000);
-    // Oberhalb greift trotzdem die Decke, falls je etwas daran vorbeikommt.
+    expect(cadModifierPrepareCostMs(0)).toBe(1_000);
+    expect(cadModifierPrepareCostMs(4_000)).toBe(11_000);
+    expect(cadModifierPrepareCostMs(14_772)).toBe(37_930);
+    expect(cadModifierPrepareCostMs(20_000)).toBe(51_000);
+    expect(cadModifierPrepareCostMs(50_000)).toBe(126_000);
+    expect(cadModifierPrepareCostMs(100_000)).toBe(251_000);
+    // No triangle-count refusal: above the 60 s floor, the 2.5x linear estimate
+    // gives these meshes their computed allowance up to the 10 minute cap.
+    expect(cadModifierPrepareTimeoutMs(14_772)).toBe(94_825);
+    expect(cadModifierPrepareTimeoutMs(20_000)).toBe(127_500);
+    expect(cadModifierPrepareTimeoutMs(50_000)).toBe(315_000);
     expect(cadModifierPrepareTimeoutMs(100_000)).toBe(CAD_MODIFIER_MAX_PREPARE_TIMEOUT_MS);
     expect(cadModifierTimeoutMessage("prepare")).toContain("lower-detail STL");
     expect(cadModifierTimeoutMessage("prepare")).not.toContain("Firefox");
-  });
-
-  /*
-   * Am 19.09.2026 auf HENMEDIA gemessen (naehen plus Kanten einsammeln). Der
-   * Punkt bei 13 304 Dreiecken ist Fraterculas Schraube: zwei Minuten fuer
-   * 14 845 Kanten, unter denen keine Kopfkante mehr zu finden ist. Wer das
-   * Kostenmodell anfasst, muss an diesen Zahlen vorbei.
-   */
-  it("bildet die gemessene Vorbereitungszeit ab, nicht eine geratene Gerade", () => {
-    const messungen: Array<[dreiecke: number, sekunden: number]> = [
-      [400, 0.6],
-      [2_208, 6.6],
-      [3_806, 11.1],
-      [13_304, 128],
-    ];
-    messungen.forEach(([dreiecke, sekunden]) => {
-      const geschaetzt = cadModifierPrepareCostMs(dreiecke) / 1000;
-      expect(geschaetzt).toBeGreaterThan(sekunden / 1.5);
-      expect(geschaetzt).toBeLessThan(sekunden * 1.5);
-    });
-    // Die Kosten wachsen ueberlinear: doppelt so viele Dreiecke kosten mehr
-    // als das Doppelte. Genau das hatte die alte Gerade verfehlt.
-    expect(cadModifierPrepareCostMs(8_000)).toBeGreaterThan(cadModifierPrepareCostMs(4_000) * 2);
-  });
-
-  it("faengt ein Netz ab, das die Wache ohnehin nicht schaffen wuerde", () => {
-    // Gemessen: 3 806 Dreiecke waren nach 11 s fertig, 7 612 nach vier Minuten
-    // nicht. Die Grenze liegt zwischen beiden und laesst den kleineren durch.
-    expect(CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT).toBeGreaterThan(3_806);
-    expect(CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT).toBeLessThan(7_612);
-    // Fraterculas Schraube liegt darueber und wird deshalb sofort abgelehnt.
-    expect(13_304).toBeGreaterThan(CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT);
   });
 
   it("does not expose thresholds above the worker's folded edge-angle range", () => {

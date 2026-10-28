@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n";
 import { localizedError } from "@/lib/userErrors";
 import type { CadModifierDeflection, CadModifierEdge, CadModifierQuality } from "@/lib/cadModifierTypes";
 import type { OcctKernel, ShapeHandle } from "occt-wasm";
+import { CAD_MESH_WORKING_BUDGET_BYTES } from "@/lib/cadMeshBudget";
 
 const occtRuntimeVersion = process.env.NEXT_PUBLIC_OCCT_RUNTIME_VERSION;
 /** Where scripts/copy-occt-wasm.mjs stages the kernel: one folder per kernel version. */
@@ -88,8 +89,8 @@ export function cadModifierTessellationDeflection(
     angular: Math.min(base.angular, minDeflection.angular),
   };
 }
-export const CAD_MODIFIER_REQUEST_TIMEOUT_MS = 30_000;
-export const CAD_MODIFIER_MAX_PREPARE_TIMEOUT_MS = 180_000;
+export const CAD_MODIFIER_REQUEST_TIMEOUT_MS = 120_000;
+export const CAD_MODIFIER_MAX_PREPARE_TIMEOUT_MS = 600_000;
 export const CAD_MODIFIER_MAX_SHARP_ANGLE = 90;
 
 export type CadModifierRequestPhase = "prepare" | "preview";
@@ -230,47 +231,13 @@ export function edgeModifierSelectionStatus(prepared: boolean, selectedCount: nu
     : t("edge.preparing");
 }
 
-/**
- * Was das Vorbereiten eines Netzes wirklich kostet, gemessen am 19.09.2026 auf
- * HENMEDIA:
- *
- * | Dreiecke | naehen und heilen | Kanten einsammeln | gesamt |
- * |---------:|------------------:|------------------:|-------:|
- * |      400 |             0,5 s |             0,1 s |  0,6 s |
- * |    2 208 |             3,6 s |             3,0 s |  6,6 s |
- * |    3 806 |             5,7 s |             5,0 s | 11,1 s |
- * |   13 304 |            20,0 s |           107,5 s |  128 s |
- *
- * Das Naehen waechst linear mit der Dreieckszahl, das Einsammeln der Kanten
- * quadratisch: jede Kante wird gegen die Flaechen ihrer Nachbarschaft
- * gehalten. Die alte Schaetzung war linear - deshalb lief die Wache bei
- * jedem groesseren Netz ab, lange bevor die Arbeit fertig war.
- */
+/** Mesh sewing still scales with facets; adjacency now uses one pass over face boundaries.
+ * This is a conservative time allowance, not an eligibility test. Planar reduction
+ * and exact-body inputs normally finish much earlier. */
 export function cadModifierPrepareCostMs(meshTriangleCount: number) {
-  const triangles = Math.max(0, meshTriangleCount);
-  return 1.5 * triangles + 6.1e-4 * triangles * triangles;
+  return 1_000 + 2.5 * Math.max(0, meshTriangleCount);
 }
-// Die Schaetzung ist eine Untergrenze: sie stammt aus Einzelmessungen an einem
-// frischen Kern. Wer den Faktor unten anfasst, sollte das wissen.
 
-/**
- * Oberhalb dieser Dreieckszahl wird gar nicht erst angefangen.
- *
- * Die Zahl steht dort, wo die Messung umschlaegt: 3 806 Dreiecke waren nach
- * 11 s fertig, 7 612 nach vier Minuten immer noch nicht - und das als vierter
- * Aufruf derselben Seitensitzung, also genau so, wie ein Mensch arbeitet. Der
- * Kern wird im Lauf einer Sitzung langsamer (siehe die Kernel-Grenze), deshalb
- * ist der isoliert gemessene Einzelwert die freundlichste Lesart, nicht die
- * wahrscheinlichste.
- *
- * Das ist keine Verschaerfung: mit der alten, linearen Schaetzung lief die
- * Wache bei dieser Groesse laengst ab. Neu ist nur, dass die Absage sofort
- * kommt und ihren Grund nennt, statt nach zwei Minuten als Zeitueberschreitung.
- * Eine tessellierte Wendel hat obendrein so viele Dreieckskanten, dass unter
- * ihnen keine Kopfkante mehr zu finden waere - 14 845 Stueck bei Fraterculas
- * Schraube.
- */
-export const CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT = 4_000;
 
 /**
  * Exact profile bodies (star, honeycomb, ...) are built quickly, but a group of
@@ -287,7 +254,9 @@ export const CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT = 4_000;
  * triangle limit. Each part and each piece gets room on top of the normal
  * minute, with the same 2.5x margin for slower computers as the mesh budget.
  */
-export const CAD_MODIFIER_EXACT_SEGMENT_LIMIT = 700;
+// Allow exact profiles according to a conservative working-memory allowance,
+// instead of downgrading a 701-segment CAD profile to display triangles.
+export const CAD_MODIFIER_EXACT_SEGMENT_LIMIT = Math.floor(CAD_MESH_WORKING_BUDGET_BYTES / 16_384);
 export const CAD_MODIFIER_EXACT_PART_BUDGET_MS = 2_000;
 export const CAD_MODIFIER_EXACT_SEGMENT_BUDGET_MS = 45;
 

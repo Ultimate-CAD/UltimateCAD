@@ -1,0 +1,92 @@
+{
+  "description": "OCCT-WASM edge-to-face topology map timings on generated triangulated sphere STL; each size is measured in its own Vitest process.",
+  "source": "apps/web/src/lib/cadEdgeTopology.ts vs OcctKernel.edgeToFaceMap",
+  "kernel": {
+    "package": "occt-wasm",
+    "version": "5.8.0",
+    "sourceCommit": "ce0e6da47ea43b7994fb2b6275643e04cb36fe5a"
+  },
+  "method": "For each size in an isolated Vitest child process, generate a triangulated sphere STL, import it into OCCT, get face handles, then time legacy edgeToFaceMap and/or buildCadEdgeFaceMap. Optimized timings exclude STL generation/import and face-handle collection. RSS is sampled at the recorded stages. Legacy comparison runs only through 14,760 facets because its nested traversal took 68 seconds there.",
+  "benchmarks": [
+    {
+      "requestedFacets": 4000,
+      "facets": 4000,
+      "faces": 4000,
+      "edges": 6000,
+      "legacyRun": true,
+      "legacyMs": 4546.5435,
+      "optimizedMs": 12.481899999999769,
+      "importMs": 102.85670000000002,
+      "getFaceHandlesMs": 2.675700000000006,
+      "rssStartBytes": 117276672,
+      "rssAfterImportBytes": 136744960,
+      "rssAfterLegacyBytes": 141324288,
+      "rssAfterOptimizedBytes": 149016576,
+      "processId": 33024
+    },
+    {
+      "requestedFacets": 14760,
+      "facets": 14760,
+      "faces": 14760,
+      "edges": 22140,
+      "legacyRun": true,
+      "legacyMs": 68231.5885,
+      "optimizedMs": 31.575800000005984,
+      "importMs": 259.3571,
+      "getFaceHandlesMs": 5.973500000000001,
+      "rssStartBytes": 117358592,
+      "rssAfterImportBytes": 167989248,
+      "rssAfterLegacyBytes": 190369792,
+      "rssAfterOptimizedBytes": 193245184,
+      "processId": 9536
+    },
+    {
+      "requestedFacets": 20000,
+      "facets": 20000,
+      "faces": 20000,
+      "edges": 29999,
+      "legacyRun": false,
+      "legacyMs": null,
+      "optimizedMs": 39.34189999999995,
+      "importMs": 324.1895,
+      "getFaceHandlesMs": 6.854300000000023,
+      "rssStartBytes": 117710848,
+      "rssAfterImportBytes": 181825536,
+      "rssAfterLegacyBytes": null,
+      "rssAfterOptimizedBytes": 209948672,
+      "processId": 30448
+    },
+    {
+      "requestedFacets": 50000,
+      "facets": 50000,
+      "faces": 50000,
+      "edges": 74999,
+      "legacyRun": false,
+      "legacyMs": null,
+      "optimizedMs": 83.43790000000001,
+      "importMs": 777.0171,
+      "getFaceHandlesMs": 16.54449999999997,
+      "rssStartBytes": 116568064,
+      "rssAfterImportBytes": 267780096,
+      "rssAfterLegacyBytes": null,
+      "rssAfterOptimizedBytes": 323100672,
+      "processId": 31872
+    },
+    {
+      "requestedFacets": 100000,
+      "facets": 100000,
+      "faces": 100000,
+      "edges": 149999,
+      "legacyRun": false,
+      "legacyMs": null,
+      "optimizedMs": 170.2304999999999,
+      "importMs": 1455.8178,
+      "getFaceHandlesMs": 27.902000000000044,
+      "rssStartBytes": 117489664,
+      "rssAfterImportBytes": 410562560,
+      "rssAfterLegacyBytes": null,
+      "rssAfterOptimizedBytes": 416555008,
+      "processId": 4568
+    }
+  ]
+}

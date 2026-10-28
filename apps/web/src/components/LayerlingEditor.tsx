@@ -1,4 +1,5 @@
 "use client";
+import { assertCadMeshBudget, CAD_FALLBACK_MESH_TRIANGLES } from "@/lib/cadMeshBudget";
 import { AlertTriangle, X } from "lucide-react";
 import { ObjectListPanel } from "@/components/workplane/ObjectListPanel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -91,7 +92,7 @@ import { cadModifierGridfinityForShape, cadModifierHelicalGearForShape, cadModif
 import { DEFAULT_OVERHANG_ANGLE, normalizeOverhangAngle, overhangArea } from "@/lib/overhang";
 import { sectionMeasurement, sectionPointToWorld, snapSectionPoint } from "@/lib/sectionMeasure";
 import { DEFAULT_INFILL_PERCENT, DEFAULT_WALLS, PRINT_MATERIAL_DENSITY, PRINT_MATERIALS, FILAMENT_DIAMETER_MM, normalizePrintMaterial, printEstimate, printEstimateWithInfill } from "@/lib/printEstimate";
-import { CAD_MODIFIER_MAX_SHARP_ANGLE, CAD_MODIFIER_REQUEST_TIMEOUT_MS, CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT, cadModifierPrepareTimeoutMs, cadModifierTimeoutMessage, cadModifierUserErrorMessage, cadModifierWorkerFailureMessage, cadModifierCandidateEdge, defaultCadModifierTangentChain, rescueSharpAngleForEdges, selectableCadModifierEdge, type CadModifierRequestPhase } from "@/lib/cadModifierRuntime";
+import { CAD_MODIFIER_MAX_SHARP_ANGLE, CAD_MODIFIER_REQUEST_TIMEOUT_MS, cadModifierPrepareTimeoutMs, cadModifierTimeoutMessage, cadModifierUserErrorMessage, cadModifierWorkerFailureMessage, cadModifierCandidateEdge, defaultCadModifierTangentChain, rescueSharpAngleForEdges, selectableCadModifierEdge, type CadModifierRequestPhase } from "@/lib/cadModifierRuntime";
 import { createCadPreviewQueue } from "@/lib/cadPreviewQueue";
 import { cloneWorkplaneShapeSnapshot, compactEdgeTreatmentHistory, edgeTreatmentAppliedFrame, groupBeforeEdgeTreatments, restoreShapeBeforeEdgeTreatment, wasGroupBeforeEdgeTreatments } from "@/lib/edgeTreatmentHistory";
 import { historyStepsAround } from "@/lib/historyStepDescription";
@@ -3022,7 +3023,7 @@ export function LayerlingEditor({
   }, [sketchSelection, sketchTool, sketchActive]);
   const [edgeModifier, setEdgeModifier] = useState<EdgeModifierSession | null>(null);
   // `mode: "offset"` is the Offset tool (#919), which shares the hollow tool's state: `thickness` is then the distance.
-  const [shellTool, setShellTool] = useState<{ mode?: "offset"; shrink?: boolean; keepCopy?: boolean; thickness: number; openings: ShellOpenings; edges: ShellEdges; busy: boolean; error: string | null } | null>(null);
+  const [shellTool, setShellTool] = useState<{ mode?: "offset"; shrink?: boolean; keepCopy?: boolean; thickness: number; openings: ShellOpenings; edges: ShellEdges; options?: import("@/types/layerling").ShellOptions; busy: boolean; error: string | null } | null>(null);
   /** Cut out (#927): `partId` stays, a copy of it grown by `clearance` is cut out of `hostId`. */
   const [cutOutTool, setCutOutTool] = useState<{ partId: string; hostId: string; clearance: number; busy: boolean; error: string | null } | null>(null);
   const [simplifyToolId, setSimplifyToolId] = useState<string | null>(null);
@@ -4572,7 +4573,7 @@ export function LayerlingEditor({
     );
     const feature = entry.feature;
     if (feature.kind === "shell") {
-      setShellTool({ thickness: feature.amount, openings: feature.openings ?? "top", edges: feature.shellEdges ?? "round", busy: false, error: null });
+      setShellTool({ thickness: feature.amount, openings: feature.openings ?? "top", edges: feature.shellEdges ?? "round", options: feature.shellOptions, busy: false, error: null });
     } else if (feature.kind === "offset") {
       setShellTool({ mode: "offset", thickness: feature.amount, shrink: feature.offsetShrink === true, keepCopy: false, openings: "none", edges: feature.shellEdges ?? "round", busy: false, error: null });
     } else if (feature.kind !== "surfaceTexture") {
@@ -6706,33 +6707,19 @@ export function LayerlingEditor({
     const profileTriangleCount = partInputs.reduce((total, part) => total + (part.profileMesh?.faces.length ?? 0), 0);
     const profilePartCount = partInputs.filter((part) => part.profile || part.step || part.thread || part.spring || part.helicalGear || part.gridfinity).length;
     const profileSegmentCount = partInputs.reduce((total, part) => total + (part.profile ? cadProfileSegmentCount(part.profile) : 0), 0);
-    const sendProfileMeshes = triangleCount + profileTriangleCount <= CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT;
+    const sendProfileMeshes = triangleCount + profileTriangleCount <= CAD_FALLBACK_MESH_TRIANGLES;
     // A STEP import's, a thread's, a spring's or a helical gear's mesh went
     // along as the part itself until it had its own body; it still goes along
     // whenever it would have fitted then. A Gridfinity part's goes the same way.
     const stepTriangleCount = partInputs.reduce((total, part) => total + (part.step || part.thread || part.spring || part.helicalGear || part.gridfinity ? part.profileMesh?.faces.length ?? 0 : 0), 0);
-    const sendStepMeshes = sendProfileMeshes || triangleCount + stepTriangleCount <= CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT;
+    const sendStepMeshes = sendProfileMeshes || triangleCount + stepTriangleCount <= CAD_FALLBACK_MESH_TRIANGLES;
     const prepareTimeoutMs = cadModifierPrepareTimeoutMs(triangleCount + (sendProfileMeshes ? profileTriangleCount : sendStepMeshes ? stepTriangleCount : 0), profilePartCount, profileSegmentCount);
     if (triangleCount === 0 && partInputs.every((part) => !part.brep && !part.step && !part.thread && !part.spring && !part.helicalGear && !part.gridfinity && !part.primitive && !part.profile)) {
       setNotice(t("status.noPrintableSurface"));
       return;
     }
-    if (triangleCount > CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT) {
-      // Ein Gewinde kommt nur noch als Dreiecke hier an, wenn es keinen
-      // exakten Koerper bekommt; dann besteht die Wendel aus tausenden
-      // Dreiecken, und die Absage nennt gleich den Weg, der wirklich zum
-      // gebrochenen Schraubenkopf fuehrt. Ein exakt gebautes Gewinde zaehlt
-      // hier nicht mit, die Absage gilt dann einem anderen Teil.
-      const istGewinde = partInputs.some((part) => part.mesh && part.shape.kind === "thread");
-      const denseCounts = { triangles: formatTriangleCount(triangleCount), limit: formatTriangleCount(CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT) };
-      // The limit is where the measurements turn (it can take minutes beyond it), not a wall: whoever
-      // knows their machine may go on after a clear warning (#941). A thread has a better way, so it stays refused.
-      const goOn = !istGewinde && typeof window !== "undefined" && window.confirm(t("status.meshDenseAsk", denseCounts));
-      if (!goOn) {
-        setNotice(t(istGewinde ? "status.threadTooDense" : "status.meshTooDense", denseCounts), true);
-        return;
-      }
-    }
+    try { assertCadMeshBudget(triangleCount); }
+    catch (error) { setNotice(error instanceof Error ? error.message : String(error), true); return; }
     const amount = Math.max(MIN_EDGE_MODIFIER_AMOUNT, Math.min(1, shapeWidth(selectedShape) / 6, shapeDepth(selectedShape) / 6, selectedShape.height / 6));
     cadModifierBaseShapeRef.current = selectedShape;
     cadModifierBaseFingerprintRef.current = projectShapesFingerprint([selectedShape]);
@@ -6849,12 +6836,12 @@ export function LayerlingEditor({
     const profileTriangleCount = partInputs.reduce((total, part) => total + (part.profileMesh?.faces.length ?? 0), 0);
     const profilePartCount = partInputs.filter((part) => part.profile || part.step || part.thread || part.spring || part.helicalGear || part.gridfinity).length;
     const profileSegmentCount = partInputs.reduce((total, part) => total + (part.profile ? cadProfileSegmentCount(part.profile) : 0), 0);
-    const sendProfileMeshes = !options.faces && triangleCount + profileTriangleCount <= CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT;
+    const sendProfileMeshes = !options.faces && triangleCount + profileTriangleCount <= CAD_FALLBACK_MESH_TRIANGLES;
     // A STEP import's, a thread's, a spring's or a helical gear's mesh went
     // along as the part itself until it had its own body; it still goes along
     // whenever it would have fitted then. A Gridfinity part's goes the same way.
     const stepTriangleCount = partInputs.reduce((total, part) => total + (part.step || part.thread || part.spring || part.helicalGear || part.gridfinity ? part.profileMesh?.faces.length ?? 0 : 0), 0);
-    const sendStepMeshes = !options.faces && (sendProfileMeshes || triangleCount + stepTriangleCount <= CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT);
+    const sendStepMeshes = !options.faces && (sendProfileMeshes || triangleCount + stepTriangleCount <= CAD_FALLBACK_MESH_TRIANGLES);
     const prepareTimeoutMs = cadModifierPrepareTimeoutMs(triangleCount + (sendProfileMeshes ? profileTriangleCount : sendStepMeshes ? stepTriangleCount : 0), profilePartCount, profileSegmentCount);
     if (triangleCount === 0 && partInputs.every((part) => !part.brep && !part.step && !part.thread && !part.spring && !part.helicalGear && !part.gridfinity && !part.primitive && !part.profile)) {
       throw new Error("The selected object has no printable surface");
@@ -6870,9 +6857,7 @@ export function LayerlingEditor({
         ? "This body was resized with Keep edge size when resizing on and has no exact faces at this size; undo the resize, delete the faces, then resize it again"
         : "This body has no exact faces to delete: layerling keeps it as a mesh, as it does an imported STL, OBJ or 3MF, a split, wrapped or simplified body, or a very detailed shape such as a long text. A part imported as STEP has exact faces.");
     }
-    if (triangleCount > CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT) {
-      throw new Error(`This mesh has ${triangleCount} triangles; interactive edge treatment stops at ${CAD_MODIFIER_PREPARE_TRIANGLE_LIMIT}. For a shape from the catalogue, use its own parameters for now. For an imported part, import it as STEP or with fewer triangles.`);
-    }
+    assertCadMeshBudget(triangleCount);
     const parts: CadModifierMeshPart[] = partInputs.map((part) => {
       if (part.brep) return { brep: part.brep, brepTransform: part.brepTransform, hole: Boolean(part.shape.hole) };
       if (part.thread) return cadModifierThreadMeshPart(part.thread, part.profileMesh, sendStepMeshes, Boolean(part.shape.hole));
@@ -6948,7 +6933,7 @@ export function LayerlingEditor({
       chamferAngle,
       ...(endAmount !== undefined ? { endAmount } : {}),
       minDeflection: shape.cadMeshDeflection,
-    }, [], 30000);
+    }, [], CAD_MODIFIER_REQUEST_TIMEOUT_MS);
     if (previewResponse.type !== "preview") {
       throw new Error("The CAD worker did not return an edge preview");
     }
@@ -7027,7 +7012,7 @@ export function LayerlingEditor({
    */
   // `watched` is the body in the scene the result replaces; it is the shape
   // itself, except when a resized hollow body is hollowed again from its state before.
-  const shellShape = useCallback(async (shape: WorkplaneShape, thickness: number, openings: ShellOpenings, edges: ShellEdges = "round", watched: WorkplaneShape = shape, offset?: { shrink: boolean }) => {
+  const shellShape = useCallback(async (shape: WorkplaneShape, thickness: number, openings: ShellOpenings, edges: ShellEdges = "round", watched: WorkplaneShape = shape, offset?: { shrink: boolean }, options?: import("@/types/layerling").ShellOptions) => {
     if (shape.locked || shape.hole || isNonSolidShape(shape)) {
       throw new Error("Select one unlocked solid object to hollow");
     }
@@ -7044,9 +7029,10 @@ export function LayerlingEditor({
       chamferAngle: 45,
       shellOpenings: openings,
       shellEdges: edges,
+      shellOptions: options,
       ...(offset ? { offsetShrink: offset.shrink } : {}),
       minDeflection: shape.cadMeshDeflection,
-    }, [], 60000);
+    }, [], 180000);
     if (previewResponse.type !== "preview") {
       throw new Error("The CAD worker did not return a hollowed body");
     }
@@ -7059,7 +7045,7 @@ export function LayerlingEditor({
       cadDisplayEdges: cadDisplayEdgesForShape(rawPreview, previewResponse.displayEdges),
       cadDisplayEdgesVersion: 2 as const,
     });
-    const feature = { kind: offset ? "offset" as const : "shell" as const, amount: thickness, edgeCount: 0, openings, ...(edges === "sharp" ? { shellEdges: edges } : {}), ...(offset?.shrink ? { offsetShrink: true } : {}) } satisfies NonNullable<WorkplaneShape["edgeTreatments"]>[number];
+    const feature = { kind: offset ? "offset" as const : "shell" as const, amount: thickness, edgeCount: 0, openings, ...(edges === "sharp" ? { shellEdges: edges } : {}), ...(options ? { shellOptions: options } : {}), ...(offset?.shrink ? { offsetShrink: true } : {}) } satisfies NonNullable<WorkplaneShape["edgeTreatments"]>[number];
     const session: EdgeModifierSession = {
       kind: offset ? "offset" : "shell",
       edges: response.edges,
@@ -7330,7 +7316,7 @@ export function LayerlingEditor({
         });
       return;
     }
-    void shellShape(target, thickness, openings, edges)
+    void shellShape(target, thickness, openings, edges, target, undefined, shellTool.options ?? { direction: "inward", tolerance: 1e-6 })
       .then((modifiedShape) => {
         commitShapes(
           shapesRef.current.map((candidate) => candidate.id === target.id ? modifiedShape : candidate),
@@ -7396,7 +7382,7 @@ export function LayerlingEditor({
       const entry = shellNeedingRebuild(stale);
       if (!entry) return;
       const fingerprint = projectShapesFingerprint([stale]);
-      const { amount, openings, shellEdges } = entry.feature;
+      const { amount, openings, shellEdges, shellOptions } = entry.feature;
       const stretch = hollowStretchSincePicture(stale, entry);
       const width = entry.before.width * stretch.x;
       const depth = entry.before.depth * stretch.z;
@@ -7412,7 +7398,7 @@ export function LayerlingEditor({
         return;
       }
       shellRebuildBusyRef.current = true;
-      void shellShape(before, amount, openings ?? "none", shellEdges ?? "round", stale)
+      void shellShape(before, amount, openings ?? "none", shellEdges ?? "round", stale, undefined, shellOptions)
         .then((rebuilt) => {
           if (replaceRebuiltShape(stale.id, fingerprint, rebuilt)) setNotice(t("status.shellRebuilt", { size: Number(amount.toFixed(2)) }));
         })
@@ -10983,13 +10969,14 @@ export function LayerlingEditor({
           ? shellOpeningsFor(params.openings.filter((side: unknown): side is ShellSide => SHELL_SIDES.includes(side as ShellSide)))
           : params.openings === "none" || params.openings === "bottom" || params.openings === "top-bottom" ? params.openings : "top";
         const edges: ShellEdges = params.edges === "sharp" ? "sharp" : "round";
-        const modifiedShape = await shellShape(target, thickness, openings, edges);
+        const options = { direction: params.direction === "outward" ? "outward" as const : "inward" as const, tolerance: mcpNumber(params.tolerance, 1e-6) };
+        const modifiedShape = await shellShape(target, thickness, openings, edges, target, undefined, options);
         commitShapes(
           shapesRef.current.map((candidate) => candidate.id === target.id ? modifiedShape : candidate),
           modifiedShape.id,
           t("status.shelledMcp", { size: Number(thickness.toFixed(2)) }),
         );
-        return { object: mcpShapeSummary(modifiedShape), thickness, openings, edges };
+        return { object: mcpShapeSummary(modifiedShape), thickness, openings, edges, ...options };
       }
 
       if (command.action === "offset_object") {
@@ -14137,7 +14124,7 @@ export function LayerlingEditor({
         <ShellPanel
           targetName={selectedShape.name}
           thickness={shellTool.thickness}
-          maxThickness={shellMaxThickness({ width: shapeWidth(selectedShape), depth: shapeDepth(selectedShape), height: selectedShape.height }, shellTool.openings)}
+          maxThickness={shellTool.options?.direction === "outward" ? Math.max(shapeWidth(selectedShape), shapeDepth(selectedShape), selectedShape.height) : shellMaxThickness({ width: shapeWidth(selectedShape), depth: shapeDepth(selectedShape), height: selectedShape.height }, shellTool.openings)}
           openings={shellTool.openings}
           workspace={workspaceSettings}
           busy={shellTool.busy}
@@ -14149,6 +14136,9 @@ export function LayerlingEditor({
           onRemoveFeature={removeEdgeTreatment}
           onEditFeature={editEdgeTreatment}
           onThicknessChange={(value) => setShellTool((current) => current ? { ...current, thickness: value, error: null } : current)}
+          options={shellTool.options}
+          onOptionsChange={options => setShellTool(current => current ? { ...current, options: { tolerance: 1e-6, ...options }, error: null } : current)}
+          meshSource={selectedShape.kind === "mesh" && !selectedShape.cadBrep && !selectedShape.importedMesh?.brepStep}
           onOpeningsChange={(value) => setShellTool((current) => {
             if (!current) return current;
             // A wall that fitted a frame may be too thick once a floor has to stay.
@@ -14158,7 +14148,7 @@ export function LayerlingEditor({
           edges={shellTool.edges}
           onEdgesChange={(value) => setShellTool((current) => current ? { ...current, edges: value, error: null } : current)}
           onApply={applyShellTool}
-          onCancel={() => setShellTool(null)}
+          onCancel={() => { invalidateCadModifierSession(); setShellTool(null); }}
         />
       ) : null}
       {deleteFaceTool && selectedShape?.id === deleteFaceTool.shapeId ? (

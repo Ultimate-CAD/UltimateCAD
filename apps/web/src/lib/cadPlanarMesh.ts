@@ -202,7 +202,18 @@ function outline(mesh: PlanarMesh, cluster: Cluster): number[] | null {
     ring.push(at);
   }
   // One ring holding every boundary edge: a face with a hole has a second ring.
-  return ring.length === next.size ? ring : null;
+  if (ring.length !== next.size) return null;
+  // Dense planar meshes often have hundreds of collinear boundary vertices.
+  // Retaining them manufactures thousands of needless kernel edges. Remove only
+  // points on the same directed segment, within a micrometre of that segment.
+  const simplified = ring.filter((id, index) => {
+    const a = mesh.vertices[ring[(index + ring.length - 1) % ring.length]];
+    const b = mesh.vertices[id];
+    const c = mesh.vertices[ring[(index + 1) % ring.length]];
+    const ab = sub(b, a), bc = sub(c, b);
+    return dot(ab, bc) < 0 || length(cross(ab, bc)) > 1e-6 * Math.max(length(ab) + length(bc), 1e-12);
+  });
+  return simplified.length >= 3 ? simplified : ring;
 }
 
 /** Flat faces of the mesh as kernel faces, ready for sewing; null when there is nothing to gain. */
@@ -215,21 +226,35 @@ export function planarMeshFaces(cad: OcctKernel, positions: ArrayLike<number>, i
   const faceOf = (ring: number[], plane?: Cluster) => {
     const points = ring.map((id) => {
       const p = point(id);
-      if (!plane) return p;
+      let fitted = p;
       // Whatever the corner step left off the plane (a corner of curved parts) is put onto it.
-      const distance = dot(plane.normal, p) - plane.offset;
-      return [p[0] - plane.normal[0] * distance, p[1] - plane.normal[1] * distance, p[2] - plane.normal[2] * distance] as V3;
+      if (plane) {
+        const distance = dot(plane.normal, p) - plane.offset;
+        fitted = [p[0] - plane.normal[0] * distance, p[1] - plane.normal[1] * distance, p[2] - plane.normal[2] * distance];
+      }
+      // Leave room for the original 0.0001 mm vertex welding grid. Never
+      // silently fit a faceted source outside the stated 0.002 mm allowance.
+      if (length(sub(fitted, mesh.vertices[id])) > 0.0018) throw new Error("Planar mesh fitting exceeded 0.002 mm");
+      return fitted;
     });
-    const edges = points.map((from, index) => cad.makeLineEdge({ x: from[0], y: from[1], z: from[2] }, { x: points[(index + 1) % points.length][0], y: points[(index + 1) % points.length][1], z: points[(index + 1) % points.length][2] }));
-    return cad.makeFace(cad.makeWire(edges));
+    const edges: ShapeHandle[] = [];
+    let wire: ShapeHandle | undefined;
+    try {
+      points.forEach((from, index) => edges.push(cad.makeLineEdge({ x: from[0], y: from[1], z: from[2] }, { x: points[(index + 1) % points.length][0], y: points[(index + 1) % points.length][1], z: points[(index + 1) % points.length][2] })));
+      wire = cad.makeWire(edges);
+      return cad.makeFace(wire);
+    } finally {
+      if (wire !== undefined) cad.release(wire);
+      edges.forEach(edge => cad.release(edge));
+    }
   };
-  mesh.clusters.forEach((cluster) => {
+  try { mesh.clusters.forEach((cluster) => {
     const ring = cluster.triangles.length >= 2 ? outline(mesh, cluster) : null;
     if (ring) {
       faces.push(faceOf(ring, cluster));
       return;
     }
     cluster.triangles.forEach((index) => faces.push(faceOf(mesh.triangles[index])));
-  });
+  }); } catch (error) { faces.forEach(face => cad.release(face)); throw error; }
   return { faces, faceCount: mesh.clusters.length };
 }

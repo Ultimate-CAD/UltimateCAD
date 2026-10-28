@@ -1,0 +1,45 @@
+{
+  "description": "In-process reconstruction, all-edge fillet, chamfer and closed sharp shell of generated subdivided boxes. Peak RSS includes the whole test process and preceding cases, not isolated per-operation memory. Source precision is faceted, with <=0.002mm plane fitting allowance.",
+  "samples": [
+    {
+      "triangles": 3888,
+      "kernelFaces": 6,
+      "kernelEdges": 12,
+      "totalMs": 192.3685,
+      "rssMiB": 159.72265625,
+      "peakRssMiB": 198.69140625
+    },
+    {
+      "triangles": 14772,
+      "kernelFaces": 6,
+      "kernelEdges": 12,
+      "totalMs": 71.4984,
+      "rssMiB": 193.484375,
+      "peakRssMiB": 198.69140625
+    },
+    {
+      "triangles": 20172,
+      "kernelFaces": 6,
+      "kernelEdges": 12,
+      "totalMs": 84.80919999999998,
+      "rssMiB": 232.328125,
+      "peakRssMiB": 235.62890625
+    },
+    {
+      "triangles": 50700,
+      "kernelFaces": 6,
+      "kernelEdges": 12,
+      "totalMs": 168.8596,
+      "rssMiB": 277.50390625,
+      "peakRssMiB": 277.66015625
+    },
+    {
+      "triangles": 101568,
+      "kernelFaces": 6,
+      "kernelEdges": 12,
+      "totalMs": 332.02200000000005,
+      "rssMiB": 382.1875,
+      "peakRssMiB": 382.19921875
+    }
+  ]
+}

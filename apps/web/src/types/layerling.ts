@@ -647,6 +647,7 @@ export type ShellOpenings = "none" | "top" | "bottom" | "top-bottom" | ShellSide
  * they intersect.
  */
 export type ShellEdges = "round" | "sharp";
+export type ShellOptions = { direction?: "inward" | "outward"; tolerance?: number };
 
 export type EdgeTreatmentFeature = {
   /**
@@ -664,6 +665,8 @@ export type EdgeTreatmentFeature = {
   openings?: ShellOpenings;
   /** Only for "shell" and "offset"; missing means "round". */
   shellEdges?: ShellEdges;
+  /** Shell reconstruction settings; absent preserves older project behavior. */
+  shellOptions?: ShellOptions;
   /** Only for "offset": the faces moved inward, the body shrunk; missing means grown. */
   offsetShrink?: boolean;
   /** Only for "deleteFace": the faces deleted, as the tool numbered them on the body before. */

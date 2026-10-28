@@ -8,7 +8,7 @@ import { cadModifierUserErrorMessage } from "@/lib/cadModifierRuntime";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/lib/useLanguage";
 import { MIN_SHELL_WALL, SHELL_SIDES, shellOpeningsFor, shellOpenSides } from "@/lib/shellLimits";
-import type { ShellEdges, ShellOpenings, WorkplaneWorkspaceSettings } from "@/types/layerling";
+import type { ShellEdges, ShellOpenings, ShellOptions, WorkplaneWorkspaceSettings } from "@/types/layerling";
 
 const SHELL_EDGES: readonly ShellEdges[] = ["round", "sharp"];
 const MIN_WALL = MIN_SHELL_WALL;
@@ -45,6 +45,9 @@ export function ShellPanel({
   onEdgesChange,
   onApply,
   onCancel,
+  options = {},
+  onOptionsChange,
+  meshSource = false,
 }: {
   targetName: string;
   thickness: number;
@@ -67,6 +70,9 @@ export function ShellPanel({
   onEdgesChange: (value: ShellEdges) => void;
   onApply: () => void;
   onCancel: () => void;
+  options?: ShellOptions;
+  onOptionsChange?: (value: ShellOptions) => void;
+  meshSource?: boolean;
 }) {
   useLanguage();
   const openSides = shellOpenSides(openings);
@@ -109,6 +115,23 @@ export function ShellPanel({
         disabled={busy}
         onChange={onThicknessChange}
       />
+
+      <div className="edge-modifier-field">
+        <label>Wall direction <select aria-label="Shell wall direction" disabled={busy} value={options.direction ?? "inward"}
+          onChange={event => onOptionsChange?.({ ...options, direction: event.target.value as "inward" | "outward" })}>
+          <option value="inward">Inward — keep outside dimensions</option>
+          <option value="outward">Outward — keep cavity dimensions</option>
+        </select></label>
+        <label>Reconstruction tolerance <select aria-label="Shell reconstruction tolerance" disabled={busy} value={options.tolerance ?? 1e-6}
+          onChange={event => onOptionsChange?.({ ...options, tolerance: Number(event.target.value) })}>
+          <option value={1e-6}>0.000001 mm — precise</option>
+          <option value={1e-4}>0.0001 mm</option>
+          <option value={1e-3}>0.001 mm — tolerant</option>
+        </select></label>
+        <span className="shell-openings-summary">{meshSource
+          ? "Faceted mesh source. Planar fitting allowance: 0.002 mm; curved detail remains limited to the original facets."
+          : "Native CAD surfaces are retained when available."} Offset tolerance is a reconstruction setting, not a guarantee of minimum wall clearance.</span>
+      </div>
 
       <div className="edge-modifier-field shell-openings" role="group" aria-label={t("shell.openings")}>
         <span>{t("shell.openings")}</span>

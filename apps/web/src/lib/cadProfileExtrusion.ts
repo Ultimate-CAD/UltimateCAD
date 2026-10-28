@@ -1523,10 +1523,10 @@ export function cadProfileSegmentCount(profile: CadModifierProfilePart) {
 }
 
 /**
- * Past CAD_MODIFIER_EXACT_SEGMENT_LIMIT outline pieces in one request the
- * exact bodies would outgrow the preview timeout. Then profile parts go back
- * to their display meshes - and meet the triangle limit, exactly as before -
- * until the rest fits: first those whose mesh is cheapest for the pieces it
+ * Past the working-memory allowance for exact outline pieces, profile parts
+ * fall back to their display meshes until the rest fits. The default allowance
+ * keeps detailed catalog profiles exact; it is independent of display density.
+ * First those whose mesh is cheapest for the pieces it
  * saves, so a gear (few triangles per piece) goes before a glyph (many), and
  * one big honeycomb does not send every other shape of the group back too.
  */

@@ -1,6 +1,6 @@
 import { JoinType, type OcctKernel, type ShapeHandle } from "occt-wasm";
 import { shellOpenSides } from "@/lib/shellLimits";
-import type { ShellEdges, ShellOpenings, ShellSide } from "@/types/layerling";
+import type { ShellEdges, ShellOpenings, ShellSide, ShellOptions } from "@/types/layerling";
 
 // Hollowing ("shell") for the CAD modifier worker. It lives outside the worker
 // so the end-to-end tests can run it against the real OCCT kernel.
@@ -135,7 +135,7 @@ const MIN_PROBE_WALL = 0.01;
  * instead. The precise tolerance is tried first; the coarser one survives more
  * curved inputs.
  */
-function shellBody(cad: OcctKernel, solid: ShapeHandle, thickness: number, openings: ShellOpenings, edges: ShellEdges) {
+function shellBody(cad: OcctKernel, solid: ShapeHandle, thickness: number, openings: ShellOpenings, edges: ShellEdges, options: ShellOptions = {}) {
   // Rounded inner corners are tried first. An outline made of many short straight pieces, such as
   // a traced drawing, can defeat the arc joins at every wall thickness while sharp joins build it
   // without trouble (forum 618422), so a rounded request falls back to sharp ones.
@@ -153,27 +153,49 @@ function shellBody(cad: OcctKernel, solid: ShapeHandle, thickness: number, openi
     // Past the thickness a body can take, OCCT may hand back the untouched
     // solid as a "valid" result - a hollow body has to lose volume.
     const solidVolume = cad.getVolume(solid);
+    const outward = options.direction === "outward";
+    const baseBounds = outward ? cad.getBoundingBox(solid, false) : null;
+    const tolerances = options.tolerance === undefined ? [1e-6, 1e-3] : [options.tolerance];
     let lastError: unknown = null;
     const attempt = (wall: number): ShapeHandle | null => {
       for (const joinType of joinTypes) {
-        for (const tolerance of [1e-6, 1e-3]) {
+        for (const tolerance of tolerances) {
           // With faces to open, the thick solid first; where it fails (a face with a pocket in it), the
           // body grown over the open faces. A closed body is hollowed with the offset of itself.
           const builds: Array<() => ShapeHandle> = open.length > 0
-            ? [() => cad.shell(solid, open, wall, tolerance, joinType), () => shellByExtension(cad, solid, open, wall, tolerance, joinType)]
+            ? outward
+              ? [() => cad.shell(solid, open, -wall, tolerance, joinType)]
+              : [() => cad.shell(solid, open, wall, tolerance, joinType), () => shellByExtension(cad, solid, open, wall, tolerance, joinType)]
             : [() => {
-              const cavity = cavityFromOffset(cad, cad.offset(solid, -wall, tolerance, joinType));
+              const cavity = cavityFromOffset(cad, cad.offset(solid, outward ? wall : -wall, tolerance, joinType));
               try {
-                return cad.cut(solid, cavity);
+                return outward ? cad.cut(cavity, solid) : cad.cut(solid, cavity);
               } finally {
                 cad.release(cavity);
               }
             }];
           for (const build of builds) {
             try {
-              const result = build();
+              const raw = build();
+              const solids = cad.isSolid(raw) ? [raw] : cad.getSubShapes(raw, "solid");
+              if (solids.length !== 1 && options.tolerance !== undefined) {
+                releaseAll(cad, solids); cad.release(raw);
+                lastError = new Error("invalid shell: expected one connected solid");
+                continue;
+              }
+              // Old projects may contain a valid compound produced by the
+              // pocket-extension fallback. Retain that behavior unless precise
+              // single-solid reconstruction was explicitly requested.
+              const result = solids.length === 1 ? solids[0] : raw;
+              if (result !== raw) cad.release(raw);
+              else if (!cad.isSolid(raw)) releaseAll(cad, solids);
               const volume = shapeIsValid(cad, result) ? cad.getVolume(result) : 0;
-              if (volume > 0 && volume < solidVolume * (1 - 1e-6)) return result;
+              const bounds = outward && volume > 0 ? cad.getBoundingBox(result, false) : null;
+              const expanded = bounds && baseBounds && (
+                bounds.xmin < baseBounds.xmin - wall / 4 || bounds.xmax > baseBounds.xmax + wall / 4 ||
+                bounds.ymin < baseBounds.ymin - wall / 4 || bounds.ymax > baseBounds.ymax + wall / 4 ||
+                bounds.zmin < baseBounds.zmin - wall / 4 || bounds.zmax > baseBounds.zmax + wall / 4);
+              if (volume > 0 && (outward ? expanded : volume < solidVolume * (1 - 1e-6))) return result;
               cad.release(result);
               lastError = new Error("invalid shell");
             } catch (error) {
@@ -243,10 +265,13 @@ function withoutSliverFaces(cad: OcctKernel, solid: ShapeHandle): ShapeHandle | 
   }
 }
 
-export function shellSolid(cad: OcctKernel, solid: ShapeHandle, thickness: number, openings: ShellOpenings, edges: ShellEdges = "round") {
+export function shellSolid(cad: OcctKernel, solid: ShapeHandle, thickness: number, openings: ShellOpenings, edges: ShellEdges = "round", options: ShellOptions = {}) {
+  if (!Number.isFinite(thickness) || thickness <= 0) throw new Error("Shell wall thickness must be positive and finite");
+  if (options.direction !== undefined && options.direction !== "inward" && options.direction !== "outward") throw new Error("Invalid shell direction");
+  if (options.tolerance !== undefined && (!Number.isFinite(options.tolerance) || options.tolerance < 1e-7 || options.tolerance > 1e-3)) throw new Error("Shell tolerance must be between 0.0000001 and 0.001 mm");
   const cleaned = withoutSliverFaces(cad, solid);
   try {
-    return shellBody(cad, cleaned ?? solid, thickness, openings, edges);
+    return shellBody(cad, cleaned ?? solid, thickness, openings, edges, options);
   } finally {
     if (cleaned !== null) cad.release(cleaned);
   }

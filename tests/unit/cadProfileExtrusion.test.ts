@@ -452,12 +452,16 @@ describe("which shapes get an exact profile", () => {
   });
 
   it("sends only as much of a big request back to the display meshes as it takes, cheapest meshes first", () => {
+    const limit = 700; // Explicit low-memory policy; no longer the workstation default.
     const star = cadModifierProfileForShape(shape("star", { starOuterFillet: 2, starInnerFillet: 1 }));
     const bigHoneycomb = cadModifierProfileForShape(shape("honeycomb", { width: 150, depth: 150, height: 3 }));
     const midHoneycomb = cadModifierProfileForShape(shape("honeycomb", { width: 100, depth: 100, height: 3 }));
     expect(cadProfileSegmentCount(star!)).toBe(20);
-    expect(cadProfileSegmentCount(midHoneycomb!)).toBeLessThanOrEqual(CAD_MODIFIER_EXACT_SEGMENT_LIMIT);
-    expect(cadProfileSegmentCount(bigHoneycomb!)).toBeGreaterThan(CAD_MODIFIER_EXACT_SEGMENT_LIMIT);
+    expect(cadProfileSegmentCount(midHoneycomb!)).toBeLessThanOrEqual(limit);
+    expect(cadProfileSegmentCount(bigHoneycomb!)).toBeGreaterThan(limit);
+    expect(cadProfileSegmentCount(bigHoneycomb!)).toBeLessThan(CAD_MODIFIER_EXACT_SEGMENT_LIMIT);
+    const exact = [{ profile: bigHoneycomb! }];
+    expect(withinExactProfileLimit(exact)).toBe(exact);
     const mesh = (triangles: number) => ({ faces: { length: triangles } });
     const starMesh = mesh(680);
     const honeycombMesh = mesh(7248);
@@ -465,7 +469,7 @@ describe("which shapes get an exact profile", () => {
     const small = [{ profile: star!, profileMesh: starMesh }, { profile: midHoneycomb!, profileMesh: mesh(3000) }, { mesh: plain }];
     expect(withinExactProfileLimit(small)).toBe(small);
     // The honeycomb alone is over the limit: it goes back, the star stays exact.
-    const big = withinExactProfileLimit([{ profile: star!, profileMesh: starMesh }, { profile: bigHoneycomb!, profileMesh: honeycombMesh }, { mesh: plain }]);
+    const big = withinExactProfileLimit([{ profile: star!, profileMesh: starMesh }, { profile: bigHoneycomb!, profileMesh: honeycombMesh }, { mesh: plain }], limit);
     expect(big[0].profile).toBe(star);
     expect(big[1].profile).toBeUndefined();
     expect(big[1].mesh).toBe(honeycombMesh);
@@ -476,8 +480,8 @@ describe("which shapes get an exact profile", () => {
     const plate = cadModifierProfileForShape(shape("honeycomb", { width: 100, depth: 100, height: 3 }))!;
     const gearMesh = mesh(cadProfileSegmentCount(gear) * 8);
     const plateMesh = mesh(cadProfileSegmentCount(plate) * 25);
-    const mixed = withinExactProfileLimit([{ profile: gear, profileMesh: gearMesh }, { profile: plate, profileMesh: plateMesh }]);
-    expect(cadProfileSegmentCount(gear) + cadProfileSegmentCount(plate)).toBeGreaterThan(CAD_MODIFIER_EXACT_SEGMENT_LIMIT);
+    const mixed = withinExactProfileLimit([{ profile: gear, profileMesh: gearMesh }, { profile: plate, profileMesh: plateMesh }], limit);
+    expect(cadProfileSegmentCount(gear) + cadProfileSegmentCount(plate)).toBeGreaterThan(limit);
     expect(mixed[0].profile).toBeUndefined();
     expect(mixed[1].profile).toBe(plate);
   });

@@ -311,6 +311,66 @@ describe("layerling .lyl project packages", () => {
     expect(restored.shapes[0].edgeTreatmentHistory?.[0].before.kind).toBe("box");
   });
 
+  it("round-trips shell direction and tolerance through feature, before snapshot, and project undo/redo", async () => {
+    const before = shape("box", "shell-body", {
+      color: "#4f7ac8",
+      x: 12,
+      z: -8,
+      elevation: 4,
+      rotation: 30,
+      rotationX: 10,
+      rotationZ: 355,
+      cadBrep: "BREP before shell",
+    });
+    const feature = {
+      kind: "shell" as const,
+      amount: 2,
+      edgeCount: 0,
+      openings: "top" as const,
+      shellEdges: "round" as const,
+      shellOptions: { direction: "outward" as const, tolerance: 1e-6 },
+    };
+    const treated = shape("box", "shell-body", {
+      color: before.color,
+      x: before.x,
+      z: before.z,
+      elevation: before.elevation,
+      rotation: before.rotation,
+      rotationX: before.rotationX,
+      rotationZ: before.rotationZ,
+      cadBrep: "BREP after shell",
+      edgeTreatments: [feature],
+      edgeTreatmentHistory: [{
+        id: "shell-history-1",
+        createdAt: 1_700_000_050_000,
+        feature,
+        before,
+      }],
+    });
+    const undo = editorHistoryEntry([before], [before.id]);
+    const redo = editorHistoryEntry([treated], [treated.id]);
+    const exported = await exportLylProject(input([treated], { history: [undo, redo], historyIndex: 1 }));
+    const restored = await importLylProject(exported);
+
+    expect(restored.shapes[0]).toMatchObject({
+      id: "shell-body",
+      color: before.color,
+      x: before.x,
+      z: before.z,
+      elevation: before.elevation,
+      rotation: before.rotation,
+      rotationX: before.rotationX,
+      rotationZ: before.rotationZ,
+      cadBrep: "BREP after shell",
+      edgeTreatments: [feature],
+    });
+    expect(restored.shapes[0].edgeTreatmentHistory?.[0]).toMatchObject({ feature, before });
+    expect(restored.history).toHaveLength(2);
+    expect(restored.historyIndex).toBe(1);
+    expect(restored.history[0].shapes[0]).toEqual(before);
+    expect(restored.history[1].shapes[0]).toMatchObject({ edgeTreatments: [feature], cadBrep: "BREP after shell" });
+  });
+
   it("saves deleted faces as their own operation and reads them back", async () => {
     const body = shape("box", "body", {
       cadBrep: "BREP exact payload",

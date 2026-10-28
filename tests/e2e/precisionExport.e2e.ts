@@ -13,7 +13,11 @@ import {
   meshTriangleMetrics,
   improvePlanarAspect,
 } from "@/lib/precisionMesh";
-import { manufacturingSurfaceChecks } from "@/lib/meshManufacturingQa";
+import {
+  manufacturingSurfaceChecks,
+  smoothManufacturingMesh,
+  sampledMeshDeviation,
+} from "@/lib/meshManufacturingQa";
 
 vi.mock("@/lib/brepKernel", async () => {
   const brep = await import("brepjs"),
@@ -51,6 +55,79 @@ beforeAll(async () => {
   rt.setup();
 });
 describe("precision manufacturing export", () => {
+  it("smooths a mesh within measured displacement while preserving sharp box corners", () => {
+    const sphere = rt.Manifold.sphere(10, 32),
+      m = sphere.getMesh();
+    const mesh = {
+      vertices: Array.from(
+        { length: m.numVert },
+        (_, i) =>
+          Array.from(
+            m.vertProperties.subarray(i * m.numProp, i * m.numProp + 3),
+          ) as [number, number, number],
+      ),
+      faces: Array.from(
+        { length: m.numTri },
+        (_, i) =>
+          Array.from(m.triVerts.subarray(i * 3, i * 3 + 3)) as [
+            number,
+            number,
+            number,
+          ],
+      ),
+    };
+    sphere.delete();
+    const smooth = smoothManufacturingMesh(mesh, 0.5, 40, 0.1),
+      distance = sampledMeshDeviation(mesh, smooth);
+    expect(auditManufacturingMesh(smooth).valid).toBe(true);
+    expect(distance.mm).toBeGreaterThan(0);
+    expect(distance.mm).toBeLessThanOrEqual(0.1);
+    const box = rt.Manifold.cube([20, 20, 20]),
+      b = box.getMesh();
+    const sharp = {
+      vertices: Array.from(
+        { length: b.numVert },
+        (_, i) =>
+          Array.from(
+            b.vertProperties.subarray(i * b.numProp, i * b.numProp + 3),
+          ) as [number, number, number],
+      ),
+      faces: Array.from(
+        { length: b.numTri },
+        (_, i) =>
+          Array.from(b.triVerts.subarray(i * 3, i * 3 + 3)) as [
+            number,
+            number,
+            number,
+          ],
+      ),
+    };
+    box.delete();
+    expect(smoothManufacturingMesh(sharp, 0.5, 40, 0.1).vertices).toEqual(
+      sharp.vertices,
+    );
+  });
+  it("improves planar aspect ratio without moving the represented surface", () => {
+    const mesh = {
+      vertices: [
+        [0, 0, 0],
+        [4, 0, 0],
+        [4, 0, 1],
+        [0, 0, 4],
+      ] as [number, number, number][],
+      faces: [
+        [0, 3, 1],
+        [1, 3, 2],
+      ] as [number, number, number][],
+    };
+    const improved = improvePlanarAspect(mesh, 2);
+    expect(improved.flips).toBe(1);
+    expect(improved.mesh.vertices).toEqual(mesh.vertices);
+    expect(meshTriangleMetrics(improved.mesh).maxAspectRatio).toBeLessThan(
+      meshTriangleMetrics(mesh).maxAspectRatio,
+    );
+    expect(sampledMeshDeviation(mesh, improved.mesh).mm).toBeLessThan(1e-9);
+  });
   it("keeps defective STL/OBJ topology blocked even when optional surface checking is disabled", async () => {
     const { PrecisionExportEngine } = await import("@/lib/precisionExport");
     const solid = rt.Manifold.cube([20, 20, 20]),

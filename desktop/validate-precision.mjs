@@ -7,7 +7,7 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { unzipSync, strFromU8 } from "fflate";
 
 const executable = path.resolve(
-  process.argv.find((s) => s.endsWith(".exe")) ||
+  process.argv.slice(2).find((s) => s.endsWith(".exe")) ||
     "dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe",
 );
 const output = path.resolve(
@@ -18,17 +18,21 @@ const fixture = path.resolve(
   process.env.LAYERLING_SAVED_ORGANIC ||
     ".codex-run/preserved-organic-ultimate3/organic-validation/hollowed-organic.lyl",
 );
-const profile = path.join(output, "isolated-profile");
+const profile = path.join(output, `isolated-profile-${Date.now()}`);
 mkdirSync(output, { recursive: true });
 const checks = [],
   errors = [],
   requests = [],
   workers = [],
   workerHandles = [];
-let app, page, connection, editorId, pid;
+let app, page, connection, editorId, pid, child;
 const sha = (file) =>
   createHash("sha256").update(readFileSync(file)).digest("hex");
 const sourceHash = existsSync(fixture) ? sha(fixture) : null;
+const sourceProjectName = sourceHash
+  ? JSON.parse(strFromU8(unzipSync(readFileSync(fixture))["project.json"]))
+      .metadata.projectName
+  : null;
 const pass = (name, detail) => {
   checks.push({ name, detail });
   console.log("PASS", name, detail ?? "");
@@ -54,13 +58,19 @@ async function command(action, params = {}) {
   assert.equal(result.ok, true, JSON.stringify(result));
   return result.data;
 }
-async function ready() {
+async function ready(projectName) {
   for (let i = 0; i < 150; i++) {
     const r = await fetch(connection.url + "/api/layerling-mcp", {
         headers: { Authorization: `Bearer ${connection.token}` },
       }),
       json = await r.json();
-    const editor = json.editors?.find((e) => Date.now() - e.lastSeen < 10000);
+    const editor = json.editors
+      ?.filter(
+        (e) =>
+          Date.now() - e.lastSeen < 10000 &&
+          (!projectName || e.projectName === projectName),
+      )
+      .sort((a, b) => b.lastSeen - a.lastSeen)[0];
     if (editor) {
       editorId = editor.editorId;
       return;
@@ -95,12 +105,21 @@ async function preview() {
   await page.locator(".precision-results").waitFor({ timeout: 180000 });
 }
 async function download(button, file) {
-  const event = page.waitForEvent("download");
+  const target = path.join(output, file);
+  await app.evaluate((_electron, target) => {
+    globalThis.__precisionDownloadTarget = target;
+    globalThis.__precisionDownloadDone = null;
+  }, target);
   await button.click();
-  const item = await event;
-  await item.saveAs(path.join(output, file));
-  assert.ok(readFileSync(path.join(output, file)).length > 0);
-  return path.join(output, file);
+  let done = null;
+  for (let i = 0; i < 600; i++) {
+    done = await app.evaluate(() => globalThis.__precisionDownloadDone);
+    if (done) break;
+    await pause(100);
+  }
+  assert.equal(done, "completed", "Native Electron download did not complete");
+  assert.ok(readFileSync(target).length > 0);
+  return target;
 }
 function strictTopology(vertices, faces) {
   const edges = new Map(),
@@ -229,34 +248,49 @@ try {
       LAYERLING_DESKTOP_TEST: "1",
     },
   });
-  pid = app.process().pid;
-  await app.evaluate(({ session }, directory) => {
-    const path = process.getBuiltinModule("path");
-    session.defaultSession.on("will-download", (_e, item) =>
-      item.setSavePath(path.join(directory, item.getFilename())),
-    );
-  }, output);
+  child = app.process();
+  pid = child.pid;
   page = await app.firstWindow();
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0].webContents.session.on(
+      "will-download",
+      (_e, item) => {
+        if (!globalThis.__precisionDownloadTarget) return;
+        item.setSavePath(globalThis.__precisionDownloadTarget);
+        item.once(
+          "done",
+          (_e, state) => (globalThis.__precisionDownloadDone = state),
+        );
+      },
+    );
+  });
   page.setDefaultTimeout(30000);
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("worker", (w) => {
     workers.push(w.url());
     workerHandles.push(w);
   });
-  await page.context().route("**/*", (r) => {
-    const url = r.request().url();
-    requests.push(url);
-    if (
-      /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:|\/)/.test(url) ||
-      /^(blob:|data:)/.test(url)
-    )
-      return r.continue();
-    return r.abort();
-  });
+  page.on("request", (r) => requests.push(r.url()));
   await page
     .getByRole("button", { name: "Create new 3D design", exact: true })
     .waitFor({ timeout: 90000 });
   connection = JSON.parse(readFileSync(path.join(profile, "connection.json")));
+  assert.equal(connection.version, "1.114.0-ultimate.4");
+  assert.equal(
+    await page.evaluate(async () => {
+      try {
+        await fetch("https://example.com");
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+    true,
+  );
+  pass(
+    "Packaged version verified and native application policy blocks external network requests",
+    connection.version,
+  );
   await page
     .getByRole("button", { name: "Create new 3D design", exact: true })
     .click();
@@ -273,7 +307,16 @@ try {
   await command("select_objects", { ids: [native.id] });
   await openStudio();
   await page.getByLabel("Mesh quality preset").selectOption("standard");
+  const workersBeforePreview = new Set(workerHandles);
   await preview();
+  const precisionWorker = workerHandles.find(
+    (w) =>
+      !workersBeforePreview.has(w) && w.url().includes("/_next/static/chunks/"),
+  );
+  assert.ok(
+    precisionWorker,
+    "Precision preview did not create its dedicated geometry worker",
+  );
   assert.equal(
     await page.locator(".precision-results").getAttribute("data-ready"),
     "true",
@@ -322,9 +365,7 @@ try {
   await page
     .getByLabel("Maximum edge length (mm; 0 = unrestricted)")
     .fill(".05");
-  const closed = new Promise((r) =>
-    workerHandles.at(-1).on("close", () => r()),
-  );
+  const closed = new Promise((r) => precisionWorker.on("close", () => r()));
   await page
     .getByRole("button", { name: "Generate export preview", exact: true })
     .click();
@@ -350,8 +391,17 @@ try {
       .locator('input[type=file][accept*=".lyl"]')
       .first()
       .setInputFiles(fixture);
-    await ready();
-    await page.waitForFunction(() => document.body.innerText.includes("Group"));
+    await ready(sourceProjectName);
+    let organic;
+    for (let i = 0; i < 100; i++) {
+      organic = (await command("list_objects")).objects.find(
+        (o) => o.importedTriangles === 171914,
+      );
+      if (organic) break;
+      await pause(100);
+    }
+    assert.ok(organic, "Cached organic result did not load");
+    await command("select_objects", { ids: [organic.id] });
     await openStudio();
     await preview();
     assert.equal(
@@ -462,7 +512,7 @@ try {
       })
       .catch(() => {});
     await Promise.race([app.close(), pause(12000)]);
-    if (app.process().exitCode === null) {
+    if (child.exitCode === null) {
       console.error(`Validator-owned app PID ${pid} did not exit`);
       process.exitCode = 1;
     }

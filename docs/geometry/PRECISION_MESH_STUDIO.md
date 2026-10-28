@@ -53,7 +53,7 @@ npx.cmd vitest run --config tests/vitest.e2e.config.ts tests/e2e/manufacturingRe
 - [x] Independent analytic export tessellation and measured mesh refinement.
 - [x] Background precision export with quality controls and repair preview.
 - [x] Manufacturing report, explicit limitations and file round-trip checks.
-- [ ] Final focused regressions, packaged UI validation and private Windows release.
+- [x] Final focused regressions, packaged UI validation and private Windows release.
 
 ## Implemented workbench
 
@@ -98,6 +98,9 @@ a global exact proof. Shell containment/orientation is probed with parity rays.
 Thickness uses sampled inward normal rays and is not a global minimum thickness
 certificate. B-rep normal estimates use closest-surface displacement where it is
 above positional noise. All these limits are visible in the report.
+Precision 3MF retains body colors; per-face material provenance through grouped
+body remeshing is not implemented. Keep material regions as separate bodies
+when using this workbench.
 
 ## Additional measurements
 
@@ -153,3 +156,60 @@ Sources inspected: installed `occt-wasm`, `manifold-3d`, `three-mesh-bvh` and
 `fflate` implementations, plus official documentation:
 [OCCT meshing](https://occt3d.com/dev/doc/overview/html/occt_user_guides__mesh.html),
 [Manifold mesh interchange](https://manifoldcad.org/docs/html/structmanifold_1_1_mesh_g_l_p.html).
+
+## Packaged acceptance and release
+
+Version: **1.114.0-ultimate.4**. App source commit: **d8ef0bd9**. The earlier
+integrity-only checkpoint is **caa8bb63**, before the larger export workbench.
+Later commits update validation helpers, tests and this report only; the packaged
+application code is the verified d8ef0bd9 build.
+
+All 10 Precision Mesh Studio packaged acceptance checks passed with no renderer
+errors. Tests used a unique isolated profile and System32-only PATH. The native
+desktop policy rejected external fetches. Binary STL and precision 3MF were
+exported through the actual UI and native Electron downloads, independently
+reimported, and checked for exact-coordinate edge/vertex manifoldness, winding,
+duplicates, degeneracy and positive volume. The dedicated export worker was
+canceled during active refinement and observed closing; source identity remained.
+The cached organic source LYL hash was unchanged after exports.
+
+Packaged Standard sphere: 4,752 triangles; Ultra: 19,950 triangles, sampled
+analytic error **0.003806682 mm** (0.005 mm request). Both files are strictly
+manifold. The 2 numerical pole facets stitched by the analytic adapter explain
+the difference from raw-kernel counts in the earlier comparison.
+
+Packaged organic exports: **92,394 triangles**, volume **24,237.875896 mm3**,
+1 positive solid component and 1 cavity shell, no topology defects, no found
+non-adjacent intersections in the completed search. Explicit repair deviation
+**0.000083552 mm** under its 0.0001 mm budget. The default 0.8 mm wall concern
+threshold remains active: the UI requires review and does **not** mark this
+specific mesh print-ready. STL is 4,619,784 bytes and 3MF is 1,689,724 bytes.
+
+All 22 packaged OpenSCAD compatibility checks also passed, including source and
+parameter persistence, local libraries, native diagnostics, render cancellation,
+geometry caching and mixed native/SCAD project storage. Existing hollowing
+regressions remain passing; the expensive original-model SDF was not rerun.
+Two added refinement checks verify bounded smoothing and sharp-corner preservation,
+and coplanar aspect improvement without source-surface movement.
+
+Artifacts, relative to the repository root:
+
+- Executable: `dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe`
+- Installer: `dist/ultimate/windows/Layerling-Ultimate-OpenSCAD-Setup-x64.exe`
+- Precision acceptance: `dist/ultimate/windows/precision-validation/results.json`
+- OpenSCAD acceptance: `dist/ultimate/windows/precision-scad-validation/results.json`
+- Corrected mesh copies: `dist/ultimate/windows/precision-validation/organic-repaired.stl`
+  and `organic-repaired.3mf`
+- Manufacturing report: `dist/ultimate/windows/precision-validation/organic-stl.mesh-report.json`
+- Workbench screenshot: `dist/ultimate/windows/precision-validation/precision-organic.png`
+- Build log: `.codex-precision-release.log`; packaged log: `.codex-precision-packaged-6.log`.
+
+SHA256 installer:
+`4c6fa6b390a4f8546de5b8899a20e6e6b1f29a58c35fa4f4b10acac8dffc571e`
+
+SHA256 executable:
+`d2eecad065711935e748204ee39e7e3fc5b6128798b8e3461f2e517e7506c19e`
+
+The installer was built successfully; the packaged executable was validated.
+The prior installed release and user profile were not replaced. No push,
+publication, user-project mutation, or external geometry transfer occurred.

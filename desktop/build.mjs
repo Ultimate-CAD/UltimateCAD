@@ -33,6 +33,6 @@ cpSync('apps/web/public', path.join(web, 'public'), { recursive: true });
 for (const name of ['main.cjs', 'server.cjs', 'preload.cjs', 'mcp-client.mjs']) cpSync(`desktop/${name}`, path.join(stage, 'app', name));
 for (const name of ['layerling-mcp-server.mjs', 'layerling-mcp-tools.mjs', 'layerling-mcp-open.mjs']) cpSync(`scripts/${name}`, path.join(stage, 'app/mcp', name));
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: ultimate ? 'layerling-ultimate' : 'layerling-desktop', productName: ultimate ? 'Layerling Ultimate' : 'Layerling Desktop', version: ultimate ? `${pkg.version}-ultimate.3` : pkg.version, main: 'main.cjs', description: pkg.description, author: pkg.author, license: pkg.license }, null, 2));
+writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: ultimate ? 'layerling-ultimate' : 'layerling-desktop', productName: ultimate ? 'Layerling Ultimate' : 'Layerling Desktop', version: ultimate ? `${pkg.version}-ultimate.4` : pkg.version, main: 'main.cjs', description: pkg.description, author: pkg.author, license: pkg.license }, null, 2));
 run('desktop/licenses.mjs', []);
 console.log('Desktop runtime staged:', stage);

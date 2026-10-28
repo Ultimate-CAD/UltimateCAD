@@ -1,6 +1,7 @@
 import { strToU8, zip, zipSync } from "fflate";
 import { layerlingToZUp, type MeshPoint } from "@/lib/meshCoordinates";
 import { weldMeshVertices } from "@/lib/objExport";
+import { indexManufacturingMesh } from "@/lib/manufacturingMesh";
 
 // ---------------------------------------------------------------------------
 // 3MF export - the counterpart of threemfImport.ts.
@@ -73,7 +74,7 @@ function coordinate(value: number) {
  * triangle names the colour group too. A program that knows neither simply
  * sees the geometry.
  */
-export function exportMeshesTo3mf(meshes: readonly ThreeMfExportMesh[], metadata: { title?: string } = {}): Uint8Array {
+export function exportMeshesTo3mf(meshes: readonly ThreeMfExportMesh[], metadata: { title?: string; precision?: boolean } = {}): Uint8Array {
   return zipSync(threeMfPackageFiles(meshes, metadata), THREE_MF_ZIP_OPTIONS);
 }
 
@@ -81,7 +82,7 @@ export function exportMeshesTo3mf(meshes: readonly ThreeMfExportMesh[], metadata
  * The same file, packed by fflate's workers: for a 300,000-triangle export packing took 1.3 s of
  * the page's main thread. Where those workers cannot start, it is packed here as before.
  */
-export async function exportMeshesTo3mfAsync(meshes: readonly ThreeMfExportMesh[], metadata: { title?: string } = {}): Promise<Uint8Array> {
+export async function exportMeshesTo3mfAsync(meshes: readonly ThreeMfExportMesh[], metadata: { title?: string; precision?: boolean } = {}): Promise<Uint8Array> {
   const files = threeMfPackageFiles(meshes, metadata);
   try {
     return await new Promise<Uint8Array>((resolve, reject) => {
@@ -94,20 +95,21 @@ export async function exportMeshesTo3mfAsync(meshes: readonly ThreeMfExportMesh[
 
 const THREE_MF_ZIP_OPTIONS = { level: 6 } as const;
 
-function threeMfPackageFiles(meshes: readonly ThreeMfExportMesh[], metadata: { title?: string }) {
+function threeMfPackageFiles(meshes: readonly ThreeMfExportMesh[], metadata: { title?: string; precision?: boolean }) {
   const colors = [...new Set(meshes.flatMap((mesh) => [displayColor(mesh.color), ...(mesh.faceColors ?? []).map(displayColor)]))];
   const objects: string[] = [];
   const items: string[] = [];
   const colorGroupId = meshes.length + 2; // after the material group (1) and the objects (2...)
 
   meshes.forEach((mesh, index) => {
-    const welded = weldMeshVertices(mesh);
+    const welded = metadata.precision ? { ...indexManufacturingMesh(mesh), kept:mesh.faces.map((_,i)=>i) } : weldMeshVertices(mesh);
     if (welded.faces.length === 0) return;
     const id = index + 2; // 1 is the material group
     const vertices = welded.vertices
       .map((vertex) => {
         const [x, y, z] = layerlingToZUp(vertex);
-        return `<vertex x="${coordinate(x)}" y="${coordinate(y)}" z="${coordinate(z)}"/>`;
+        const encode = metadata.precision ? (v:number)=>String(Object.is(v,-0)?0:v) : coordinate;
+        return `<vertex x="${encode(x)}" y="${encode(y)}" z="${encode(z)}"/>`;
       })
       .join("");
     const colorIndex = colors.indexOf(displayColor(mesh.color));

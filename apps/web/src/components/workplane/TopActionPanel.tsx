@@ -16,6 +16,7 @@ import { lylFileAccessSupported } from "@/lib/lylFileAccess";
 import { hasOwnShapeName } from "@/lib/shapeCatalog";
 import type { ProjectAttachment, WorkplaneShape } from "@/types/layerling";
 import { type ExportSolidVolume, PRINT_MATERIAL_STORAGE_KEY, PRINT_INFILL_STORAGE_KEY, PRINT_WALLS_STORAGE_KEY, formatEstimateNumber } from "@/lib/editorBooleans";
+import { PrecisionMeshStudio } from "./PrecisionMeshStudio";
 
 
 export type TopPanel = "import" | "export" | "attachments" | null;
@@ -42,6 +43,7 @@ export function TopActionPanel({
   onEstimatePrint,
   onClose,
   onExport,
+  onPrecisionDeliver,
   stlFileName = null,
   onExportLyl,
   onExportStep,
@@ -79,6 +81,7 @@ export function TopActionPanel({
   onEstimatePrint: (shapes: readonly WorkplaneShape[]) => Promise<ExportSolidVolume>;
   onClose: () => void;
   onExport: (format: DirectExportFormat, exportName: string, chooseFile?: boolean, svgView?: SvgExportView, toServer?: boolean, bridges?: StencilBridgeOptions | null) => void;
+  onPrecisionDeliver?: (name:string,bytes:Uint8Array,type:string)=>Promise<void>;
   /** The STL file this design exports into, once one was chosen (Chrome and Edge). */
   stlFileName?: string | null;
   onExportLyl: (exportName: string, historyLimit: LylHistoryLimit, target?: LylExportTarget) => void;
@@ -626,7 +629,8 @@ export function TopActionPanel({
             <p>{selectedExport.note}</p>
           </div>
 
-          <footer className="export-dialog-footer">
+          {onPrecisionDeliver&&(exportFormat==="stl"||exportFormat==="3mf")?<PrecisionMeshStudio shapes={estimateShapes} format={exportFormat} name={exportName} onDeliver={onPrecisionDeliver}/>:null}
+          <footer className="export-dialog-footer" hidden={Boolean(onPrecisionDeliver&&(exportFormat==="stl"||exportFormat==="3mf"))}>
             {exportFormat === "stl" && stlFileName ? (
               stlNameAsksForNewFile(exportName, projectName, stlFileName)
                 ? <span className="export-linked-file" title={exportName}>{t("export.stlNewFile", { name: projectExportFileName(exportName.trim().replace(/\.stl$/i, ""), "stl") })}</span>

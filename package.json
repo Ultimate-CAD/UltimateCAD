@@ -48,7 +48,8 @@
     "ultimate:release": "node desktop/build-ultimate.mjs",
     "ultimate:validate": "node desktop/validate-openscad.mjs",
     "ultimate:validate:geometry": "node desktop/validate-geometry.mjs",
-    "ultimate:validate:organic": "node desktop/validate-organic.mjs"
+    "ultimate:validate:organic": "node desktop/validate-organic.mjs",
+    "ultimate:validate:precision": "node desktop/validate-precision.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.1",

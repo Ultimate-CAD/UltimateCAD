@@ -13,6 +13,7 @@ import { applyCadTransform } from "@/lib/cadModifierRuntime";
 import { hingeHasExactParts } from "@/lib/hingeGeometry";
 import { hingeWorldParts } from "@/lib/hingeParts";
 import { restoreGroupedChildren } from "@/lib/editorBooleans";
+import { stitchAnalyticNumericalEdges } from "@/lib/precisionMesh";
 
 /**
  * Why a body did not go into the STEP file, in a word the editor can say in the user's language
@@ -518,4 +519,60 @@ export async function exportShapesToStep(shapes: WorkplaneShape[]): Promise<Step
   }
 
   return { blob: result.value, exportedCount: parts.length, skipped };
+}
+
+/** Same exact-body construction and placement as STEP; export tessellation never changes the model. */
+export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: number, angleDeg: number, progress:(text:string)=>void=()=>{}) {
+  if(stepSourceForShape(shape)==="unsupported"&&!isOpenableGroup(shape))return null;
+  const brep=await loadBrepWithOcct(),kernel=occtKernel();
+  if(!kernel)throw new Error("Exact export kernel is unavailable");
+  const skipped:SkippedShape[]=[];
+  const parts=await buildScope(brep,[{...shape,hole:false}],skipped);
+  if(skipped.length||!parts.length)throw new Error(`Exact export cannot preserve this body: ${skipped.map(s=>s.reason).join("; ")}`);
+  const vertices:[number,number,number][]=[],faces:[number,number,number][]=[];
+  let sampledDeviationMm=0,sampledNormalDeviationDeg=0,samples=0;
+  for(const part of parts){
+    const encoded=brep.toBREP(part.solid);if(!encoded.ok)throw new Error("Exact export could not serialize its working body");
+    const body=kernel.fromBREP(encoded.value);
+    try{
+      let accepted=false,previousAngle=Infinity;
+      for(let pass=0;pass<6;pass++){
+        const options={linearDeflection:deviationMm/2**pass,angularDeflection:angleDeg*Math.PI/180/2**pass,relative:false};
+        const mesh=kernel.tessellate(body,options);
+        progress(`Analytic pass ${pass+1}: ${mesh.triangleCount} triangles`);
+        if(mesh.triangleCount>12_000_000)throw new Error("Analytic tessellation exceeded the 12 million triangle worker budget");
+        let distance=0,normalAngle=0,count=0;
+        const subfaces=kernel.getSubShapes(body,"face");
+        try{for(const face of subfaces){
+          const m=kernel.tessellate(face,options);
+          // Exhaustive at modest density; stratified at high density, explicitly reported as sampled.
+          const stride=Math.max(1,Math.ceil(m.triangleCount/25000));
+          for(let i=0;i<m.indices.length;i+=3*stride){
+            const ids=[m.indices[i],m.indices[i+1],m.indices[i+2]],p=ids.map(id=>[m.positions[id*3],m.positions[id*3+1],m.positions[id*3+2]]);
+            const u=p[1].map((v,j)=>v-p[0][j]),v=p[2].map((v,j)=>v-p[0][j]);
+            const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],length=Math.hypot(...n);
+            // Pole/seam facets below floating-point area cannot define a reliable normal.
+            if(length<Math.max(1e-20,options.linearDeflection**2*1e-10))continue;
+            const probes=[p[0],p[1],p[2],[0,1,2].map(j=>(p[0][j]+p[1][j]+p[2][j])/3),...[[0,1],[1,2],[2,0]].map(([a,b])=>p[a].map((v,j)=>(v+p[b][j])/2))];
+            for(let pi=0;pi<probes.length;pi++){const p=probes[pi],q=kernel.projectPointOnFace(face,{x:p[0],y:p[1],z:p[2]}),delta=[q.x-p[0],q.y-p[1],q.z-p[2]],d=Math.hypot(...delta);distance=Math.max(distance,d);count++;
+              // Closest-surface displacement gives the analytic normal at a curved face's centroid.
+              // Below float32 positional noise its direction is undefined; don't invent an angle.
+              if(pi===3&&d>1e-5)normalAngle=Math.max(normalAngle,Math.acos(Math.min(1,Math.abs(n.reduce((s,v,j)=>s+v*delta[j],0)/length/d)))*180/Math.PI);
+            }
+          }
+        }}finally{subfaces.forEach(f=>kernel.release(f));}
+        progress(`Analytic samples: ${distance} mm, ${normalAngle} degrees`);
+        const angleStalled=pass>0&&normalAngle>=previousAngle*.99;
+        previousAngle=normalAngle;
+        if(distance>deviationMm||(normalAngle>angleDeg&&!angleStalled)){if(pass===5)throw new Error(`Exact tessellation did not achieve sampled tolerances (${distance} mm, ${normalAngle} degrees)`);continue;}
+        const offset=vertices.length;
+        for(let i=0;i<mesh.positions.length;i+=3)vertices.push([mesh.positions[i],mesh.positions[i+1],mesh.positions[i+2]]);
+        for(let i=0;i<mesh.indices.length;i+=3)faces.push([mesh.indices[i]+offset,mesh.indices[i+1]+offset,mesh.indices[i+2]+offset]);
+        sampledDeviationMm=Math.max(sampledDeviationMm,distance);sampledNormalDeviationDeg=Math.max(sampledNormalDeviationDeg,normalAngle);samples+=count;accepted=true;break;
+      }
+      if(!accepted)throw new Error("Exact export tessellation failed");
+    }finally{kernel.release(body);}
+  }
+  const stitched=stitchAnalyticNumericalEdges({vertices,faces},Math.min(1e-9,deviationMm/1000));
+  return {mesh:{name:shape.name,...stitched.mesh},sampledDeviationMm:sampledDeviationMm+stitched.movedMm,sampledNormalDeviationDeg,samples,numericalStitchMm:stitched.movedMm,numericalFacetsRemoved:stitched.removedFacets};
 }

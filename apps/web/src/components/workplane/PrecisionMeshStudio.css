@@ -1,0 +1,120 @@
+.precision-studio {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-color, #43505e);
+  border-radius: 12px;
+  background: var(--panel-bg, #202831);
+  color: var(--text-color, #eef3f7);
+}
+.export-dialog-footer[hidden] {
+  display: none;
+}
+.precision-studio p {
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 5px 0;
+  color: inherit;
+  opacity: 0.85;
+}
+.precision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+.precision-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 0;
+}
+.precision-field input,
+.precision-field select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px;
+  border-radius: 5px;
+  border: 1px solid #667789;
+  background: #16212b;
+  color: #eef3f7;
+  font-size: 13px;
+}
+.precision-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.precision-check input {
+  width: auto;
+}
+.precision-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.precision-buttons button {
+  padding: 9px 12px;
+  border: 1px solid #5f9bb0;
+  border-radius: 6px;
+  background: #183e4b;
+  color: #e9f9ff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.precision-buttons button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.precision-results {
+  display: grid;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.precision-results[data-ready="false"] > strong,
+.precision-studio [role="alert"] {
+  color: #ffbf83;
+}
+.precision-results[data-ready="true"] > strong {
+  color: #8ce1b1;
+}
+.precision-results details {
+  border-top: 1px solid #465461;
+  padding-top: 8px;
+  font-size: 12px;
+}
+.precision-results summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.precision-results ul {
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.precision-preview {
+  margin: 0;
+  display: grid;
+  gap: 7px;
+}
+.precision-preview canvas {
+  width: 100%;
+  max-width: 460px;
+  border-radius: 6px;
+}
+.precision-preview figcaption,
+.precision-preview label {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.precision-preview input[type="range"] {
+  width: 100%;
+}
+@media (max-width: 560px) {
+  .precision-grid {
+    grid-template-columns: 1fr;
+  }
+}

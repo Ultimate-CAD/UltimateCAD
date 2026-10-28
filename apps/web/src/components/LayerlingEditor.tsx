@@ -14377,6 +14377,7 @@ export function LayerlingEditor({
           onEstimatePrint={exportSolidVolumeOffThread}
           onClose={() => setTopPanel(null)}
           onExport={(format, exportName, chooseFile, svgView, toServer, bridges) => void exportDesign(format, exportName, chooseFile, svgView, toServer, bridges)}
+          onPrecisionDeliver={async(name,bytes,type)=>{await deliverExportFile(name,new Blob([bytes as BlobPart],{type}),type,false);}}
           stlFileName={topPanel === "export" && !workspaceSettings.stlAsDownload ? linkedStlFile(projectId ?? "")?.name ?? null : null}
           onExportLyl={exportLylDesign}
           onExportStep={exportStepDesign}

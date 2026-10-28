@@ -240,19 +240,10 @@ export function cadModifierPrepareCostMs(meshTriangleCount: number) {
 
 
 /**
- * Exact profile bodies (star, honeycomb, ...) are built quickly, but a group of
- * many of them is fused and cut one by one, and the kernel needs a while to
- * map the edges of a big one. Measured in Chromium on a 2-core machine
- * (prepare, then a fillet on 12 edges, which maps the edges once more):
- * honeycomb 80 mm, 306 outline pieces: 3.6 s + 0.7 s; 100 mm, 610 pieces:
- * 4.8 s + 6.3 s; 120 mm, 898 pieces: 8.8 s + 13.7 s; 150 mm, 1,550 pieces:
- * 26 s, and the fillet no longer fits the 30 s preview timeout.
- *
- * So up to 700 pieces per request the exact body is used - its preview stays
- * near 9 s there, over three times inside the timeout - and above that the
- * parts go the way they always went, through their display meshes and the
- * triangle limit. Each part and each piece gets room on top of the normal
- * minute, with the same 2.5x margin for slower computers as the mesh budget.
+ * Exact profile construction/fusion costs are separate from display density.
+ * The former 700-piece fallback protected the old quadratic edge map. Keep
+ * exact profiles within a working-memory allowance instead; each part and
+ * outline piece also receives time within the bounded preparation budget.
  */
 // Allow exact profiles according to a conservative working-memory allowance,
 // instead of downgrading a 701-segment CAD profile to display triangles.

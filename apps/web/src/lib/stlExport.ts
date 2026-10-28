@@ -32,7 +32,17 @@ function writePoint(view: DataView, offset: number, point: MeshPoint) {
 }
 
 export function exportMeshesToStl(meshes: readonly StlExportMesh[]): ArrayBuffer {
-  const triangleCount = meshes.reduce((count, mesh) => count + mesh.faces.length, 0);
+  // OCCT can emit collapsed seam facets. Also a nonzero double-precision
+  // triangle can collapse when encoded as STL float32. Such facets add zero
+  // material but make an otherwise closed surface look non-manifold.
+  const printable = meshes.map(mesh => ({ ...mesh, faces: mesh.faces.filter(([ai, bi, ci]) => {
+    const [a,b,c] = [ai,bi,ci].map(index => mesh.vertices[index].map(Math.fround));
+    if (![...a,...b,...c].every(Number.isFinite)) throw new Error("STL export contains non-finite coordinates");
+    const ux=b[0]-a[0], uy=b[1]-a[1], uz=b[2]-a[2];
+    const vx=c[0]-a[0], vy=c[1]-a[1], vz=c[2]-a[2];
+    return uy*vz-uz*vy !== 0 || uz*vx-ux*vz !== 0 || ux*vy-uy*vx !== 0;
+  }) }));
+  const triangleCount = printable.reduce((count, mesh) => count + mesh.faces.length, 0);
   if (triangleCount > 0xffff_ffff) {
     throw new Error("STL export exceeds the binary format's triangle limit");
   }
@@ -46,7 +56,7 @@ export function exportMeshesToStl(meshes: readonly StlExportMesh[]): ArrayBuffer
   view.setUint32(STL_HEADER_BYTES, triangleCount, true);
   let offset = STL_PREFIX_BYTES;
 
-  meshes.forEach((mesh) => {
+  printable.forEach((mesh) => {
     mesh.faces.forEach(([ai, bi, ci]) => {
       const a = layerlingToZUp(mesh.vertices[ai]);
       const b = layerlingToZUp(mesh.vertices[bi]);

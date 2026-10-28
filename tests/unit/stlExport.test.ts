@@ -10,6 +10,24 @@ function readPoint(view: DataView, offset: number) {
 }
 
 describe("binary STL export", () => {
+  it("omits collapsed seam facets without removing any material from a closed tetrahedron", () => {
+    const stl=exportMeshesToStl([{
+      vertices:[[0,0,0],[10,0,0],[0,10,0],[0,0,10]],
+      faces:[[0,2,1],[0,1,3],[1,2,3],[2,0,3],[0,1,1]],
+    }]);
+    const view=new DataView(stl);expect(view.getUint32(80,true)).toBe(4);
+    const edges=new Map<string,number>();
+    for(let i=0;i<4;i++) {
+      const points=[0,1,2].map(k=>readPoint(view,84+i*50+12+k*12).join(','));
+      for(const [a,b] of [[0,1],[1,2],[2,0]]){const key=[points[a],points[b]].sort().join('|');edges.set(key,(edges.get(key)??0)+1);}
+    }
+    expect([...edges.values()]).toEqual([2,2,2,2,2,2]);
+  });
+  it("does not emit a triangle that collapses only after float32 encoding", () => {
+    const stl=exportMeshesToStl([{vertices:[[100,0,0],[100+1e-7,0,0],[100,1,0]],faces:[[0,1,2]]}]);
+    expect(new DataView(stl).getUint32(80,true)).toBe(0);
+    expect(stl.byteLength).toBe(84);
+  });
   it("uses the fixed binary STL record size and triangle count", () => {
     const stl = exportMeshesToStl([
       {

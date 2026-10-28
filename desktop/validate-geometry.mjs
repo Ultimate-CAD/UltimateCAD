@@ -267,6 +267,9 @@ async function runCurrent() {
   assert.equal(edgeResult.edges.length, 12);
   assert.equal(edgeResult.selectableEdgeIds.length, 12);
   pass('20,172-triangle box reduces to 12 selectable CAD edges', { edges: edgeResult.edges.length, selectable: edgeResult.selectableEdgeIds.length });
+  const boxProject = await command('save_project', { history: 'all' });
+  const boxProjectFile = path.join(output, 'box-before-cancel.lyl');
+  writeFileSync(boxProjectFile, Buffer.from(boxProject.base64, 'base64'));
 
   const curvedMesh = curvedSphereStl();
   const curvedObject = await importMesh(curvedMesh.triangles, curvedMesh);
@@ -286,6 +289,10 @@ async function runCurrent() {
   const unchangedMesh = await command('export_mesh', { format: 'stl', ids: [curvedObject.id] });
   const unchangedMeshHash = createHash('sha256').update(Buffer.from(unchangedMesh.base64, 'base64')).digest('hex');
   assert.equal(unchangedMeshHash, originalMeshHash, 'Canceled worker changed the source mesh');
+  // Dashboard imports open a new project. Restore the retained box project
+  // before testing recovery against its original object identity.
+  await page.locator('input[type=file][accept*=".lyl"]').first().setInputFiles(boxProjectFile);
+  await waitForShape(id, () => true, 'Box project did not restore after cancellation');
   const restartedEdges = await command('list_edges', { id });
   assert.equal(restartedEdges.object.id, id, 'CAD worker did not restart after cancellation');
   assert.equal(restartedEdges.edges.length, 12);
@@ -322,8 +329,8 @@ async function runCurrent() {
 
   const exported = await command('export_mesh', { format: 'stl', ids: [id] });
   const stl = Buffer.from(exported.base64, 'base64');
-  const mesh = validateManufacturingStl(stl);
   writeFileSync(path.join(output, 'geometry-hollow.stl'), stl);
+  const mesh = validateManufacturingStl(stl);
   pass('Hollow STL has finite triangles, positive volume, and closed edges', mesh);
 
   heartbeat = await stopHeartbeat();

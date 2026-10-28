@@ -72,7 +72,8 @@ Preparation is bounded at ten minutes; edge previews allow two minutes, shell re
 
 ## Verification and limitations
 
-Targeted unit/LYL/SCAD compatibility checks: 136 tests passed. Targeted real-kernel,
+Targeted unit/LYL/SCAD compatibility checks: 136 tests passed; 43 STL/LYL checks passed
+after the export correction. Targeted real-kernel,
 mesh, shell, STEP, tessellation and native SCAD checks: 88 tests passed. TypeScript passed.
 Packaged acceptance and final installer details are recorded below after release validation.
 
@@ -81,6 +82,12 @@ treatment by approximately 0.26%; independent signed-tetrahedron mesh volume con
 material removal and unchanged bounds. Do not treat that query as a high-precision physical
 volume measurement for many small curved faces. No kernel/toolchain upgrade was attempted.
 No full scene feature-history or geometric constraint solver is introduced by this work.
+
+Packaged validation caught sixteen exactly zero-area seam triangles in the outward shell's
+STL. Those facets contributed zero volume but produced apparent valence-1/4 edges.
+STL encoding now omits only exactly collapsed facets at final float32 precision. It does
+not weld gaps, cap openings, or remove nonzero-area detail. Independent Manifold validation
+of the original file confirmed a closed, correctly oriented cavity after the same cleanup.
 
 Sources inspected: [occt-wasm v5.8.0 source](https://github.com/andymai/occt-wasm/tree/ce0e6da47ea43b7994fb2b6275643e04cb36fe5a)
 and [OCCT thick-solid documentation](https://occt3d.com/dev/doc/refman/html/class_b_rep_offset_a_p_i___make_thick_solid.html).

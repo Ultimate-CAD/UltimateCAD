@@ -1,15 +1,16 @@
-import { BufferGeometry, Float32BufferAttribute, DoubleSide, Ray, Vector3 } from "three";
+import { BufferGeometry, Float32BufferAttribute } from "three";
 import { MeshBVH } from "three-mesh-bvh";
 import type { ManifoldToplevel, Manifold, Mesh } from "manifold-3d";
 import type { ShellOpenings } from "@/types/layerling";
 import { shellOpenSides } from "@/lib/shellLimits";
+import {createMeshDistanceQuery,type DistanceQueryStats} from "@/lib/meshSignedDistance";
 
 export type MeshHollowOptions = { direction?: "inward" | "outward"; maxErrorMm?: number };
 export type MeshHollowInput = { positions: ArrayLike<number>; indices: ArrayLike<number>; thickness: number; openings: ShellOpenings; options?: MeshHollowOptions };
 export type MeshHollowResult = { positions: number[]; indices: number[]; stats: {
   method: "mesh-sdf"; cellSizeMm: number; maxErrorMm: number; measuredErrorMm: number;
   sourceTriangles: number; resultTriangles: number; sourceVolumeMm3: number; resultVolumeMm3: number;
-  cavityVolumeMm3: number; evaluations: number; durationMs: number; omittedCavities: number;
+  cavityVolumeMm3: number; evaluations: number; durationMs: number; omittedCavities: number; distanceQueryStats?:DistanceQueryStats;
 } };
 const OPENING_AXES = { left:[0,-1], right:[0,1], bottom:[1,-1], top:[1,1], front:[2,1], back:[2,-1] } as const;
 const GRID_CELL_BUDGET = 16_000_000;
@@ -64,26 +65,18 @@ export function hollowMesh(runtime: ManifoldToplevel, input: MeshHollowInput, on
     if(absent) throw new Error(`This mesh has no flat ${absent.side} face to open. Choose Closed (cavity inside), or a flat cut base such as Bottom.`);
     if(walls.length<12) throw new Error("Too many faces were selected as openings");
     const signBvh = makeBvh(indices), distanceBvh = openings.length ? makeBvh(walls) : signBvh;
-    const probe = new Vector3(), signedProbe = new Vector3();
-    const nearest = {point:new Vector3(),distance:0,faceIndex:0};
-    const ray = new Ray(new Vector3(),new Vector3(1,0.371390676,0.69474659).normalize());
+    const distanceQuery=createMeshDistanceQuery(signBvh,distanceBvh,bounds,epsilon),signedProbe=[0,0,0];
     let evaluations = 0;
     const distanceField = (p: readonly number[]) => {
       evaluations++;
       if(evaluations % 200_000 === 0) onProgress(`Building mesh cavity (${Math.round(evaluations/1000)}k distance queries)`);
-      probe.set(p[0],p[1],p[2]);
-      const hit=distanceBvh.closestPointToPoint(probe,nearest);
-      if(!hit) throw new Error("Could not measure source surface distance");
-      const distance=hit.distance;
-      signedProbe.copy(probe);
+      if(!openings.length)return distanceQuery.signedDistance(p);
+      signedProbe[0]=p[0];signedProbe[1]=p[1];signedProbe[2]=p[2];
       for(const opening of openings) {
-        if(opening.sign<0 && signedProbe.getComponent(opening.axis)<opening.coordinate+epsilon*2) signedProbe.setComponent(opening.axis,opening.coordinate+epsilon*2);
-        if(opening.sign>0 && signedProbe.getComponent(opening.axis)>opening.coordinate-epsilon*2) signedProbe.setComponent(opening.axis,opening.coordinate-epsilon*2);
+        if(opening.sign<0 && signedProbe[opening.axis]<opening.coordinate+epsilon*2) signedProbe[opening.axis]=opening.coordinate+epsilon*2;
+        if(opening.sign>0 && signedProbe[opening.axis]>opening.coordinate-epsilon*2) signedProbe[opening.axis]=opening.coordinate-epsilon*2;
       }
-      ray.origin.copy(signedProbe);
-      const crossing=signBvh.raycastFirst(ray,DoubleSide);
-      const inside=Boolean(crossing?.face && ray.direction.dot(crossing.face.normal)>0);
-      return inside?distance:-distance;
+      return distanceQuery.signedDistance(p,signedProbe);
     };
     let cell = Math.min(wall*0.6,Math.sqrt(wall*maxError*4));
     let cavity: Manifold | undefined, measuredError = Infinity, omittedCavities = 0;
@@ -156,7 +149,7 @@ export function hollowMesh(runtime: ManifoldToplevel, input: MeshHollowInput, on
     const output=result.getMesh();
     const outputPositions:number[]=[];
     for(let i=0;i<output.vertProperties.length;i+=output.numProp)outputPositions.push(output.vertProperties[i],output.vertProperties[i+1],output.vertProperties[i+2]);
-    return {positions:outputPositions,indices:Array.from(output.triVerts),stats:{method:"mesh-sdf",cellSizeMm:cell,maxErrorMm:maxError,measuredErrorMm:measuredError,sourceTriangles:source.numTri(),resultTriangles:result.numTri(),sourceVolumeMm3:sourceVolume,resultVolumeMm3:result.volume(),cavityVolumeMm3:cavity.volume(),evaluations,durationMs:performance.now()-started,omittedCavities}};
+    return {positions:outputPositions,indices:Array.from(output.triVerts),stats:{method:"mesh-sdf",cellSizeMm:cell,maxErrorMm:maxError,measuredErrorMm:measuredError,sourceTriangles:source.numTri(),resultTriangles:result.numTri(),sourceVolumeMm3:sourceVolume,resultVolumeMm3:result.volume(),cavityVolumeMm3:cavity.volume(),evaluations,durationMs:performance.now()-started,omittedCavities,distanceQueryStats:distanceQuery.stats}};
   } finally {
     for(const shape of new Set(retained))shape.delete();
     // Mesh is a plain JS wrapper in current Manifold builds; only delete when supplied.

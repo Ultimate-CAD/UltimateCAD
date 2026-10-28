@@ -77,6 +77,37 @@ describe("precision resource preflight and retained caches", () => {
     expect(() =>
       assertKnownPrecisionSourceBudget([shape(new Array(10).fill(0))], 1000),
     ).toThrow(/incomplete/);
+    const missing = shape([], { importedMesh: undefined });
+    const group = shape([], {
+      id: "group",
+      importedMesh: undefined,
+      groupedShapes: [missing],
+    });
+    expect(() => assertKnownPrecisionSourceBudget([group], 1000)).toThrow(
+      /missing geometry/,
+    );
+    expect(() =>
+      assertKnownPrecisionSourceBudget(
+        [
+          {
+            ...group,
+            importedMesh: shape(new Array(9).fill(0)).importedMesh,
+          },
+        ],
+        1000,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertKnownPrecisionSourceBudget(
+        [
+          {
+            ...group,
+            importedMesh: shape(new Array(9009).fill(0)).importedMesh,
+          },
+        ],
+        1000,
+      ),
+    ).toThrow(/before export preparation/);
     expect(() =>
       assertKnownPrecisionSourceBudget(
         [shape(new Array(9009).fill(0), { hidden: true })],

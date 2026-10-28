@@ -407,6 +407,7 @@ try {
     .locator('input[type=file][accept*=".stl"]')
     .first()
     .setInputFiles(coarseFile);
+  await ready(path.basename(coarseFile,path.extname(coarseFile)));
   let imported;
   for (let i = 0; i < 120; i++) {
     imported = (await command("list_objects")).objects.find(

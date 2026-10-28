@@ -15,17 +15,18 @@ captured hollowing fixtures and precision defaults remain unchanged.
 - [x] Compare identical inputs, output geometry, sampled error and repaired topology.
 - [x] Fix shared-vertex intersection gaps, cache memory and budget preflight issues.
 - [x] Exercise cutter diagnostics, double-precision 3MF QA and worker recovery.
-- [ ] Run focused tests, selected high-density checks and packaged acceptance.
+- [x] Run focused tests and selected high-density checks.
+- [ ] Complete final packaged acceptance after the mixed-group correction.
 - [ ] Build and validate a private Windows release; record measurements and commits.
 
 ## Investigation
 
-The current field performs a nearest-surface BVH traversal followed by an
-oriented first-ray traversal on every query. A CPU profile and phase timings
-are being collected before changing that path. Safe candidates include reusing
-the already-found closest face for an unambiguous face-interior sign, while
-retaining ray fallback at edges, vertices and openings. Grid resolution,
-sampling, simplification and accuracy thresholds must not be loosened.
+The baseline field performed a nearest-surface BVH traversal followed by an
+oriented first-ray traversal on every query. CPU profiles and phase timings
+identified these repeated traversals as the principal cost. The optimized path
+reuses the already-found closest face for an unambiguous face-interior sign,
+while retaining ray fallback at edges, vertices and openings. Grid resolution,
+sampling, simplification and accuracy thresholds remain unchanged.
 
 Reliability audit identified five concrete gaps: self-intersection pairs sharing
 a vertex are all excluded; exact mesh caches are count-bounded but not
@@ -113,6 +114,13 @@ and optimized results within each fixture are compared without mixing them.
   not a memory reservation or a guarantee against JS/WASM engine limits.
 - Test outputs have explicit or unique per-run directories. The original source
   and release artifacts remain separate from new results.
+- Mixed native/mesh groups export their complete mesh, with the representation
+  reported honestly. Native-only groups retain exact tessellation. An unbaked
+  mixed group containing cuts/Boolean operations is rejected until regenerated;
+  export never drops a member or fills a cut by exporting a partial exact subset.
+  Nested missing mesh inputs are rejected; a valid cached group mesh remains
+  authoritative even when its historical inputs are unavailable. Cached root
+  triangle counts also participate in the early resource budget.
 
 ## High-density and regression checks
 
@@ -124,12 +132,15 @@ reimport retained all 786,432 faces. Strict topology and volume checks passed.
 The self-intersection candidate budget was reached, so the result remained
 explicitly unverified for print readiness; no validation limit was relaxed.
 
-Focused checks passed TypeScript, **97 unit tests** and **53 geometry/STEP/export
+Focused checks passed TypeScript, **97 unit tests** and **54 geometry/STEP/export
 integration tests**, with four opt-in expensive benchmarks skipped in that suite.
 Separate tests cover the profiled organic runs, the high-density workload,
 closed/open cavities, thin walls, multiple shells, invalid STL/OBJ and cutters,
 precision preflight, bounded cache eviction, worker failure/cancellation/recovery,
-Undo/Redo history and LYL source serialization. Packaged acceptance follows.
+Undo/Redo history and LYL source serialization. After the mixed-group correction,
+the affected 36 export/STEP tests and three resource tests passed again.
+The first .5 packaged acceptance passed; the final source will be rebuilt and
+revalidated after this correction.
 
 Primary implementations inspected:
 [three-mesh-bvh queries](https://github.com/gkjohnson/three-mesh-bvh/blob/v0.9.16/src/core/cast/closestPointToPoint.js),

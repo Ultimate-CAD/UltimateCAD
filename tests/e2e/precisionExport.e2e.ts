@@ -62,6 +62,107 @@ beforeAll(async () => {
   rt.setup();
 });
 describe("precision manufacturing export", () => {
+  it(
+    "exports mixed exact/mesh groups from their complete mesh without omitting members or claiming a whole-body B-rep",
+    async () => {
+      const cube = rt.Manifold.cube([20, 20, 20]);
+      const m = cube.getMesh();
+      const positions = Array.from(m.triVerts).flatMap((i) =>
+        Array.from(m.vertProperties.subarray(i * m.numProp, i * m.numProp + 3)),
+      );
+      cube.delete();
+      const group = shape({
+        id: "mixed",
+        kind: "mesh",
+        width: 80,
+        depth: 20,
+        height: 20,
+        groupedBaseWidth: 80,
+        groupedBaseDepth: 20,
+        groupedBaseHeight: 20,
+        groupedShapes: [
+          shape({ id: "native-child", x: -25 }),
+          shape({
+            id: "mesh-child",
+            kind: "mesh",
+            x: 25,
+            importedMesh: {
+              positions,
+              baseWidth: 20,
+              baseDepth: 20,
+              baseHeight: 20,
+              triangleCount: m.numTri,
+              sourceFormat: "stl",
+            },
+          }),
+        ],
+      });
+      const { PrecisionExportEngine } = await import("@/lib/precisionExport");
+      const { meshForShape } = await import("@/lib/editorMeshCore");
+      const before = JSON.stringify(group);
+      const expected = auditManufacturingMesh(meshForShape(group));
+      const result = await new PrecisionExportEngine(rt).run([group], "3mf", {
+        ...DEFAULT_PRECISION,
+        minWallMm: 0,
+      });
+      expect(result.bytes).not.toBeNull();
+      expect(result.report.bodies[0].representation).toBe("mesh");
+      expect(result.report.bodies[0].audit.solidComponents).toBe(2);
+      expect(result.report.bodies[0].audit.signedVolumeMm3).toBeCloseTo(
+        expected.signedVolumeMm3,
+        5,
+      );
+      expect(JSON.stringify(group)).toBe(before);
+
+      const nativeGroup = {
+        ...group,
+        groupedShapes: group.groupedShapes!.map((child) => ({
+          ...child,
+          kind: "box" as const,
+          importedMesh: undefined,
+        })),
+      };
+      const exact = await new PrecisionExportEngine(rt).run(
+        [nativeGroup],
+        "3mf",
+        { ...DEFAULT_PRECISION, minWallMm: 0 },
+      );
+      expect(exact.report.bodies[0].representation).toBe("analytic");
+      expect(exact.report.bodies[0].audit.solidComponents).toBe(2);
+
+      const cutGroup = {
+        ...group,
+        groupedShapes: group.groupedShapes!.map((child) =>
+          child.kind === "box" ? { ...child, hole: true } : child,
+        ),
+      };
+      await expect(
+        new PrecisionExportEngine(rt).run([cutGroup], "3mf", {
+          ...DEFAULT_PRECISION,
+          minWallMm: 0,
+        }),
+      ).rejects.toThrow(/unevaluated Boolean/);
+      const cached = {
+        ...cutGroup,
+        importedMesh: {
+          positions,
+          baseWidth: 20,
+          baseDepth: 20,
+          baseHeight: 20,
+          triangleCount: m.numTri,
+          sourceFormat: "stl" as const,
+        },
+      };
+      const baked = await new PrecisionExportEngine(rt).run(
+        [cached],
+        "3mf",
+        { ...DEFAULT_PRECISION, minWallMm: 0 },
+      );
+      expect(baked.bytes).not.toBeNull();
+      expect(baked.report.bodies[0].representation).toBe("mesh");
+      expect(baked.report.bodies[0].audit.solidComponents).toBe(1);
+    },
+  );
   it.skipIf(!process.env.LAYERLING_PRECISION_STRESS_BENCH)(
     "processes a bounded high-density export and reuses its checked cache",
     async () => {

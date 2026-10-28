@@ -64,28 +64,24 @@ export function assertKnownPrecisionSourceBudget(
   budget: number,
 ) {
   let triangles = 0;
-  for (const shape of shapes) {
+  const visit = (shape: WorkplaneShape) => {
     if (
-      !shape.hidden &&
-      !isNonSolidShape(shape) &&
-      shape.kind === "mesh" &&
-      !shape.importedMesh &&
-      !shape.cadBrep &&
-      !shape.groupedShapes?.length
-    )
+      shape.hidden || isNonSolidShape(shape) || shape.cadBrep ||
+      shape.importedMesh?.brepStep
+    ) return;
+    // A cached result is authoritative; grouped children can be historical inputs.
+    if (
+      !(shape.kind === "mesh" && shape.importedMesh) &&
+      shape.groupedShapes?.length
+    ) {
+      shape.groupedShapes.forEach(visit);
+      return;
+    }
+    if (shape.kind === "mesh" && !shape.importedMesh)
       throw new Error(
         `Imported mesh ${shape.name} is missing geometry; export will not invent a replacement body`,
       );
-    if (
-      shape.hidden ||
-      isNonSolidShape(shape) ||
-      shape.kind !== "mesh" ||
-      !shape.importedMesh ||
-      shape.cadBrep ||
-      shape.importedMesh.brepStep ||
-      shape.groupedShapes?.length
-    )
-      continue;
+    if (shape.kind !== "mesh" || !shape.importedMesh) return;
     const count = shape.importedMesh.positions.length;
     if (count < 9)
       throw new Error(
@@ -100,5 +96,6 @@ export function assertKnownPrecisionSourceBudget(
       throw new Error(
         `Combined source/cutter geometry exceeds the selected ${budget.toLocaleString()} triangle working budget before export preparation`,
       );
-  }
+  };
+  shapes.forEach(visit);
 }

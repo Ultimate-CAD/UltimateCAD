@@ -425,6 +425,21 @@ function isOpenableGroup(shape: WorkplaneShape) {
     && (shape.groupOperation === undefined || shape.groupOperation === "group");
 }
 
+// A mixed group must use its complete mesh, never just the exact subset.
+// Restoring first also accounts for transforms that change exact eligibility.
+function hasWholeAnalyticSource(shape: WorkplaneShape): boolean {
+  if (stepSourceForShape(shape) !== "unsupported") return true;
+  return isOpenableGroup(shape) && restoreGroupedChildren(shape)
+    .filter((child) => !child.hidden).every(hasWholeAnalyticSource);
+}
+
+function needsBakedMeshGroup(shape: WorkplaneShape): boolean {
+  if (shape.kind === "mesh" && shape.importedMesh) return false;
+  if (!shape.groupedShapes?.length) return false;
+  return (shape.groupOperation !== undefined && shape.groupOperation !== "group")
+    || shape.groupedShapes.some((child) => !child.hidden && (child.hole || needsBakedMeshGroup(child)));
+}
+
 /** The cutters among these shapes, a group of holes opened into the holes it holds. */
 function collectHoles(brep: Brep, shapes: WorkplaneShape[], skipped: SkippedShape[], holes: { box: Aabb; solid: BrepSolid }[]) {
   for (const shape of shapes.filter((s) => s.hole)) {
@@ -524,7 +539,10 @@ export async function exportShapesToStep(shapes: WorkplaneShape[]): Promise<Step
 /** Same exact-body construction and placement as STEP; export tessellation never changes the model. */
 export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: number, angleDeg: number, progress:(text:string)=>void=()=>{},triangleBudget=12_000_000) {
   if(!Number.isFinite(triangleBudget)||triangleBudget<1)throw new Error("No triangle working budget remains for analytic tessellation");
-  if(stepSourceForShape(shape)==="unsupported"&&!isOpenableGroup(shape))return null;
+  if (!hasWholeAnalyticSource(shape)) {
+    if (needsBakedMeshGroup(shape)) throw new Error("Mixed mesh group has an unevaluated Boolean operation; regenerate the group before export so no cuts or members are lost");
+    return null;
+  }
   const brep=await loadBrepWithOcct(),kernel=occtKernel();
   if(!kernel)throw new Error("Exact export kernel is unavailable");
   const skipped:SkippedShape[]=[];

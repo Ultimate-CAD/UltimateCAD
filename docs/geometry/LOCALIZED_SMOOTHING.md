@@ -50,3 +50,13 @@ Dense tessellations diffuse less for the same iteration count; this tool does no
 reconstruct a reference surface or promise volume preservation. Unverified
 self-intersection checks block the operation. Undo/Redo, actual LYL readback,
 brush interaction and final release acceptance are pending packaged validation.
+
+Packaged acceptance caught a shared manufacturing-validator false positive:
+two coplanar collar facets occupying y=15..16 and y=17..18 were reported as
+intersecting by the approximate triangle predicate. A strict triangle AABB
+separation check now rejects provably disjoint pairs before that predicate.
+Touching and overlapping bounds still receive the complete original checks.
+The regression retains a true-overlap case; this does not relax manifold or
+surface validation. The smoothing worker message protocol also has a direct
+init/paint/preview test. Preview is disabled after failed source initialization.
+Seventy-two focused unit tests pass after this correction.

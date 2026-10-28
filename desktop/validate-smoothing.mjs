@@ -3,8 +3,9 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { unzipSync, strFromU8, zipSync, strToU8 } from "fflate";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
-const executable = path.resolve(process.argv.find((s) => s.endsWith(".exe")) || "dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe");
+const executable = path.resolve(process.argv.slice(2).find((s) => s.endsWith(".exe")) || "dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe");
 const output = path.resolve(process.env.LAYERLING_SMOOTHING_VALIDATION_DIR || "dist/ultimate/windows/smoothing-validation");
 const profile = path.join(output, `isolated-profile-${Date.now()}`);
 mkdirSync(output, { recursive: true });
@@ -85,7 +86,22 @@ async function savedProject() {
   const archive = unzipSync(Buffer.from(saved.base64, "base64"));
   const project = JSON.parse(strFromU8(archive["project.json"]));
   const state = project.states.find((candidate) => candidate.id === project.sceneStateId);
-  return { saved, archive, project, state, node: state.nodes.find((candidate) => candidate.objectId === sourceObject.id) };
+  const stored = state.nodes.find((candidate) => candidate.objectId === sourceObject.id);
+  const asset = project.assets.find(a => a.id === (stored?.importedMesh?.meshAssetId || stored?.importedMesh?.sourceAssetId));
+  assert.ok(asset, 'Saved mesh asset is missing');
+  const bytes = archive[asset.path];let positions;
+  if(stored.importedMesh.meshAssetId){
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const count = view.getUint32(8, true);positions = Array.from({length:count},(_,i)=>view.getFloat64(16+i*8,true));
+  } else {
+    const geometry=new STLLoader().parse(bytes.slice().buffer),p=geometry.attributes.position;
+    const points=Array.from({length:p.count},(_,i)=>[p.getX(i),p.getZ(i),-p.getY(i)]);
+    const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];
+    for(const p of points)p.forEach((v,j)=>{min[j]=Math.min(min[j],v);max[j]=Math.max(max[j],v);});
+    positions=points.flatMap(p=>p.map((v,j)=>v-(j===1?min[j]:(min[j]+max[j])/2)));geometry.dispose();
+  }
+  const node = {...stored, importedMesh:{...stored.importedMesh,positions}};
+  return { saved, archive, project, state, node };
 }
 function sourceFingerprint(node) {
   assert.ok(node?.importedMesh?.positions?.length, "Saved object has no imported mesh source positions");

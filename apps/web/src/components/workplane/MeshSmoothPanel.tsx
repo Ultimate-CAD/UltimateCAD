@@ -354,7 +354,7 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       {error && <p role="alert">{error}</p>}
       <div style={{ display: "flex", gap: 12 }}>
         <button
-          disabled={busy || !worker.current}
+          disabled={busy || !worker.current || !view.current}
           onClick={() => {
             setBusy(true);
             setError("");

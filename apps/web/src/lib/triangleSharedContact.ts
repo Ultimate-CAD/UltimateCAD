@@ -16,10 +16,17 @@ export function intersectsBeyondSharedContact(
   b: ExtendedTriangle,
   shared: readonly Point[],
 ) {
-  if (!shared.length) return a.intersectsTriangle(b);
-  if (shared.length === 3) return true;
   const p = [point(a.a), point(a.b), point(a.c)],
     q = [point(b.a), point(b.b), point(b.c)];
+  // BVH leaf boxes can overlap while individual triangles are disjoint.
+  // Reject strict interval separation before the approximate triangle predicate,
+  // which can misclassify separated coplanar triangles with parallel edges.
+  for (let axis = 0; axis < 3; axis++) {
+    if (Math.max(p[0][axis], p[1][axis], p[2][axis]) < Math.min(q[0][axis], q[1][axis], q[2][axis]) ||
+        Math.max(q[0][axis], q[1][axis], q[2][axis]) < Math.min(p[0][axis], p[1][axis], p[2][axis])) return false;
+  }
+  if (!shared.length) return a.intersectsTriangle(b);
+  if (shared.length === 3) return true;
   if (
     new Set(p.map((p) => p.join(","))).size < 3 ||
     new Set(q.map((p) => p.join(","))).size < 3

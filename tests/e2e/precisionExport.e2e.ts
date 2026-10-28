@@ -62,6 +62,79 @@ beforeAll(async () => {
   rt.setup();
 });
 describe("precision manufacturing export", () => {
+  it.skipIf(!process.env.LAYERLING_SMOOTH_LYL)(
+    "exports a packaged smoothed LYL through precision QA and independently reimports it",
+    async () => {
+      const archive = unzipSync(
+        readFileSync(process.env.LAYERLING_SMOOTH_LYL!),
+      );
+      const project = JSON.parse(strFromU8(archive["project.json"]));
+      const state = project.states.find(
+        (s: any) => s.id === project.sceneStateId,
+      );
+      const node = state.nodes.find(
+        (n: any) => n.importedMesh?.meshAssetId,
+      );
+      const record = project.assets.find(
+        (a: any) => a.id === node.importedMesh.meshAssetId,
+      );
+      const bytes = archive[record.path];
+      const view = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
+      );
+      const positions = Array.from(
+        { length: view.getUint32(8, true) },
+        (_, i) => view.getFloat64(16 + i * 8, true),
+      );
+      const source = shape({
+        ...node.definition,
+        id: node.objectId,
+        kind: "mesh",
+        importedMesh: {
+          ...node.importedMesh,
+          positions,
+          sourceFormat: "json",
+        },
+      });
+      const { PrecisionExportEngine } = await import("@/lib/precisionExport");
+      const result = await new PrecisionExportEngine(rt).run([source], "stl", {
+        ...DEFAULT_PRECISION,
+        minWallMm: 0,
+      });
+
+      expect(result.report.ready, JSON.stringify(result.report)).toBe(true);
+      expect(result.report.bodies[0].representation).toBe("mesh");
+      expect(result.report.triangles).toBe(2016);
+
+      const geometry = new STLLoader().parse(
+        result.bytes!.buffer as ArrayBuffer,
+      );
+      const positionsAttribute = geometry.attributes.position.array;
+      const vertices = Array.from(
+        { length: positionsAttribute.length / 3 },
+        (_, i) =>
+          [
+            positionsAttribute[i * 3],
+            positionsAttribute[i * 3 + 2],
+            -positionsAttribute[i * 3 + 1],
+          ] as [number, number, number],
+      );
+      const faces = Array.from(
+        { length: positionsAttribute.length / 9 },
+        (_, i) => [i * 3, i * 3 + 1, i * 3 + 2] as [number, number, number],
+      );
+
+      expect(auditManufacturingMesh({ vertices, faces }).valid).toBe(true);
+      geometry.dispose();
+      writeFileSync(artifact("packaged-smoothed.stl"), result.bytes!);
+      writeFileSync(
+        artifact("packaged-smoothed-report.json"),
+        JSON.stringify(result.report, null, 2),
+      );
+    },
+  );
   it(
     "exports mixed exact/mesh groups from their complete mesh without omitting members or claiming a whole-body B-rep",
     async () => {

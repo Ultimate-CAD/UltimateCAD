@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute } from "three";
-import { MeshBVH } from "three-mesh-bvh";
+import { MeshBVH,SAH } from "three-mesh-bvh";
 import type { ManifoldToplevel, Manifold, Mesh } from "manifold-3d";
 import type { ShellOpenings } from "@/types/layerling";
 import { shellOpenSides } from "@/lib/shellLimits";
@@ -49,7 +49,7 @@ export function hollowMesh(runtime: ManifoldToplevel, input: MeshHollowInput, on
       const geometry = new BufferGeometry(); geometries.push(geometry);
       geometry.setAttribute("position", new Float32BufferAttribute(positions, original.numProp));
       geometry.setIndex(Array.from(faces));
-      return new MeshBVH(geometry, { targetLeafSize: 8 });
+      return new MeshBVH(geometry, { strategy:SAH,targetLeafSize: 8 });
     };
     const sides = shellOpenSides(input.openings);
     if (outward && sides.length) throw new Error("Outward mesh walls currently need Closed (cavity inside). Use inward walls for an open base.");

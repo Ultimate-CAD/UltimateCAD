@@ -1,6 +1,6 @@
 import {
   BufferGeometry,
-  Float32BufferAttribute,
+  BufferAttribute,
   Vector3,
   Ray,
   DoubleSide,
@@ -9,12 +9,13 @@ import {
 import { MeshBVH } from "three-mesh-bvh";
 import type { StlExportMesh } from "@/lib/stlExport";
 import { indexManufacturingMesh } from "@/lib/manufacturingMesh";
+import { intersectsBeyondSharedContact } from "@/lib/triangleSharedContact";
 
 function acceleration(mesh: StlExportMesh) {
   const geometry = new BufferGeometry();
   geometry.setAttribute(
     "position",
-    new Float32BufferAttribute(mesh.vertices.flat(), 3),
+    new BufferAttribute(Float64Array.from(mesh.vertices.flat()), 3),
   );
   geometry.setIndex(mesh.faces.flat());
   return { geometry, bvh: new MeshBVH(geometry, { indirect: true }) };
@@ -128,7 +129,7 @@ export function smoothManufacturingMesh(
   return { vertices: result, faces };
 }
 
-/** Bounded BVH check of non-adjacent triangle pairs; shared-vertex contacts are checked by topology. */
+/** Bounded BVH check; shared pairs are checked beyond the common simplex. */
 export function manufacturingSurfaceChecks(
   mesh: StlExportMesh,
   checkIntersections: boolean,
@@ -157,9 +158,10 @@ export function manufacturingSurfaceChecks(
           }
           const ti = bvh.resolveTriangleIndex(i),
             tj = bvh.resolveTriangleIndex(j);
-          if (indexed.faces[ti].some((v) => indexed.faces[tj].includes(v)))
-            return false;
-          if (a.intersectsTriangle(b)) {
+          const shared = [...new Set(indexed.faces[ti])]
+            .filter((v) => indexed.faces[tj].includes(v))
+            .map((v) => indexed.vertices[v]);
+          if (intersectsBeyondSharedContact(a, b, shared)) {
             intersections++;
             intersectionFaces.push([ti, tj]);
             return true;
@@ -246,7 +248,7 @@ export function manufacturingSurfaceChecks(
         candidatePairs: pairs,
         exampleFaces: intersectionFaces,
         method:
-          "BVH non-adjacent triangle intersections; shared-vertex pairs excluded",
+          "Double-precision BVH triangle intersections; shared pairs checked beyond their expected simplex with robust orientation predicates",
       },
       shellOrientationConcerns,
       minSampledThicknessMm: Number.isFinite(minSampledThicknessMm)

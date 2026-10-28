@@ -31,6 +31,42 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("precision worker ownership", () => {
+  it("rejects known invalid geometry before creating or cloning into a worker", async () => {
+    const { PrecisionExportSession } = await import(
+        "@/lib/precisionExportWorker"
+      ),
+      session = new PrecisionExportSession();
+    const shape = {
+      kind: "mesh",
+      name: "Empty",
+      importedMesh: { positions: [] },
+    } as unknown as import("@/types/layerling").WorkplaneShape;
+    await expect(
+      session.run([shape], "stl", DEFAULT_PRECISION),
+    ).rejects.toThrow(/no complete triangles/);
+    expect(FakeWorker.instances.length).toBe(0);
+  });
+  it("recovers cleanly from worker construction failure", async () => {
+    const { PrecisionExportSession } = await import(
+        "@/lib/precisionExportWorker"
+      ),
+      session = new PrecisionExportSession();
+    vi.stubGlobal(
+      "Worker",
+      class {
+        constructor() {
+          throw new Error("Worker creation blocked");
+        }
+      },
+    );
+    await expect(session.run([], "stl", DEFAULT_PRECISION)).rejects.toThrow(
+      /creation blocked/,
+    );
+    vi.stubGlobal("Worker", FakeWorker);
+    const next = session.run([], "stl", DEFAULT_PRECISION);
+    session.dispose();
+    await expect(next).rejects.toMatchObject({ name: "AbortError" });
+  });
   it("keeps one worker for cached previews and ignores unrelated messages", async () => {
     const { PrecisionExportSession } = await import(
         "@/lib/precisionExportWorker"
@@ -43,6 +79,8 @@ describe("precision worker ownership", () => {
       }),
       w = FakeWorker.instances[0];
     w.send({ id: 99, type: "result", result: {} });
+    expect(() => w.send(null)).not.toThrow();
+    expect(() => w.send("invalid")).not.toThrow();
     await Promise.resolve();
     expect(settled).toBe(false);
     const result = {

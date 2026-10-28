@@ -4,7 +4,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { unzipSync, strFromU8 } from "fflate";
+import { unzipSync, strFromU8, zipSync, strToU8 } from "fflate";
 
 const executable = path.resolve(
   process.argv.slice(2).find((s) => s.endsWith(".exe")) ||
@@ -82,6 +82,16 @@ async function ready(projectName) {
 async function openStudio() {
   await page.keyboard.press("Control+e");
   await page.getByRole("region", { name: "Precision Mesh Studio" }).waitFor();
+}
+async function waitObject(id, predicate) {
+  for (let i = 0; i < 120; i++) {
+    const object = (await command("list_objects")).objects.find(
+      (o) => o.id === id,
+    );
+    if (object && predicate(object)) return object;
+    await pause(100);
+  }
+  throw Error(`Object ${id} did not reach the expected worker/history state`);
 }
 async function preview() {
   await page
@@ -275,7 +285,12 @@ try {
     .getByRole("button", { name: "Create new 3D design", exact: true })
     .waitFor({ timeout: 90000 });
   connection = JSON.parse(readFileSync(path.join(profile, "connection.json")));
-  assert.equal(connection.version, "1.114.0-ultimate.4");
+  assert.match(connection.version, /^1\.114\.0-ultimate\.\d+$/);
+  if (process.env.LAYERLING_EXPECTED_APP_VERSION)
+    assert.equal(
+      connection.version,
+      process.env.LAYERLING_EXPECTED_APP_VERSION,
+    );
   assert.equal(
     await page.evaluate(async () => {
       try {
@@ -386,6 +401,90 @@ try {
     "Packaged export cancellation terminates the worker and preserves source identity",
   );
   await page.keyboard.press("Escape");
+  // A small real mesh job verifies the optimized packaged worker without rerendering the expensive fixture.
+  await command("delete_objects", { ids: [native.id] });
+  await page
+    .locator('input[type=file][accept*=".stl"]')
+    .first()
+    .setInputFiles(coarseFile);
+  let imported;
+  for (let i = 0; i < 120; i++) {
+    imported = (await command("list_objects")).objects.find(
+      (o) => o.importedTriangles === coarse.triangles,
+    );
+    if (imported) break;
+    await pause(100);
+  }
+  assert.ok(imported, "Packaged mesh worker fixture did not import");
+  await command("hollow_object", {
+    id: imported.id,
+    thickness: 2,
+    openings: "none",
+    direction: "inward",
+    meshAccuracyMm: 0.1,
+  });
+  const latestShell = (o) =>
+    o.edgeTreatments?.filter((f) => f.kind === "shell").at(-1);
+  const hollowed = await waitObject(
+      imported.id,
+      (o) => latestShell(o)?.meshHollow?.method === "mesh-sdf",
+    ),
+    hollowStats = latestShell(hollowed).meshHollow;
+  assert.ok(hollowStats.measuredErrorMm <= 0.1);
+  assert.equal(hollowStats.maxErrorMm, 0.1);
+  for (const axis of ["width", "depth", "height"])
+    assert.ok(
+      Math.abs(hollowed.dimensions[axis] - imported.dimensions[axis]) < 0.01,
+    );
+  if (hollowStats.distanceQueryStats)
+    assert.ok(
+      hollowStats.distanceQueryStats.rayQueries <
+        hollowStats.distanceQueryStats.nearestQueries,
+    );
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await waitObject(
+    imported.id,
+    (o) => !latestShell(o) && o.importedTriangles === coarse.triangles,
+  );
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await waitObject(
+    imported.id,
+    (o) => latestShell(o)?.meshHollow?.method === "mesh-sdf",
+  );
+  const saved = await command("save_project", { history: "all" }),
+    archive = unzipSync(Buffer.from(saved.base64, "base64")),
+    project = JSON.parse(strFromU8(archive["project.json"])),
+    state = project.states.find((s) => s.id === project.sceneStateId),
+    node = state.nodes.find((n) => n.objectId === imported.id),
+    entry = node.edgeTreatmentHistory.at(-1),
+    before = state.nodes.find((n) => n.nodeId === entry.beforeNodeId);
+  assert.equal(before.importedMesh.triangleCount, coarse.triangles);
+  assert.equal(entry.feature.meshHollow.method, "mesh-sdf");
+  assert.ok(!project.exactCad.some((n) => n.objectId === imported.id));
+  // Import a synthetic checkpoint copy under a distinct project ID so an already-open
+  // IndexedDB project cannot satisfy the readback. Object and source-history IDs stay intact.
+  project.metadata.projectName = "Hollow worker checkpoint";
+  project.metadata.projectId += "-readback";
+  archive["project.json"] = strToU8(JSON.stringify(project));
+  const hollowProject = path.join(output, "hollow-worker-checkpoint.lyl");
+  writeFileSync(hollowProject, zipSync(archive));
+  await page
+    .locator('input[type=file][accept*=".lyl"]')
+    .first()
+    .setInputFiles(hollowProject);
+  await ready(project.metadata.projectName);
+  await waitObject(
+    imported.id,
+    (o) => latestShell(o)?.meshHollow?.method === "mesh-sdf",
+  );
+  pass(
+    "Optimized packaged hollow worker preserves outside dimensions, identity, Undo/Redo and LYL source history",
+    {
+      triangles: hollowStats.resultTriangles,
+      sampledErrorMm: hollowStats.measuredErrorMm,
+      durationMs: hollowStats.durationMs,
+    },
+  );
   if (sourceHash) {
     await page
       .locator('input[type=file][accept*=".lyl"]')

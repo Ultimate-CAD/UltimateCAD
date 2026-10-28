@@ -1,12 +1,19 @@
 import { beforeAll, describe, it, expect, vi } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import module, { type ManifoldToplevel } from "manifold-3d";
 import type { WorkplaneShape } from "@/types/layerling";
 import { unzipSync, strFromU8 } from "fflate";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { auditManufacturingMesh } from "@/lib/manufacturingMesh";
+const artifactDirectory =
+  process.env.LAYERLING_PRECISION_TEST_OUTPUT ??
+  `.codex-run/precision-tests/${Date.now()}`;
+const artifact = (name: string) => {
+  mkdirSync(artifactDirectory, { recursive: true });
+  return join(artifactDirectory, name);
+};
 import {
   DEFAULT_PRECISION,
   subdivideManufacturingMesh,
@@ -55,6 +62,157 @@ beforeAll(async () => {
   rt.setup();
 });
 describe("precision manufacturing export", () => {
+  it.skipIf(!process.env.LAYERLING_PRECISION_STRESS_BENCH)(
+    "processes a bounded high-density export and reuses its checked cache",
+    async () => {
+      const { PrecisionExportEngine } = await import("@/lib/precisionExport"),
+        engine = new PrecisionExportEngine(rt),
+        settings = {
+          ...DEFAULT_PRECISION,
+          maxEdgeMm: 0.15,
+          triangleBudget: 1_000_000,
+          minWallMm: 0,
+        };
+      const result = await engine.run([shape()], "stl", settings);
+      expect(result.report.triangles).toBeGreaterThan(500000);
+      expect(result.report.triangles).toBeLessThanOrEqual(
+        settings.triangleBudget,
+      );
+      expect(result.report.bodies[0].audit.valid).toBe(true);
+      expect(result.report.bodies[0].audit.signedVolumeMm3).toBeCloseTo(
+        8000,
+        5,
+      );
+      expect(result.report.bodies[0].surface.selfIntersections.found).toBe(0);
+      expect(result.bytes).not.toBeNull();
+      if (!result.report.bodies[0].surface.selfIntersections.complete)
+        expect(result.report.ready).toBe(false);
+      const cached = await engine.run([shape()], "stl", settings);
+      expect(Buffer.compare(result.bytes!, cached.bytes!)).toBe(0);
+      expect(cached.report.cacheHits).toBeGreaterThan(result.report.cacheHits);
+      const parsed = new STLLoader().parse(result.bytes!.buffer as ArrayBuffer);
+      expect(parsed.attributes.position.count / 3).toBe(
+        result.report.triangles,
+      );
+      parsed.dispose();
+      const report = {
+        report: result.report,
+        cachedMs: cached.report.durationMs,
+        maxRssKiB: process.resourceUsage().maxRSS,
+        memory: process.memoryUsage(),
+        independentReimportTriangles: result.report.triangles,
+      };
+      writeFileSync(
+        artifact("bounded-density-result.json"),
+        JSON.stringify(report, null, 2),
+      );
+      console.log(
+        JSON.stringify({
+          triangles: result.report.triangles,
+          ms: result.report.durationMs,
+          cachedMs: cached.report.durationMs,
+          peakRssMiB: process.resourceUsage().maxRSS / 1024,
+          surfaceComplete:
+            result.report.bodies[0].surface.selfIntersections.complete,
+        }),
+      );
+    },
+    180000,
+  );
+  it("applies the selected analytic triangle budget before expensive face projection", async () => {
+    const { loadBrepWithOcct, occtKernel } = await import("@/lib/brepKernel");
+    await loadBrepWithOcct();
+    const project = vi.spyOn(occtKernel()!, "projectPointOnFace");
+    try {
+      const { analyticMeshForExport } = await import("@/lib/stepExport");
+      await expect(
+        analyticMeshForExport(
+          shape({ kind: "sphere" }),
+          0.005,
+          7.5,
+          () => {},
+          1000,
+        ),
+      ).rejects.toThrow(/triangle working budget/);
+      expect(project).not.toHaveBeenCalled();
+    } finally {
+      project.mockRestore();
+    }
+  });
+  it("rejects aggregate raw source budgets before geometry analysis", async () => {
+    const sphere = rt.Manifold.sphere(10, 32),
+      mesh = sphere.getMesh(),
+      positions = Array.from(mesh.triVerts).flatMap((i) =>
+        Array.from(
+          mesh.vertProperties.subarray(i * mesh.numProp, i * mesh.numProp + 3),
+        ),
+      );
+    sphere.delete();
+    expect(mesh.numTri).toBeLessThan(1000);
+    expect(mesh.numTri * 2).toBeGreaterThan(1000);
+    const source = (id: string) =>
+        shape({
+          id,
+          kind: "mesh",
+          importedMesh: {
+            positions,
+            baseWidth: 20,
+            baseDepth: 20,
+            baseHeight: 20,
+            triangleCount: mesh.numTri,
+            sourceFormat: "stl",
+          },
+        }),
+      progress: string[] = [];
+    const { PrecisionExportEngine } = await import("@/lib/precisionExport");
+    await expect(
+      new PrecisionExportEngine(rt).run(
+        [source("a"), source("b")],
+        "stl",
+        { ...DEFAULT_PRECISION, triangleBudget: 1000 },
+        (s) => progress.push(s),
+      ),
+    ).rejects.toThrow(/before export preparation/);
+    expect(progress).toEqual([]);
+  });
+  it("rejects a named open cutter without silently healing missing cutter geometry", async () => {
+    const cube = rt.Manifold.cube([20, 20, 20]),
+      mesh = cube.getMesh(),
+      positions = Array.from(mesh.triVerts)
+        .flatMap((i) =>
+          Array.from(
+            mesh.vertProperties.subarray(
+              i * mesh.numProp,
+              i * mesh.numProp + 3,
+            ),
+          ),
+        )
+        .slice(9);
+    cube.delete();
+    const cutter = shape({
+      id: "cutter",
+      name: "Open door cutter",
+      kind: "mesh",
+      hole: true,
+      importedMesh: {
+        positions,
+        baseWidth: 20,
+        baseDepth: 20,
+        baseHeight: 20,
+        triangleCount: mesh.numTri - 1,
+        sourceFormat: "obj",
+      },
+    });
+    const { PrecisionExportEngine } = await import("@/lib/precisionExport");
+    for (const repair of [false, true])
+      await expect(
+        new PrecisionExportEngine(rt).run([shape(), cutter], "stl", {
+          ...DEFAULT_PRECISION,
+          repair,
+          minWallMm: 0,
+        }),
+      ).rejects.toThrow(/Cutter "Open door cutter" is not a closed/);
+  });
   it("smooths a mesh within measured displacement while preserving sharp box corners", () => {
     const sphere = rt.Manifold.sphere(10, 32),
       m = sphere.getMesh();
@@ -258,7 +416,7 @@ describe("precision manufacturing export", () => {
     const { analyticMeshForExport } = await import("@/lib/stepExport"),
       s = shape({ kind: "sphere" });
     const trace = (s: string) =>
-      writeFileSync(".codex-run/precision-analytic-trace.log", s + "\n", {
+      writeFileSync(artifact("precision-analytic-trace.log"), s + "\n", {
         flag: "a",
       });
     const coarse = await analyticMeshForExport(s, 0.1, 15, trace),
@@ -363,7 +521,7 @@ describe("precision manufacturing export", () => {
           minWallMm: 0,
         });
         writeFileSync(
-          `.codex-run/organic-repro/precision-${format}-report.json`,
+          artifact(`precision-${format}-report.json`),
           JSON.stringify(fixed.report, null, 2),
         );
         console.log(
@@ -385,7 +543,7 @@ describe("precision manufacturing export", () => {
         expect(cached.report.cacheHits).toBeGreaterThan(fixed.report.cacheHits);
         expect(Buffer.compare(fixed.bytes!, cached.bytes!)).toBe(0);
         writeFileSync(
-          `.codex-run/organic-repro/precision-${format}-cache-benchmark.json`,
+          artifact(`precision-${format}-cache-benchmark.json`),
           JSON.stringify(
             {
               coldMs: fixed.report.durationMs,
@@ -397,12 +555,9 @@ describe("precision manufacturing export", () => {
             2,
           ),
         );
+        writeFileSync(artifact(`precision-organic.${format}`), fixed.bytes!);
         writeFileSync(
-          `.codex-run/organic-repro/precision-organic.${format}`,
-          fixed.bytes!,
-        );
-        writeFileSync(
-          `.codex-run/organic-repro/precision-${format}-report.json`,
+          artifact(`precision-${format}-report.json`),
           JSON.stringify(fixed.report, null, 2),
         );
       }

@@ -1,5 +1,7 @@
 import type { WorkplaneShape } from "@/types/layerling";
 import type { PrecisionSettings } from "@/lib/precisionMesh";
+import { validatePrecisionSettings } from "@/lib/precisionMesh";
+import { assertKnownPrecisionSourceBudget } from "@/lib/precisionResource";
 import type { PrecisionFormat, PrecisionResult } from "@/lib/precisionExport";
 import {
   BUILD_ID,
@@ -29,11 +31,26 @@ export class PrecisionExportSession {
       return Promise.reject(new DOMException("Export canceled", "AbortError"));
     if (this.cancel)
       return Promise.reject(new Error("An export preview is already running"));
-    if (!this.worker)
-      this.worker = new Worker(
-        new URL("../workers/precisionExport.worker.ts", import.meta.url),
-        { type: "module" },
+    try {
+      validatePrecisionSettings(settings);
+      assertKnownPrecisionSourceBudget(shapes, settings.triangleBudget);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (typeof Worker === "undefined" || typeof window === "undefined")
+      return Promise.reject(
+        new Error("Precision export requires a Web Worker"),
       );
+    if (!this.worker) {
+      try {
+        this.worker = new Worker(
+          new URL("../workers/precisionExport.worker.ts", import.meta.url),
+          { type: "module", name: "layerling-precision-export" },
+        );
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     const worker = this.worker,
       id = ++this.sequence;
     return new Promise((resolve, reject) => {
@@ -85,6 +102,7 @@ export class PrecisionExportSession {
             );
           return;
         }
+        if (!message || typeof message !== "object") return;
         if (message.id !== id) return;
         if (message.type === "progress") {
           onProgress?.(message.text);

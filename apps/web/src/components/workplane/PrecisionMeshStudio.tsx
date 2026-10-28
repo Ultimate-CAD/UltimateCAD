@@ -8,6 +8,7 @@ import {
 import { PrecisionExportSession } from "@/lib/precisionExportWorker";
 import type { PrecisionResult, PrecisionFormat } from "@/lib/precisionExport";
 import { projectExportFileName } from "@/lib/exportNames";
+import { precisionWorkingBytes } from "@/lib/precisionResource";
 import "./PrecisionMeshStudio.css";
 
 type Props = {
@@ -243,9 +244,11 @@ export function PrecisionMeshStudio({
       </label>
       <p>
         Resource estimate: about{" "}
-        {Math.ceil((0.5 + (settings.triangleBudget * 1500) / 1024 ** 3) * 10) /
-          10}{" "}
+        {Math.ceil(
+          (precisionWorkingBytes(settings.triangleBudget) / 1024 ** 3) * 10,
+        ) / 10}{" "}
         GiB working memory at the selected budget, including kernel overhead.
+        The resource budget covers prepared source bodies, cutters and final output.
         Binary STL uses 50 bytes per triangle plus 84 bytes. Processing and
         compression run in a cancelable worker.
       </p>

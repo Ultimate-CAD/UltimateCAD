@@ -1,11 +1,19 @@
 import { beforeAll, describe, it, expect } from "vitest";
 import module, { type ManifoldToplevel } from "manifold-3d";
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { auditManufacturingMesh } from "@/lib/manufacturingMesh";
 import { repairManufacturingMesh } from "@/lib/meshManufacturingRepair";
 import { exportMeshesToStl } from "@/lib/stlExport";
 import { unzipSync, strFromU8 } from "fflate";
+const artifactDirectory =
+  process.env.LAYERLING_PRECISION_TEST_OUTPUT ??
+  `.codex-run/manufacturing-repair-tests/${Date.now()}`;
+const artifact = (name: string) => {
+  mkdirSync(artifactDirectory, { recursive: true });
+  return join(artifactDirectory, name);
+};
 
 describe("strict manufacturing topology and explicit repair", () => {
   let runtime: ManifoldToplevel;
@@ -121,11 +129,11 @@ describe("strict manufacturing topology and explicit repair", () => {
         parsed.dispose();
       }
       writeFileSync(
-        ".codex-run/organic-repro/hollowed-organic-manifold-fixed.stl",
+        artifact("hollowed-organic-manifold-fixed.stl"),
         Buffer.from(bytes),
       );
       writeFileSync(
-        ".codex-run/organic-repro/manifold-fix-report.json",
+        artifact("manifold-fix-report.json"),
         JSON.stringify(
           { original, ...fixed, mesh: undefined, exported: audit },
           null,

@@ -522,12 +522,14 @@ export async function exportShapesToStep(shapes: WorkplaneShape[]): Promise<Step
 }
 
 /** Same exact-body construction and placement as STEP; export tessellation never changes the model. */
-export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: number, angleDeg: number, progress:(text:string)=>void=()=>{}) {
+export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: number, angleDeg: number, progress:(text:string)=>void=()=>{},triangleBudget=12_000_000) {
+  if(!Number.isFinite(triangleBudget)||triangleBudget<1)throw new Error("No triangle working budget remains for analytic tessellation");
   if(stepSourceForShape(shape)==="unsupported"&&!isOpenableGroup(shape))return null;
   const brep=await loadBrepWithOcct(),kernel=occtKernel();
   if(!kernel)throw new Error("Exact export kernel is unavailable");
   const skipped:SkippedShape[]=[];
   const parts=await buildScope(brep,[{...shape,hole:false}],skipped);
+  try {
   if(skipped.length||!parts.length)throw new Error(`Exact export cannot preserve this body: ${skipped.map(s=>s.reason).join("; ")}`);
   const vertices:[number,number,number][]=[],faces:[number,number,number][]=[];
   let sampledDeviationMm=0,sampledNormalDeviationDeg=0,samples=0;
@@ -540,7 +542,7 @@ export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: 
         const options={linearDeflection:deviationMm/2**pass,angularDeflection:angleDeg*Math.PI/180/2**pass,relative:false};
         const mesh=kernel.tessellate(body,options);
         progress(`Analytic pass ${pass+1}: ${mesh.triangleCount} triangles`);
-        if(mesh.triangleCount>12_000_000)throw new Error("Analytic tessellation exceeded the 12 million triangle worker budget");
+        if(mesh.triangleCount+faces.length>triangleBudget)throw new Error(`Analytic tessellation exceeds the remaining ${triangleBudget.toLocaleString()} triangle working budget; source preserved`);
         let distance=0,normalAngle=0,count=0;
         const subfaces=kernel.getSubShapes(body,"face");
         try{for(const face of subfaces){
@@ -575,4 +577,9 @@ export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: 
   }
   const stitched=stitchAnalyticNumericalEdges({vertices,faces},Math.min(1e-9,deviationMm/1000));
   return {mesh:{name:shape.name,...stitched.mesh},sampledDeviationMm:sampledDeviationMm+stitched.movedMm,sampledNormalDeviationDeg,samples,numericalStitchMm:stitched.movedMm,numericalFacetsRemoved:stitched.removedFacets};
+  } finally {
+    // These are local export construction handles; cached exports retain only meshes.
+    // Public disposal also unregisters brepjs finalizers, avoiding deferred arena pressure.
+    for(const solid of new Set(parts.map(part=>part.solid)))solid[Symbol.dispose]();
+  }
 }

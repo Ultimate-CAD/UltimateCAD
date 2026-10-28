@@ -32,6 +32,10 @@ export function indexManufacturingMesh(mesh: StlExportMesh, float32 = false) {
       number,
       number,
     ];
+    if (!point.every(Number.isFinite))
+      throw new Error(
+        "Mesh coordinates exceed the encoding's finite coordinate range",
+      );
     const key = point.join(",");
     let id = ids.get(key);
     if (id === undefined) {
@@ -96,13 +100,6 @@ export function auditManufacturingMesh(
     // Count degenerate faces in the topology too: they must never masquerade as a valid cap.
     for (const vertex of new Set([ai, bi, ci])) incident[vertex].push(i);
     live.push(i);
-    const volume =
-      (a[0] * (b[1] * c[2] - b[2] * c[1]) +
-        a[1] * (b[2] * c[0] - b[0] * c[2]) +
-        a[2] * (b[0] * c[1] - b[1] * c[0])) /
-      6;
-    signedVolumeMm3 += volume;
-    faceVolumes.push(volume);
     for (const [a, b] of [
       [ai, bi],
       [bi, ci],
@@ -159,6 +156,27 @@ export function auditManufacturingMesh(
     }
     return max - min;
   });
+  // Integrate each connected shell around its own origin. World-coordinate
+  // determinants lose small solid volumes when an object is far from (0,0,0).
+  const shellOrigins = new Map<number, readonly number[]>();
+  faces.forEach((face, i) => {
+    const r = root(i);
+    let origin = shellOrigins.get(r);
+    if (!origin) {
+      origin = vertices[face[0]];
+      shellOrigins.set(r, origin);
+    }
+    const [a, b, c] = face.map((j) =>
+      vertices[j].map((v, k) => v - origin![k]),
+    );
+    const volume =
+      (a[0] * (b[1] * c[2] - b[2] * c[1]) +
+        a[1] * (b[2] * c[0] - b[0] * c[2]) +
+        a[2] * (b[0] * c[1] - b[1] * c[0])) /
+      6;
+    faceVolumes.push(volume);
+    signedVolumeMm3 += volume;
+  });
   const valid =
     faces.length > 0 &&
     !boundaryEdges &&
@@ -167,6 +185,7 @@ export function auditManufacturingMesh(
     !windingMismatches &&
     !degenerateFaces &&
     !duplicateFaces &&
+    Number.isFinite(signedVolumeMm3) &&
     signedVolumeMm3 > 0 &&
     dimensionsMm.every((v) => Number.isFinite(v) && v > 0);
   const shellVolumes = new Map<number, number>();

@@ -1,4 +1,4 @@
-import type { ManifoldToplevel } from "manifold-3d";
+import type { ManifoldToplevel, Manifold } from "manifold-3d";
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from "three";
 import { MeshBVH } from "three-mesh-bvh";
 import type { StlExportMesh } from "@/lib/stlExport";
@@ -24,15 +24,24 @@ export function repairManufacturingMesh(
     triVerts: Uint32Array.from(input.faces.flat()),
     tolerance: Math.min(1e-5, maxDeviationMm / 16),
   });
-  mesh.merge();
-  const source = runtime.Manifold.ofMesh(mesh);
-  // Spend half the explicit repair budget on numerical slivers, leaving room
-  // for singular-fan separation and float32 encoding in the measured preview.
-  const simplified = source.simplify(
-    Math.max(source.tolerance(), maxDeviationMm / 2),
-  );
+  let source: Manifold | undefined, simplified: Manifold | undefined;
   const geometry = new BufferGeometry();
   try {
+    mesh.merge();
+    source = runtime.Manifold.ofMesh(mesh);
+    if (
+      source.status() !== "NoError" ||
+      source.isEmpty() ||
+      source.volume() <= 0
+    )
+      throw new Error(
+        "Repair cannot infer a closed, positively oriented solid from this mesh",
+      );
+    // Spend half the explicit repair budget on numerical slivers, leaving room
+    // for singular-fan separation and float32 encoding in the measured preview.
+    simplified = source.simplify(
+      Math.max(source.tolerance(), maxDeviationMm / 2),
+    );
     if (source.status() !== "NoError" || simplified.status() !== "NoError")
       throw new Error("Repair cannot infer a closed solid from this mesh");
     const m = simplified.getMesh(),
@@ -151,7 +160,6 @@ export function repairManufacturingMesh(
     };
   } finally {
     geometry.dispose();
-    simplified.delete();
-    source.delete();
+    for (const solid of new Set([simplified, source])) solid?.delete();
   }
 }

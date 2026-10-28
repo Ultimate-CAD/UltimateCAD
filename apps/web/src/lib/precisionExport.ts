@@ -23,6 +23,12 @@ import {
 } from "@/lib/meshManufacturingQa";
 import { meshForShape } from "@/lib/editorMeshCore";
 import { analyticMeshForExport } from "@/lib/stepExport";
+import {
+  assertKnownPrecisionSourceBudget,
+  BoundedLruCache,
+  retainedMeshBytes,
+  precisionWorkingBytes,
+} from "@/lib/precisionResource";
 import { isNonSolidShape } from "@/lib/workplaneShapes";
 
 export type PrecisionFormat = "stl" | "3mf";
@@ -72,10 +78,9 @@ export type PrecisionResult = {
 
 /** Worker-owned cache: exact export tessellation only. Never caches or reruns a hollow operation. */
 export class PrecisionExportEngine {
-  private cache = new Map<
-    string,
-    Awaited<ReturnType<typeof analyticMeshForExport>>
-  >();
+  private cache = new BoundedLruCache<
+    NonNullable<Awaited<ReturnType<typeof analyticMeshForExport>>>
+  >(256 * 1024 ** 2, 12, (value) => retainedMeshBytes(value.mesh));
   private last: { key: string; result: PrecisionResult } | null = null;
   constructor(private runtime: ManifoldToplevel) {}
   async run(
@@ -85,32 +90,44 @@ export class PrecisionExportEngine {
     onProgress: (s: string) => void = () => {},
   ): Promise<PrecisionResult> {
     validatePrecisionSettings(settings);
+    assertKnownPrecisionSourceBudget(shapes, settings.triangleBudget);
     const started = performance.now();
     let cacheHits = 0;
     const jobKey = JSON.stringify([shapes, format, settings]);
     if (this.last?.key === jobKey) {
-      onProgress("Reusing unchanged validated export");
+      onProgress("Reusing unchanged export preview and checks");
       const result = structuredClone(this.last.result);
       result.report.cacheHits++;
       result.report.durationMs = performance.now() - started;
       return result;
     }
+    // A different job cannot reuse the prior file cache; release it before allocating new geometry.
+    this.last = null;
     const visible = shapes.filter((s) => !s.hidden && !isNonSolidShape(s));
     const sources: {
       shape: WorkplaneShape;
       mesh: ExportMesh;
       analytic: Awaited<ReturnType<typeof analyticMeshForExport>>;
     }[] = [];
+    let sourceTriangles = 0;
     for (const shape of visible) {
+      if (sourceTriangles >= settings.triangleBudget)
+        throw new Error(
+          "Combined source/cutter geometry exhausted the selected triangle working budget before further tessellation",
+        );
       onProgress(`Preparing ${shape.name}`);
-      const key = JSON.stringify([
-        shape,
-        settings.deviationMm,
-        settings.angleDeg,
-      ]);
+      const cacheable =
+        shape.kind !== "mesh" ||
+        shape.cadBrep ||
+        shape.importedMesh?.brepStep ||
+        shape.groupedShapes?.length;
+      const key = cacheable
+        ? JSON.stringify([shape, settings.deviationMm, settings.angleDeg])
+        : "";
       let analytic: Awaited<ReturnType<typeof analyticMeshForExport>>;
-      if (this.cache.has(key)) {
-        analytic = this.cache.get(key)!;
+      const cached = cacheable ? this.cache.get(key) : undefined;
+      if (cached) {
+        analytic = cached;
         cacheHits++;
       } else {
         analytic = await analyticMeshForExport(
@@ -118,19 +135,19 @@ export class PrecisionExportEngine {
           settings.deviationMm,
           settings.angleDeg,
           onProgress,
+          settings.triangleBudget - sourceTriangles,
         );
-        if (this.cache.size >= 12)
-          this.cache.delete(this.cache.keys().next().value!);
-        this.cache.set(key, analytic);
+        if (cacheable && analytic) this.cache.set(key, analytic);
       }
       const mesh = {
         ...(analytic?.mesh ?? meshForShape(shape)),
         name: shape.name,
         color: shape.color,
       };
-      if (mesh.faces.length > settings.triangleBudget)
+      sourceTriangles += mesh.faces.length;
+      if (sourceTriangles > settings.triangleBudget)
         throw new Error(
-          `Input exceeds the selected ${settings.triangleBudget.toLocaleString()} triangle budget`,
+          `Combined source/cutter geometry exceeds the selected ${settings.triangleBudget.toLocaleString()} triangle working budget`,
         );
       sources.push({ shape, mesh, analytic });
     }
@@ -138,6 +155,28 @@ export class PrecisionExportEngine {
       holes = sources.filter((s) => s.shape.hole);
     if (!solids.length)
       throw new Error("Select at least one solid body for precision export");
+    for (const hole of holes) {
+      onProgress(`Validating cutter ${hole.shape.name}`);
+      const audit = auditManufacturingMesh(hole.mesh, format === "stl");
+      if (!audit.valid)
+        throw new Error(
+          `Cutter "${hole.shape.name}" is not a closed, consistently oriented manifold solid. Repair the cutter explicitly before subtraction; missing cutter geometry will not be inferred.`,
+        );
+      const surface = manufacturingSurfaceChecks(
+        hole.mesh,
+        true,
+        0,
+        audit.shellSeeds,
+      );
+      if (
+        surface.selfIntersections.found ||
+        !surface.selfIntersections.complete ||
+        surface.shellOrientationConcerns
+      )
+        throw new Error(
+          `Cutter "${hole.shape.name}" has intersecting or unverified surfaces and cannot be safely subtracted`,
+        );
+    }
     const bodies: PrecisionBodyReport[] = [],
       meshes: ExportMesh[] = [];
     for (const source of solids) {
@@ -178,6 +217,10 @@ export class PrecisionExportEngine {
             input.merge();
             const solid = this.runtime.Manifold.ofMesh(input);
             owned.push(solid);
+            if (solid.status() !== "NoError" || solid.isEmpty())
+              throw new Error(
+                "A Boolean operand could not be represented as a closed solid at the engine's coordinate precision",
+              );
             return solid;
           };
           const body = make(mesh),
@@ -429,7 +472,9 @@ export class PrecisionExportEngine {
         fileBytes:
           bytes?.byteLength ??
           (format === "stl" ? 84 + triangles * 50 : triangles * 40),
-        estimatedWorkingMiB: 512 + Math.ceil((triangles * 1500) / 1024 ** 2),
+        estimatedWorkingMiB: Math.ceil(
+          precisionWorkingBytes(triangles) / 1024 ** 2,
+        ),
         durationMs: performance.now() - started,
         cacheHits,
         ready,
@@ -439,7 +484,7 @@ export class PrecisionExportEngine {
           "Deviation is sampled at vertices, edge midpoints and centroids; it is not a global Hausdorff certificate.",
           "Analytic normal angles are sampled from closest-surface centroid displacement where it exceeds 0.00001 mm numerical noise; these do not certify a global maximum. Requested angular deflection is also supplied to OCCT.",
           "Mesh subdivision preserves the existing faceted surface and cannot recover an unavailable original surface.",
-          "Self-intersections use bounded BVH tests of non-adjacent triangles; pairs sharing a vertex are excluded. Tangencies and nested shells require inspection.",
+          "Self-intersections use bounded double-precision BVH tests; shared pairs are checked beyond their expected edge or vertex. Tangencies and nested shells still require inspection.",
           "Thickness is sampled using inward normal rays, not a global minimum-wall certificate. Acute edges can produce conservative warnings.",
           "Repair is an explicit preview that changes export geometry only; the project and exact B-reps remain unchanged.",
         ],
@@ -447,8 +492,14 @@ export class PrecisionExportEngine {
     };
     // Keep at most one encoded result and at most 256 MiB of file cache in this studio.
     // Clone before transfer so worker ownership cannot detach the cached buffers.
+    const retainedResultBytes =
+      (bytes?.byteLength ?? 0) +
+      jobKey.length * 2 +
+      result.preview.before.byteLength +
+      result.preview.after.byteLength +
+      JSON.stringify(result.report).length * 2;
     this.last =
-      (bytes?.byteLength ?? 0) <= 256 * 1024 ** 2
+      retainedResultBytes <= 256 * 1024 ** 2
         ? { key: jobKey, result: structuredClone(result) }
         : null;
     return result;

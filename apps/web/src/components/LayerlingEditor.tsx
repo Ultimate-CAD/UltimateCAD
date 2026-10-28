@@ -59,6 +59,7 @@ import { DEFAULT_HOLE_PATTERN, normalizeHolePattern, type HolePatternSettings } 
 import { holePatternShapes, readPerforableFace, type PerforableFace } from "@/lib/holePatternShapes";
 import { honeycombReplacementParts } from "@/lib/honeycombMigration";
 import { MeshSimplifyPanel } from "./workplane/MeshSimplifyPanel";
+import { MeshSmoothPanel } from "./workplane/MeshSmoothPanel";
 import { addCustomFontFile, customFontErrorMessage, FontManagerPanel } from "./workplane/FontManagerPanel";
 import { onFontManagerRequested } from "@/lib/fontManagerEvents";
 import { customFontList, onCustomFontsChanged, textFontLabel } from "@/lib/textFonts";
@@ -3030,6 +3031,7 @@ export function LayerlingEditor({
   /** Cut out (#927): `partId` stays, a copy of it grown by `clearance` is cut out of `hostId`. */
   const [cutOutTool, setCutOutTool] = useState<{ partId: string; hostId: string; clearance: number; busy: boolean; error: string | null } | null>(null);
   const [simplifyToolId, setSimplifyToolId] = useState<string | null>(null);
+  const [smoothSource, setSmoothSource] = useState<WorkplaneShape | null>(null);
   /** The window for fonts of one's own (#customFonts), opened from a text's font select. */
   const [fontManagerOpen, setFontManagerOpen] = useState(false);
   // A font that came or went changes the font select and maybe the letters drawn: draw again.
@@ -14092,6 +14094,16 @@ export function LayerlingEditor({
           onClose={() => setFontManagerOpen(false)}
         />
       ) : null}
+      {selectedShapes.length === 1 && selectedShape?.kind === "mesh" && selectedShape.importedMesh && !selectedShape.parametricSource && !shapeHasShapeDeform(selectedShape) && !selectedShape.cadBrep && !selectedShape.importedMesh.brepStep && !selectedShape.locked && !smoothSource ? (
+        <button style={{position:'absolute',left:16,bottom:70,zIndex:35}} onClick={()=>setSmoothSource(selectedShape)}>Smooth Mesh</button>
+      ) : null}
+      {smoothSource ? <MeshSmoothPanel shape={smoothSource} onCancel={()=>setSmoothSource(null)} onApply={(positions)=>{
+        const current=shapesRef.current.find(s=>s.id===smoothSource.id);
+        if(current!==smoothSource || current.locked){setNotice('Source changed while smoothing. Reopen Smooth Mesh.');setSmoothSource(null);return;}
+        const source=current.importedMesh!;
+        const modified=canonicalizeShape({...current,importedMesh:{positions,baseWidth:source.baseWidth,baseDepth:source.baseDepth,baseHeight:source.baseHeight,triangleCount:positions.length/9,sourceFormat:'json'},groupedShapes:undefined,groupOperation:undefined,edgeTreatments:undefined,edgeTreatmentHistory:undefined,cadBrep:undefined,cadDisplayEdges:undefined});
+        commitShapes(shapesRef.current.map(s=>s.id===current.id?modified:s),[current.id],'Localized mesh smoothing');setSmoothSource(null);
+      }}/> : null}
       {simplifyToolShape ? (
         <MeshSimplifyPanel
           key={simplifyToolShape.id}

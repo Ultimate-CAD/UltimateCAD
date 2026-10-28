@@ -227,7 +227,7 @@ async function validateStl(bytes) {
     if (manifoldStatus === 'NoError') manifoldVolume = solid.volume();
   } finally {
     solid?.delete();
-    mesh.delete();
+    if (typeof mesh.delete === "function") mesh.delete();
     geometry.dispose();
   }
   assert.equal(manifoldStatus, 'NoError', `Manifold rejected exported mesh: ${manifoldStatus}`);
@@ -366,6 +366,8 @@ try {
   let hollowed;
   while (Date.now() < deadline) {
     const status = await shellPanel.locator('[role="status"]').innerText().catch(() => '');
+    const failure = await shellPanel.locator('[role="alert"]').innerText({ timeout: 200 }).catch(() => '');
+    if (failure) throw new Error(`Mesh hollowing UI failed: ${failure}`);
     if (status && progressSamples.at(-1)?.text !== status) progressSamples.push({ phase: 'hollow-run', text: status, at: new Date().toISOString() });
     const current = (await listObjects()).find(object => object.id === id);
     const feature = latestShell(current);

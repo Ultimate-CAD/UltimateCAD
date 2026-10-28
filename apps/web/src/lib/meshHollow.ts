@@ -36,7 +36,10 @@ export function hollowMesh(runtime: ManifoldToplevel, input: MeshHollowInput, on
     onProgress("Checking closed mesh");
     sourceMesh = new runtime.Mesh({ numProp:3, vertProperties:Float32Array.from(input.positions), triVerts:Uint32Array.from(input.indices), tolerance:1e-5 });
     sourceMesh.merge();
-    const source = runtime.Manifold.ofMesh(sourceMesh); retained.push(source);
+    let source:Manifold;
+    try {source=runtime.Manifold.ofMesh(sourceMesh);}
+    catch {throw new Error("Mesh hollowing needs a closed, consistently oriented solid. Repair open or non-manifold source edges first.");}
+    retained.push(source);
     if (source.status() !== "NoError" || source.isEmpty() || source.volume() <= 0) throw new Error("Mesh hollowing needs a closed, consistently oriented solid. Repair open or non-manifold source edges first.");
     const bounds = source.boundingBox(), original = source.getMesh();
     const sourceVolume = source.volume();

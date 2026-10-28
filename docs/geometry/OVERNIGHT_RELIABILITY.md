@@ -16,8 +16,8 @@ captured hollowing fixtures and precision defaults remain unchanged.
 - [x] Fix shared-vertex intersection gaps, cache memory and budget preflight issues.
 - [x] Exercise cutter diagnostics, double-precision 3MF QA and worker recovery.
 - [x] Run focused tests and selected high-density checks.
-- [ ] Complete final packaged acceptance after the mixed-group correction.
-- [ ] Build and validate a private Windows release; record measurements and commits.
+- [x] Complete final packaged precision acceptance after the mixed-group correction.
+- [x] Complete final OpenSCAD compatibility acceptance and release record.
 
 ## Investigation
 
@@ -139,8 +139,74 @@ closed/open cavities, thin walls, multiple shells, invalid STL/OBJ and cutters,
 precision preflight, bounded cache eviction, worker failure/cancellation/recovery,
 Undo/Redo history and LYL source serialization. After the mixed-group correction,
 the affected 36 export/STEP tests and three resource tests passed again.
-The first .5 packaged acceptance passed; the final source will be rebuilt and
-revalidated after this correction.
+The final .5 source was rebuilt after this correction and passed all 11 packaged
+precision checks, with zero renderer errors. The original cached organic LYL
+was hash-checked unchanged. A small imported mesh exercises the actual optimized
+worker in the packaged app: 8,596 triangles, 0.034212 mm sampled error and 338 ms;
+Undo/Redo, preserved outside dimensions/identity, and source/history save/reopen
+all pass. The saved test copy uses a separate project identity to force actual
+readback rather than selecting an already-open project.
+
+Final OpenSCAD compatibility acceptance passed **22 checks** with zero renderer
+errors, including bundled engine/libraries, editable source and parameters,
+native coexistence, cached regeneration, malformed/missing-library diagnostics,
+save/reopen, mesh reimport and native process cancellation. Test applications
+exited gracefully. In total the final packaged application passed **33 checks**.
+
+Both independently reimported organic STL and 3MF contain **92,394 triangles**,
+46,201 vertices, volume **24,237.875896 mm3**, and zero boundary edges,
+non-manifold edges or non-manifold vertices. Explicit repair reports
+**0.000083552021 mm sampled deviation**. Raw defective geometry is still blocked;
+no automatic repair or relaxed validity check was introduced. The full packaged
+run uses an isolated profile, System32-only PATH, and a runtime network block.
+
+## Release and recovery
+
+- App version: **1.114.0-ultimate.5**.
+- Packaged source commit: **22f867f389c2ab21240ed9120c8b6c7f6342a7c7**.
+- Local checkpoints: **62cf0a8d** (measured hollow optimization), **5c96b7c8**
+  (manufacturing QA/resources), **22f867f3** (complete mixed-group export).
+- The earlier integrity-only milestone **caa8bb63**, previous .4 baseline
+  **a51ac809**, and recovery tag **checkpoint-ultimate4-a51ac809** remain available.
+- Executable: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\win-unpacked\Layerling Ultimate.exe`.
+  SHA256: `d21d49cda0523b23257ad92f2faff5e537e5125404141ae29b27d037ecb4a202`.
+- Installer: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\Layerling-Ultimate-OpenSCAD-Setup-x64.exe`.
+  Size: **212,658,173 bytes**. SHA256:
+  `219c8796b0c73f866f2da55f4e72247696654567b0ec958d8daf7158f4515678`.
+- Source archive and provenance: `dist/ultimate/windows/sources/Layerling-Ultimate-Source.zip`
+  and `dist/ultimate/windows/release-metadata.json`.
+- Final acceptance: `dist/ultimate/windows/overnight-final-validation/results.json`
+  and `dist/ultimate/windows/overnight-final-scad-validation/results.json`.
+- Private measurements: `.codex-run/overnight-hollow/*-result.json`, CPU profiles,
+  binary mesh comparisons, and `.codex-run/overnight-precision/density/bounded-density-result.json`.
+
+The complete .4 rollback app/installer hashes were verified unchanged, as were
+the original STL and cached hollow LYL. No repository push/publication or
+replacement of the installed working app was performed. Acceptance launches
+the packaged unpacked executable; the NSIS installer is built, not installed
+over the working release.
+
+## Remaining limits
+
+- Timings are measured controlled runs on this workstation, not guaranteed
+  latency. Peak memory increased slightly; the gain comes from less traversal.
+- The raw hollow retains its original numerical defects and secondary-cavity
+  policy. Explicit export repair is still needed for this fixture. Surface
+  deviation and cavity error are sampled measurements, not global proofs.
+- The organic thin-region warning remains (approximately 0.000099 mm at an
+  acute feature); this is not certification of a uniform 2 mm printable wall.
+- Self-intersection work has a 5-million-candidate/time budget. Exhaustion stays
+  explicitly unverified, including the 786k-triangle stress model; a closed
+  topology alone cannot establish global print readiness.
+- The 4-million default/12-million selectable triangle limits are unchanged.
+  The recalibrated RAM estimate is advisory; JavaScript/WASM limits and one
+  native tessellation call can constrain large jobs even with 64 GB system RAM.
+  The full pipeline was newly measured at 786k triangles; the retained 2.62M
+  baseline measures encoding/reimport rather than a complete new QA run.
+- No unavailable analytic surface is inferred from imported mesh detail.
+  Mixed-group remeshing still lacks per-face material provenance. Final B-rep
+  exports are deterministically disposed; intermediate library objects retain
+  their existing GC finalizers.
 
 Primary implementations inspected:
 [three-mesh-bvh queries](https://github.com/gkjohnson/three-mesh-bvh/blob/v0.9.16/src/core/cast/closestPointToPoint.js),

@@ -1,0 +1,111 @@
+{
+  "packageVersion": "1.114.0-ultimate.2",
+  "packageSourceCommit": "08359c11da5b6650007a13352039185601b6071d",
+  "branch": "codex/precision-edge-shell",
+  "installer": "dist/ultimate/windows/Layerling-Ultimate-OpenSCAD-Setup-x64.exe",
+  "installerSha256": "a8491fb6dbb319b928214c720ca7cb6859f7e1c94061846322c85d59d5540e46",
+  "installerArchiveIntegrity": "7za t: Everything is Ok. The PE/NSIS wrapper has data after its embedded archive; no archive data errors.",
+  "geometry": {
+    "runId": "fa876396-4aaf-4954-bc5f-30353cba6c4e",
+    "startedAt": "2026-10-28T00:22:54.450Z",
+    "finishedAt": "2026-10-28T00:23:04.298Z",
+    "pass": 16,
+    "fail": 0,
+    "errors": 0,
+    "shutdowns": [
+      {
+        "mode": "graceful",
+        "events": [
+          "before-quit",
+          "will-quit"
+        ]
+      },
+      {
+        "mode": "graceful",
+        "events": [
+          "before-quit",
+          "will-prevent-unload",
+          "quit-retry",
+          "before-quit",
+          "will-quit"
+        ]
+      }
+    ],
+    "processExitCode": 0,
+    "heartbeat": {
+      "frames": 711,
+      "maxGapMs": 72.80000000000018
+    },
+    "operationLatencies": [
+      {
+        "action": "list_edges",
+        "ms": 174.52620000000002,
+        "httpStatus": 200,
+        "ok": true
+      },
+      {
+        "action": "apply_edge_treatment",
+        "ms": 82.68060000000014,
+        "httpStatus": 200,
+        "ok": true
+      },
+      {
+        "action": "list_edges",
+        "ms": 177.58170000000018,
+        "httpStatus": 200,
+        "ok": true
+      },
+      {
+        "action": "list_edges",
+        "ms": 152.1306999999997,
+        "httpStatus": 200,
+        "ok": true
+      },
+      {
+        "action": "apply_edge_treatment",
+        "ms": 163.10990000000038,
+        "httpStatus": 200,
+        "ok": true
+      },
+      {
+        "action": "hollow_object",
+        "ms": 227.15970000000016,
+        "httpStatus": 200,
+        "ok": true
+      }
+    ]
+  },
+  "openscad": {
+    "runId": "6c631681-1f27-4c21-b8fd-c91ec3a29f29",
+    "startedAt": "2026-10-28T00:18:24.268Z",
+    "finishedAt": "2026-10-28T00:18:46.533Z",
+    "pass": 22,
+    "fail": 0,
+    "errors": 0,
+    "shutdowns": [
+      {
+        "mode": "graceful",
+        "events": [
+          "before-quit",
+          "will-prevent-unload",
+          "quit-retry",
+          "before-quit",
+          "will-quit"
+        ]
+      },
+      {
+        "mode": "graceful",
+        "events": [
+          "before-quit",
+          "will-prevent-unload",
+          "quit-retry",
+          "before-quit",
+          "will-quit"
+        ]
+      }
+    ],
+    "processExitCode": 0
+  },
+  "originalDesktopPreserved": true,
+  "previousUltimateInstallerPreserved": ".codex-run/preserved-ultimate-scad/Layerling-Ultimate-OpenSCAD-Setup-x64.exe"
+}

@@ -41,5 +41,16 @@
       "rssMiB": 382.1875,
       "peakRssMiB": 382.19921875
     }
-  ]
+  ],
+  "hardware": {
+    "cpu": "Intel Core i9-14900K",
+    "physicalCores": 24,
+    "logicalProcessors": 32,
+    "reportedPhysicalMemoryBytes": 68544913408,
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "platform": "win32",
+    "osRelease": "10.0.26300",
+    "node": "v26.4.0",
+    "kernel": "occt-wasm 5.8.0"
+  }
 }

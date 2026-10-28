@@ -15,10 +15,11 @@ Branch: codex/precision-edge-shell. Base: 7e2cf9ad. Private workstation only.
 - [x] Remove count-only rejection; preserve bounded workers and recoverable cancellation.
 - [x] Improve precise shell options and representation diagnostics.
 - [x] Verify geometry, persistence and representative 14772/20000/50000/100000 meshes.
-- [ ] Commit, package separate Ultimate, validate packaged workflows and preserve releases.
+- [x] Commit, package separate Ultimate, validate packaged workflows and preserve releases.
 
 ## State handoff
-Native/STEP/existing B-Rep already use exact reconstruction. Mesh inputs currently import/sew
-STL before trying planar regions, and skip planar reconstruction above 6000 triangles.
-Edge collection repeatedly projects points onto planes. No replacement modeling kernel planned.
-Original desktop release and previous Ultimate installer must remain recoverable.
+Complete. Package source: 08359c11; implementation: fa5fd1f1. Final validator/documentation
+checkpoint follows without changing the packaged application. Exact representations retained;
+one-pass edge adjacency, planar-first reconstruction, signed precise shells and safe cancellation
+validated. See ENGINEERING_REPORT.md, benchmark JSON and release-validation.json.
+Original desktop release hashes match; previous Ultimate installer is preserved separately.

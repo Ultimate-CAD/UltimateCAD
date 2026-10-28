@@ -73,7 +73,7 @@ function curvedSphereStl() {
   return indexedGeometryStl(positions, indices);
 }
 
-async function launch() {
+async function launch(createDesign = true) {
   app = await electron.launch({ executablePath: executable, cwd: output, timeout: 90000, env: { ...process.env,
     ELECTRON_RUN_AS_NODE: undefined, PATH: process.env.SystemRoot + '\\System32',
     LAYERLING_DESKTOP_PROFILE: profile, LAYERLING_DESKTOP_TEST: '1' } });
@@ -84,7 +84,7 @@ async function launch() {
   page.setDefaultTimeout(30000);
   page.on('pageerror', error => errors.push(error.message));
   await page.getByRole('button', { name: 'Create new 3D design', exact: true }).waitFor({ timeout: 60000 });
-  await page.getByRole('button', { name: 'Create new 3D design', exact: true }).click();
+  if (createDesign) await page.getByRole('button', { name: 'Create new 3D design', exact: true }).click();
   connection = JSON.parse(readFileSync(path.join(profile, 'connection.json'), 'utf8'));
 }
 
@@ -289,6 +289,24 @@ async function runCurrent() {
   const unchangedMesh = await command('export_mesh', { format: 'stl', ids: [curvedObject.id] });
   const unchangedMeshHash = createHash('sha256').update(Buffer.from(unchangedMesh.base64, 'base64')).digest('hex');
   assert.equal(unchangedMeshHash, originalMeshHash, 'Canceled worker changed the source mesh');
+
+  await command('select_objects', { ids: [curvedObject.id] });
+  await page.getByRole('button', { name: 'Hollow', exact: true }).click();
+  const shellCancelPanel = page.locator('.shell-panel');
+  await shellCancelPanel.waitFor({ state: 'visible' });
+  await shellCancelPanel.getByRole('button', { name: 'Closed (cavity inside)', exact: true }).click();
+  await shellCancelPanel.getByRole('button', { name: 'Hollow', exact: true }).click();
+  await shellCancelPanel.locator('.edge-modifier-spinner').waitFor({ state: 'visible', timeout: 30000 });
+  await shellCancelPanel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await waitForShape(curvedObject.id, current => current.edgeTreatments.length === 0, 'Canceled hollow changed the object');
+  await pause(1200);
+  const afterShellCancel = await waitForShape(curvedObject.id, current => current.edgeTreatments.length === 0, 'A canceled hollow worker committed late');
+  assert.equal(afterShellCancel.id, curvedObject.id);
+  const afterShellCancelMesh = await command('export_mesh', { format: 'stl', ids: [curvedObject.id] });
+  const afterShellCancelHash = createHash('sha256').update(Buffer.from(afterShellCancelMesh.base64, 'base64')).digest('hex');
+  assert.equal(afterShellCancelHash, originalMeshHash, 'Canceled hollow changed the source mesh');
+  pass('Cancel during curved-mesh hollow preparation leaves source unchanged', { id: curvedObject.id, triangles: curvedObject.importedTriangles, meshSha256: afterShellCancelHash });
+
   // Dashboard imports open a new project. Restore the retained box project
   // before testing recovery against its original object identity.
   await page.locator('input[type=file][accept*=".lyl"]').first().setInputFiles(boxProjectFile);
@@ -336,9 +354,9 @@ async function runCurrent() {
   heartbeat = await stopHeartbeat();
   const savedSummary = hollow.object;
   await closeApplication();
-  await launch();
-  await editorReady();
+  await launch(false);
   await page.locator('input[type=file][accept*=".lyl"]').first().setInputFiles(projectFile);
+  await editorReady();
   const restored = await waitForShape(id, current => current.edgeTreatments.some(feature => feature.kind === 'shell'), 'Saved geometry project did not restore its hollowed object');
   const restoredShell = restored.edgeTreatments.find(feature => feature.kind === 'shell');
   assert.deepEqual(restoredShell.shellOptions, { direction: 'outward', tolerance: 1e-6 });
@@ -348,6 +366,26 @@ async function runCurrent() {
   assert.deepEqual(restored.rotation, savedSummary.rotation);
   assert.deepEqual(restored.dimensions, savedSummary.dimensions);
   pass('Closing and reopening the saved LYL retains shell options, CAD object id, transform, and color', { id: restored.id, shellOptions: restoredShell.shellOptions });
+
+  const nativeBox = await command('create_shape', { kind: 'box', width: 20, depth: 20, height: 20 });
+  const nativeId = nativeBox.object.id;
+  await command('select_objects', { ids: [nativeId] });
+  await page.getByRole('button', { name: 'Hollow', exact: true }).click();
+  const nativeShellPanel = page.locator('.shell-panel');
+  await nativeShellPanel.waitFor({ state: 'visible' });
+  await page.getByLabel('Shell wall direction').selectOption('outward');
+  await page.getByLabel('Shell reconstruction tolerance').selectOption('0.000001');
+  await nativeShellPanel.getByRole('button', { name: 'Closed (cavity inside)', exact: true }).click();
+  await nativeShellPanel.getByRole('radio', { name: 'Sharp', exact: true }).click();
+  await nativeShellPanel.getByRole('button', { name: 'Hollow', exact: true }).click();
+  const nativeHollow = await waitForShape(nativeId, current => current.edgeTreatments.some(feature => feature.kind === 'shell'), 'Native box hollow did not complete');
+  const nativeShell = nativeHollow.edgeTreatments.find(feature => feature.kind === 'shell');
+  assert.equal(nativeHollow.id, nativeId);
+  assert.deepEqual(nativeShell.shellOptions, { direction: 'outward', tolerance: 1e-6 });
+  assert.equal(nativeHollow.dimensions.width, 24);
+  assert.equal(nativeHollow.dimensions.depth, 24);
+  assert.equal(nativeHollow.dimensions.height, 24);
+  pass('Shell panel outward direction and reconstruction tolerance apply to native CAD geometry', { id: nativeId, dimensions: nativeHollow.dimensions, shellOptions: nativeShell.shellOptions });
   return { mesh, savedBytes: projectBytes.length };
 }
 

@@ -75,7 +75,11 @@ Preparation is bounded at ten minutes; edge previews allow two minutes, shell re
 Targeted unit/LYL/SCAD compatibility checks: 136 tests passed; 43 STL/LYL checks passed
 after the export correction. Targeted real-kernel,
 mesh, shell, STEP, tessellation and native SCAD checks: 88 tests passed. TypeScript passed.
-Packaged acceptance and final installer details are recorded below after release validation.
+Packaged acceptance: 16 geometry checks and 22 OpenSCAD checks passed; both processes
+exited 0 with graceful shutdown. Includes actual 14772-triangle chamfer, 20172-triangle
+fillet, edge/hollow cancellation on a curved mesh with unchanged source hash, Undo/Redo,
+outward hollowing, source/parameter compatibility, LYL close/reopen and zero renderer errors.
+The direction/tolerance UI produced a 24x24x24 mm shell from a 20 mm native box at 2 mm wall.
 
 The kernel's default non-adaptive volume integral overestimated the faceted cylinder rim
 treatment by approximately 0.26%; independent signed-tetrahedron mesh volume confirmed
@@ -92,3 +96,21 @@ of the original file confirmed a closed, correctly oriented cavity after the sam
 Sources inspected: [occt-wasm v5.8.0 source](https://github.com/andymai/occt-wasm/tree/ce0e6da47ea43b7994fb2b6275643e04cb36fe5a)
 and [OCCT thick-solid documentation](https://occt3d.com/dev/doc/refman/html/class_b_rep_offset_a_p_i___make_thick_solid.html).
 OCCT documents limitations in offset self-intersection handling; invalid results are refused.
+
+## Local release
+
+Version 1.114.0-ultimate.2. Implementation commit fa5fd1f1; STL correction/package source
+08359c11. Final validator/documentation checkpoint does not change application code.
+Installer: dist/ultimate/windows/Layerling-Ultimate-OpenSCAD-Setup-x64.exe.
+SHA256: a8491fb6dbb319b928214c720ca7cb6859f7e1c94061846322c85d59d5540e46.
+NSIS archive CRC/decompression integrity passed. Packaged executable was tested; the installer
+was not run over any existing installation. Detailed run IDs, timings and lifecycle events are
+in release-validation.json and the two validation directories beside the installer.
+Final manufacturing STL: 8408 triangles, volume 11225.455293 mm3, zero unmatched edges.
+Original Desktop setup/portable hashes are unchanged. Previous Ultimate installer is preserved
+at .codex-run/preserved-ultimate-scad; no user projects, public uploads or Git remotes changed.
+
+Main changed files: cadEdgeTopology.ts, cadMeshSolid.ts, cadMeshBudget.ts, cadPlanarMesh.ts,
+cadModifier.worker.ts, cadModifierRuntime.ts, cadProfileExtrusion.ts, cadShell.ts, stlExport.ts;
+LayerlingEditor.tsx, ShellPanel.tsx, CAD/project types, MCP schemas/timeouts, Ultimate build
+metadata and desktop/validate-geometry.mjs. Focused unit/e2e tests and this checkpoint accompany them.

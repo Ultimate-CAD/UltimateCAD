@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   completeLayerlingMcpCommand,
   dispatchLayerlingMcpCommand,
@@ -26,6 +26,19 @@ beforeEach(() => {
 });
 
 describe("Layerling MCP long polling", () => {
+  it("allows a bounded mesh hollow operation to complete beyond the ordinary one-minute cap", async () => {
+    vi.useFakeTimers();
+    try {
+      const result = dispatchLayerlingMcpCommand({ editorId: editor.editorId, action: "hollow_object", timeoutMs: 300000 });
+      const command = pollLayerlingMcpCommand(editor.editorId)!;
+      let settled=false;void result.then(()=>{settled=true;});
+      for(let i=0;i<6;i++){await vi.advanceTimersByTimeAsync(10000);registerLayerlingMcpEditor(editor);}
+      await vi.advanceTimersByTimeAsync(1000);registerLayerlingMcpEditor(editor);
+      expect(settled).toBe(false);
+      completeLayerlingMcpCommand(editor.editorId,{commandId:command.id,ok:true,data:{method:"mesh-sdf"}});
+      await expect(result).resolves.toMatchObject({ok:true,data:{method:"mesh-sdf"}});
+    } finally {vi.useRealTimers();}
+  });
   it("delivers a command directly to a waiting editor", async () => {
     const poll = waitForLayerlingMcpCommand(editor.editorId, { timeoutMs: 5_000 });
     const result = dispatchLayerlingMcpCommand({ editorId: editor.editorId, action: "list_objects" });

@@ -188,6 +188,8 @@ import type { AlignAxis, AlignHandleStatus, AlignTarget, EdgeTreatmentFeature, G
 import { type Vec3, type MeshData, type Cuboid, type ShapeUpdatePatch, type ManifoldSolid, MIN_SHAPE_DIMENSION, resetManifoldRuntime, cleanModelDimension, getManifoldRuntime, meshForShape, meshReachAlong, appendMeshData, formatTriangleCount, shapeAabb, boundsForShapes, boundsForCuboids, meshAabb, boundsForPositions, quantizedPointKey } from "@/lib/editorMeshCore";
 import { meshPartCount } from "@/lib/meshPartCount";
 import { buildGroupedShapeOffThread, exportSolidVolumeOffThread, callOffFaceRead, faceReadInWorker, createFaceReadKeeper, faceReadPositionsOffThread, simplifyTrianglePositionsOffThread, splitShapesByPlaneOffThread, subscribeGeometryBusy, warmGeometryWorker } from "@/lib/geometryWorker";
+import { hollowMeshOffThread } from "@/lib/meshHollowWorker";
+import { isPureMeshHollowSource } from "@/lib/meshHollowSource";
 import { roundedAlignedValue } from "@/lib/alignRounding";
 import { cloneAsGroupChild, meshDataToManifoldMesh, shapeToManifoldSolid, withClosedHolesNote, unionOverlappingExportMeshes, exportBodiesWithLooseHoles, formatSectionOffset, SECTION_SEEN_FROM_KEYS, expandBundles, visibleExportShapes, multicolorExportSolids, exportFaceColors, colorSeparatedExportMeshes, disposeManifold, canIntersectShapes, buildIntersectionShapeFromSelection, canHullShapes, buildHullShapeFromSelection, groupedShape, quaternionForShape, rotationFromQuaternion, cleanShapePatch, restoreGroupedChildren, restoreGroupedChildrenForEdges } from "@/lib/editorBooleans";
 import { handleViewArrowKey } from "@/lib/viewArrowKeys";
@@ -3023,7 +3025,8 @@ export function LayerlingEditor({
   }, [sketchSelection, sketchTool, sketchActive]);
   const [edgeModifier, setEdgeModifier] = useState<EdgeModifierSession | null>(null);
   // `mode: "offset"` is the Offset tool (#919), which shares the hollow tool's state: `thickness` is then the distance.
-  const [shellTool, setShellTool] = useState<{ mode?: "offset"; shrink?: boolean; keepCopy?: boolean; thickness: number; openings: ShellOpenings; edges: ShellEdges; options?: import("@/types/layerling").ShellOptions; busy: boolean; error: string | null } | null>(null);
+  const [shellTool, setShellTool] = useState<{ mode?: "offset"; shrink?: boolean; keepCopy?: boolean; thickness: number; openings: ShellOpenings; edges: ShellEdges; options?: import("@/types/layerling").ShellOptions; busy: boolean; error: string | null; progress?: string } | null>(null);
+  const meshHollowAbortRef = useRef<AbortController | null>(null);
   /** Cut out (#927): `partId` stays, a copy of it grown by `clearance` is cut out of `hostId`. */
   const [cutOutTool, setCutOutTool] = useState<{ partId: string; hostId: string; clearance: number; busy: boolean; error: string | null } | null>(null);
   const [simplifyToolId, setSimplifyToolId] = useState<string | null>(null);
@@ -7019,6 +7022,64 @@ export function LayerlingEditor({
     invalidateCadModifierSession();
     const sourceFingerprint = projectShapesFingerprint([watched]);
     const sourceProjectId = projectInfoRef.current.projectId;
+    meshHollowAbortRef.current?.abort();
+    meshHollowAbortRef.current = null;
+    if (!offset && isPureMeshHollowSource(shape)) {
+      const controller = new AbortController();
+      meshHollowAbortRef.current = controller;
+      try {
+        const sourceMesh = meshForShape(shape);
+        const positions = sourceMesh.vertices.flatMap((vertex) => vertex);
+        const indices = sourceMesh.faces.flatMap((face) => face);
+        const result = await hollowMeshOffThread({
+          positions,
+          indices,
+          thickness,
+          openings,
+          options: { direction: options?.direction ?? "inward", maxErrorMm: options?.meshAccuracyMm ?? 0.1 },
+        }, controller.signal, (progress) => {
+          setShellTool((current) => current?.busy ? { ...current, progress } : current);
+        });
+        const currentTarget = shapesRef.current.find((candidate) => candidate.id === watched.id);
+        if (
+          projectInfoRef.current.projectId !== sourceProjectId ||
+          !currentTarget ||
+          projectShapesFingerprint([currentTarget]) !== sourceFingerprint
+        ) {
+          controller.abort();
+          throw new Error("The object or project changed while it was being hollowed; try again");
+        }
+        const rawPreview = shapeFromCadMesh(shape, Float32Array.from(result.positions), new Float32Array(), Uint32Array.from(result.indices), "");
+        if (!rawPreview) throw new Error("Mesh hollowing returned an empty body");
+        const preview = canonicalizeShape({
+          ...rawPreview,
+          cadBrep: undefined,
+          cadBrepFrame: undefined,
+          cadMeshDeflection: undefined,
+          cadDisplayEdges: undefined,
+          cadDisplayEdgesVersion: undefined,
+          cadPrimitiveFrame: undefined,
+          groupedShapes: undefined,
+          groupedBaseWidth: undefined,
+          groupedBaseDepth: undefined,
+          groupedBaseHeight: undefined,
+          groupOperation: undefined,
+        });
+        const meshOptions = { direction: options?.direction ?? "inward", meshAccuracyMm: options?.meshAccuracyMm ?? 0.1 } satisfies import("@/types/layerling").ShellOptions;
+        const feature = {
+          kind: "shell" as const,
+          amount: thickness,
+          edgeCount: 0,
+          openings,
+          ...(edges === "sharp" ? { shellEdges: edges } : {}),
+          shellOptions: meshOptions,
+          meshHollow: result.stats,
+        } satisfies NonNullable<WorkplaneShape["edgeTreatments"]>[number];
+        return shapeWithEdgeTreatmentRecord(bakedEdgeTreatmentPreview(preview, shape), shape, feature, true, Date.now());
+      } finally {
+        if (meshHollowAbortRef.current === controller) meshHollowAbortRef.current = null;
+      }
+    }
     const { response, sourceParts } = await prepareCadModifierForMcp(shape, 25);
     const previewResponse = await postCadModifierRequestAsync({
       type: "preview",
@@ -7176,6 +7237,8 @@ export function LayerlingEditor({
 
   const startShellTool = useCallback(() => {
     if (shellTool && shellTool.mode !== "offset") {
+      meshHollowAbortRef.current?.abort();
+      meshHollowAbortRef.current = null;
       setShellTool(null);
       return;
     }
@@ -7189,9 +7252,12 @@ export function LayerlingEditor({
       return;
     }
     if (edgeModifier) invalidateCadModifierSession();
+    meshHollowAbortRef.current?.abort();
+    meshHollowAbortRef.current = null;
     closeSplit();
     const smallest = Math.min(shapeWidth(selectedShape), shapeDepth(selectedShape), selectedShape.height);
-    setShellTool({ thickness: Math.max(0.2, Math.min(2, Number((smallest / 5).toFixed(1)))), openings: "top", edges: "round", busy: false, error: null });
+    const meshSource = isPureMeshHollowSource(selectedShape);
+    setShellTool({ thickness: Math.max(0.2, Math.min(2, Number((smallest / 5).toFixed(1)))), openings: meshSource ? "none" : "top", edges: "round", ...(meshSource ? { options: { direction: "inward", meshAccuracyMm: 0.1 } } : {}), busy: false, error: null });
   }, [refuseLockedSelection, closeSplit, edgeModifier, invalidateCadModifierSession, selectedShape, selectedShapes.length, shellTool]);
 
   const startOffsetTool = useCallback(() => {
@@ -7208,6 +7274,8 @@ export function LayerlingEditor({
       setNotice(t("status.bundleNotOneBody"));
       return;
     }
+    meshHollowAbortRef.current?.abort();
+    meshHollowAbortRef.current = null;
     if (edgeModifier) invalidateCadModifierSession();
     closeSplit();
     setShellTool({ mode: "offset", shrink: false, keepCopy: false, thickness: 0.2, openings: "none", edges: "round", busy: false, error: null });
@@ -7296,7 +7364,7 @@ export function LayerlingEditor({
       return;
     }
     const { thickness, openings, edges } = shellTool;
-    setShellTool((current) => current ? { ...current, busy: true, error: null } : current);
+    setShellTool((current) => current ? { ...current, busy: true, error: null, progress: undefined } : current);
     if (shellTool.mode === "offset") {
       const shrink = shellTool.shrink === true;
       const keepCopy = shellTool.keepCopy === true;
@@ -7334,8 +7402,19 @@ export function LayerlingEditor({
 
   // The panel belongs to one selected body; a new selection closes it.
   useEffect(() => {
+    if (meshHollowAbortRef.current) {
+      meshHollowAbortRef.current.abort();
+      meshHollowAbortRef.current = null;
+      setShellTool(null);
+      return;
+    }
     setShellTool((current) => current && !current.busy ? null : current);
-  }, [selectedShape?.id]);
+  }, [selectedShape?.id, projectId]);
+
+  useEffect(() => () => {
+    meshHollowAbortRef.current?.abort();
+    meshHollowAbortRef.current = null;
+  }, []);
 
   /*
    * Ein ausgehoehlter Koerper wird nach dem Groesse-Aendern neu ausgehoehlt:
@@ -10965,11 +11044,12 @@ export function LayerlingEditor({
         if (target.groupOperation === "bundle") throw new Error("A bundle is not one body; group it (layerling_group_objects) or hollow its parts one by one");
         const thickness = Math.max(0.2, mcpNumber(params.thickness, 2));
         // A list of sides, or one of the names the tool had before it took every side.
+        const meshSource = isPureMeshHollowSource(target);
         const openings: ShellOpenings = Array.isArray(params.openings)
           ? shellOpeningsFor(params.openings.filter((side: unknown): side is ShellSide => SHELL_SIDES.includes(side as ShellSide)))
-          : params.openings === "none" || params.openings === "bottom" || params.openings === "top-bottom" ? params.openings : "top";
+          : params.openings === "none" || params.openings === "top" || params.openings === "bottom" || params.openings === "top-bottom" ? params.openings : meshSource ? "none" : "top";
         const edges: ShellEdges = params.edges === "sharp" ? "sharp" : "round";
-        const options = { direction: params.direction === "outward" ? "outward" as const : "inward" as const, tolerance: mcpNumber(params.tolerance, 1e-6) };
+        const options = { direction: params.direction === "outward" ? "outward" as const : "inward" as const, tolerance: mcpNumber(params.tolerance, 1e-6), ...(meshSource ? { meshAccuracyMm: mcpNumber(params.meshAccuracyMm, 0.1) } : {}) };
         const modifiedShape = await shellShape(target, thickness, openings, edges, target, undefined, options);
         commitShapes(
           shapesRef.current.map((candidate) => candidate.id === target.id ? modifiedShape : candidate),
@@ -14138,7 +14218,8 @@ export function LayerlingEditor({
           onThicknessChange={(value) => setShellTool((current) => current ? { ...current, thickness: value, error: null } : current)}
           options={shellTool.options}
           onOptionsChange={options => setShellTool(current => current ? { ...current, options: { tolerance: 1e-6, ...options }, error: null } : current)}
-          meshSource={selectedShape.kind === "mesh" && !selectedShape.cadBrep && !selectedShape.importedMesh?.brepStep}
+          meshSource={isPureMeshHollowSource(selectedShape)}
+          progress={shellTool.progress}
           onOpeningsChange={(value) => setShellTool((current) => {
             if (!current) return current;
             // A wall that fitted a frame may be too thick once a floor has to stay.
@@ -14148,7 +14229,7 @@ export function LayerlingEditor({
           edges={shellTool.edges}
           onEdgesChange={(value) => setShellTool((current) => current ? { ...current, edges: value, error: null } : current)}
           onApply={applyShellTool}
-          onCancel={() => { invalidateCadModifierSession(); setShellTool(null); }}
+          onCancel={() => { meshHollowAbortRef.current?.abort(); meshHollowAbortRef.current = null; invalidateCadModifierSession(); setShellTool(null); }}
         />
       ) : null}
       {deleteFaceTool && selectedShape?.id === deleteFaceTool.shapeId ? (

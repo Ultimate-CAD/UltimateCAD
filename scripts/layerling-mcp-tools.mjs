@@ -962,7 +962,7 @@ export const tools = [
   },
   {
     name: "layerling_hollow_object",
-    description: "Hollow a solid into walls of equal thickness, like a box, cup or case. Wall direction is inward by default (outside keeps its size), or outward (original solid becomes the cavity). `tolerance` selects the kernel reconstruction precision from 0.0000001 to 0.001 mm; default 0.000001. Mesh sources remain faceted, not recovered analytic surfaces. `openings` chooses which flat sides stay open, measured against the world's axes: a list of any of top, bottom, front (+z), back (-z), left (-x) and right (+x) - for example [\"front\"] for a drawer slot - or one of the names top (default), bottom, top-bottom, or none for a sealed cavity. A side asked for in a list must have a flat face at the very edge of the body on that side. `edges` sets how the inner walls meet where the body has a step or opening: round (default, radius = wall thickness) or sharp. Can be undone like an edge treatment. Resizing the body later hollows it again at the new size a moment afterwards, so the walls keep their thickness.",
+    description: "Hollow a solid into walls of equal thickness, like a box, cup or case. Wall direction is inward by default (outside keeps its size), or outward (original solid becomes the cavity). Exact CAD sources use `tolerance` for kernel reconstruction precision from 0.0000001 to 0.001 mm (default 0.000001). Pure triangle meshes use `meshAccuracyMm` (0.05, 0.1 default, 0.2 or 0.3 mm) as a sampled target surface error; the cavity is approximate, and inward mode retains the original outside facets. Mesh sources remain faceted, not recovered analytic surfaces. `openings` chooses which flat sides stay open, measured against the world's axes: a list of any of top, bottom, front (+z), back (-z), left (-x) and right (+x) - for example [\"front\"] for a drawer slot - or one of the names top (default for exact CAD), bottom, top-bottom, or none (default for meshes and sealed cavities). A side asked for in a list must have a flat face at the very edge of the body on that side. `edges` sets how the inner walls meet where the body has a step or opening: round (default, radius = wall thickness) or sharp. Can be undone like an edge treatment. Resizing the body later hollows it again at the new size a moment afterwards, so the walls keep their thickness.",
     inputSchema: {
       ...editorTargetSchema,
       required: ["id", "thickness"],
@@ -972,6 +972,7 @@ export const tools = [
         thickness: { type: "number", description: "Wall thickness in millimetres." },
         direction: { type: "string", enum: ["inward", "outward"], description: "Inward keeps outside dimensions (default); outward keeps cavity dimensions." },
         tolerance: { type: "number", minimum: 0.0000001, maximum: 0.001, description: "Kernel reconstruction tolerance in mm; defaults to 0.000001 without silently retrying coarser values." },
+        meshAccuracyMm: { type: "number", enum: [0.05, 0.1, 0.2, 0.3], description: "Sampled mesh cavity target error in mm (default 0.1); pure mesh hollowing only." },
         openings: {
           anyOf: [
             { type: "string", enum: ["top", "bottom", "top-bottom", "none"] },

@@ -48,6 +48,7 @@ export function ShellPanel({
   options = {},
   onOptionsChange,
   meshSource = false,
+  progress,
 }: {
   targetName: string;
   thickness: number;
@@ -73,6 +74,7 @@ export function ShellPanel({
   options?: ShellOptions;
   onOptionsChange?: (value: ShellOptions) => void;
   meshSource?: boolean;
+  progress?: string;
 }) {
   useLanguage();
   const openSides = shellOpenSides(openings);
@@ -122,15 +124,24 @@ export function ShellPanel({
           <option value="inward">Inward — keep outside dimensions</option>
           <option value="outward">Outward — keep cavity dimensions</option>
         </select></label>
-        <label>Reconstruction tolerance <select aria-label="Shell reconstruction tolerance" disabled={busy} value={options.tolerance ?? 1e-6}
-          onChange={event => onOptionsChange?.({ ...options, tolerance: Number(event.target.value) })}>
-          <option value={1e-6}>0.000001 mm — precise</option>
-          <option value={1e-4}>0.0001 mm</option>
-          <option value={1e-3}>0.001 mm — tolerant</option>
-        </select></label>
-        <span className="shell-openings-summary">{meshSource
-          ? "Faceted mesh source. Planar fitting allowance: 0.002 mm; curved detail remains limited to the original facets."
-          : "Native CAD surfaces are retained when available."} Offset tolerance is a reconstruction setting, not a guarantee of minimum wall clearance.</span>
+        {meshSource ? <>
+          <label>Mesh accuracy <select aria-label="Mesh hollow accuracy" disabled={busy} value={options.meshAccuracyMm ?? 0.1}
+            onChange={event => onOptionsChange?.({ ...options, meshAccuracyMm: Number(event.target.value) })}>
+            <option value={0.05}>0.05 mm - finer</option>
+            <option value={0.1}>0.1 mm - balanced</option>
+            <option value={0.2}>0.2 mm</option>
+            <option value={0.3}>0.3 mm - faster</option>
+          </select></label>
+          <span className="shell-openings-summary">Inward mode retains the original outside surface. The cavity is a sampled mesh approximation; the selected accuracy is a target surface error, not a certified bound.</span>
+        </> : <>
+          <label>Reconstruction tolerance <select aria-label="Shell reconstruction tolerance" disabled={busy} value={options.tolerance ?? 1e-6}
+            onChange={event => onOptionsChange?.({ ...options, tolerance: Number(event.target.value) })}>
+            <option value={1e-6}>0.000001 mm - precise</option>
+            <option value={1e-4}>0.0001 mm</option>
+            <option value={1e-3}>0.001 mm - tolerant</option>
+          </select></label>
+          <span className="shell-openings-summary">Native CAD surfaces are retained when available. Offset tolerance is a reconstruction setting, not a guarantee of minimum wall clearance.</span>
+        </>}
       </div>
 
       <div className="edge-modifier-field shell-openings" role="group" aria-label={t("shell.openings")}>
@@ -168,7 +179,7 @@ export function ShellPanel({
         <span className="shell-openings-summary">{openSides.length === 0 ? t("shell.sidesNone") : t("shell.sidesHint")}</span>
       </div>
 
-      <div className="edge-modifier-field shell-openings" role="radiogroup" aria-label={t("shell.edges")}>
+      {!meshSource ? <div className="edge-modifier-field shell-openings" role="radiogroup" aria-label={t("shell.edges")}>
         <span>{t("shell.edges")}</span>
         <div className="shell-opening-options">
           {SHELL_EDGES.map((option) => (
@@ -186,8 +197,9 @@ export function ShellPanel({
           ))}
         </div>
         <span className="shell-openings-summary">{t("shell.edgesHint")}</span>
-      </div>
+      </div> : null}
 
+      {busy && progress ? <div className="shell-openings-summary" role="status" aria-live="polite">{progress}</div> : null}
       {error ? <div className="edge-modifier-error" role="alert">{shellErrorMessage(error, roundedEdgesHint)}</div> : null}
       <div className="edge-modifier-footer">
         <button type="button" className="secondary" onClick={onCancel}>{t("common.cancel")}</button>

@@ -194,7 +194,7 @@ export function dispatchLayerlingMcpCommand({
         error: `Timed out waiting for Layerling editor ${editor.editorNumber}`,
         completedAt: Date.now(),
       });
-    }, Math.max(1000, Math.min(timeoutMs, 60000)));
+    }, Math.max(1000, Math.min(timeoutMs, action === "hollow_object" ? 360000 : 60000)));
     state.pending.set(command.id, { editorId: editor.editorId, resolve, timer });
   });
 }

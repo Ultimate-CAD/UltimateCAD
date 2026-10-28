@@ -647,7 +647,7 @@ export type ShellOpenings = "none" | "top" | "bottom" | "top-bottom" | ShellSide
  * they intersect.
  */
 export type ShellEdges = "round" | "sharp";
-export type ShellOptions = { direction?: "inward" | "outward"; tolerance?: number };
+export type ShellOptions = { direction?: "inward" | "outward"; tolerance?: number; meshAccuracyMm?: number };
 
 export type EdgeTreatmentFeature = {
   /**
@@ -667,6 +667,8 @@ export type EdgeTreatmentFeature = {
   shellEdges?: ShellEdges;
   /** Shell reconstruction settings; absent preserves older project behavior. */
   shellOptions?: ShellOptions;
+  /** Approximation measurements recorded by the mesh-only hollow operation. */
+  meshHollow?: import("@/lib/meshHollow").MeshHollowResult["stats"];
   /** Only for "offset": the faces moved inward, the body shrunk; missing means grown. */
   offsetShrink?: boolean;
   /** Only for "deleteFace": the faces deleted, as the tool numbered them on the body before. */

@@ -25,6 +25,8 @@ import type { WorkplaneShape } from "@/types/layerling";
 import { retainedCutEvidence } from "../helpers/retainedCutEvidence";
 
 let runtime: ManifoldToplevel;
+const evidenceDirectory =
+  process.env.LAYERLING_FINISH_EVIDENCE_DIR ?? ".codex-run/geometry9/evidence";
 beforeAll(async () => {
   runtime = await manifoldModule();
   runtime.setup();
@@ -350,7 +352,7 @@ it.skipIf(!process.env.LAYERLING_FINISH_ORGANIC)(
       keepPositive: true,
     });
     const qa = validateFinishing(source, result);
-    mkdirSync(".codex-run/finishing8", { recursive: true });
+    mkdirSync(evidenceDirectory, { recursive: true });
     const uprightSource = importedShapeFromTriangleSoup(
       "Captured upright hollow organic",
       p,
@@ -370,9 +372,9 @@ it.skipIf(!process.env.LAYERLING_FINISH_ORGANIC)(
       snapGrid: DEFAULT_SNAP_GRID,
       placementElevation: 0,
     });
-    writeFileSync(".codex-run/finishing8/organic-upright.lyl", project);
+    writeFileSync(`${evidenceDirectory}/organic-upright.lyl`, project);
     writeFileSync(
-      ".codex-run/finishing8/organic-result.json",
+      `${evidenceDirectory}/organic-result.json`,
       JSON.stringify(
         {
           stats: result.stats,
@@ -391,7 +393,7 @@ it.skipIf(!process.env.LAYERLING_FINISH_ORGANIC)(
       ),
     );
     writeFileSync(
-      ".codex-run/finishing8/open-organic.stl",
+      `${evidenceDirectory}/open-organic.stl`,
       Buffer.from(exportMeshesToStl([result.mesh])),
     );
     expect(result.encodedAudit.valid).toBe(true);
@@ -447,9 +449,9 @@ it.skipIf(!process.env.LAYERLING_FINISH_BENCH)(
         peakRssKiB: process.resourceUsage().maxRSS,
       });
       expect(qa.encodedSurface.selfIntersections.complete).toBe(true);
-      mkdirSync(".codex-run/finishing8", { recursive: true });
+      mkdirSync(evidenceDirectory, { recursive: true });
       writeFileSync(
-        ".codex-run/finishing8/benchmark.json",
+        `${evidenceDirectory}/benchmark.json`,
         JSON.stringify(records, null, 2),
       );
       if (process.env.LAYERLING_FINISH_WRITE_FIXTURES) {
@@ -495,7 +497,7 @@ it.skipIf(!process.env.LAYERLING_FINISH_BENCH)(
           placementElevation: 0,
         });
         writeFileSync(
-          `.codex-run/finishing8/closed-hollow-${mesh.faces.length}.lyl`,
+          `${evidenceDirectory}/closed-hollow-${mesh.faces.length}.lyl`,
           project,
         );
       }

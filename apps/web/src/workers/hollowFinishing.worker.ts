@@ -14,6 +14,12 @@ import {
 import { buildMessage } from "@/lib/buildStamp";
 import { finishedMeshShape } from "@/lib/hollowFinishingShape";
 import type { WorkplaneShape } from "@/types/layerling";
+import {
+  observeGeometryTiming,
+  startGeometryTiming,
+  withGeometryTiming,
+  type GeometrySpan,
+} from "@/lib/geometryTiming";
 
 let source: FinishingSource | undefined;
 let shape: WorkplaneShape | undefined;
@@ -22,17 +28,31 @@ let cached:
       key: string;
       result: ReturnType<typeof cutHollowBase>;
       validation: ReturnType<typeof validateFinishing>;
+      positions: Float64Array;
     }
   | undefined;
 self.postMessage(buildMessage());
 self.onmessage = async ({ data }) => {
+  const requestStart = performance.now(),
+    timings: GeometrySpan[] = [];
+  observeGeometryTiming((span) => timings.push(span));
   const post = (
     type: string,
     detail: object = {},
     transfer: Transferable[] = [],
   ) =>
     self.postMessage(
-      { type, revision: data.revision, ...detail },
+      {
+        type,
+        revision: data.revision,
+        ...detail,
+        ...(type !== "progress"
+          ? {
+              timings: timings.slice(),
+              requestMs: performance.now() - requestStart,
+            }
+          : {}),
+      },
       { transfer },
     );
   try {
@@ -46,11 +66,15 @@ self.onmessage = async ({ data }) => {
         throw new Error(
           "Open Hollow Base supports up to 2 million input triangles. Source retained.",
         );
+      const endUnpack = startGeometryTiming("worker.input.unpack");
       for (let i = 0; i < p.length; i += 3)
         vertices.push([p[i], p[i + 1], p[i + 2]]);
       for (let i = 0; i < vertices.length; i += 3)
         faces.push([i, i + 1, i + 2]);
-      source = prepareFinishingSource({ vertices, faces });
+      endUnpack();
+      source = withGeometryTiming("source.prepare", () =>
+        prepareFinishingSource({ vertices, faces }),
+      );
       cached = undefined;
       shape = data.shape;
       post("ready", { audit: source.audit });
@@ -64,33 +88,44 @@ self.onmessage = async ({ data }) => {
         post("progress", {
           message: "Clipping triangles and constructing rim",
         });
+        const activeSource = source;
         const runtime = await getManifoldRuntime();
-        const result = cutHollowBase(runtime, source, cut);
+        if (source !== activeSource)
+          throw new Error(
+            "Source changed while initializing the preview engine; request a new preview.",
+          );
+        const result = withGeometryTiming("cut.total", () =>
+          cutHollowBase(runtime, activeSource, cut),
+        );
+        const endPack = startGeometryTiming("worker.packForTransform");
         const raw = new Float64Array(result.mesh.faces.length * 9);
         let i = 0;
         for (const f of result.mesh.faces)
           for (const n of f)
             for (const value of result.mesh.vertices[n]) raw[i++] = value;
+        endPack();
         // Verify the exact rebasing/mirroring/rotation and encoding that Apply will use.
-        const manufacturingMesh = shape
-          ? meshForShape(finishedMeshShape(shape, raw))
-          : result.mesh;
-        const validation = validateFinishing(
-          source,
-          result,
-          0.8,
-          (message) => post("progress", { message }),
-          manufacturingMesh,
+        const manufacturingMesh = withGeometryTiming(
+          "worker.rebaseTransform",
+          () =>
+            shape ? meshForShape(finishedMeshShape(shape, raw)) : result.mesh,
         );
-        cached = { key, result, validation };
+        const validation = withGeometryTiming("validation.total", () =>
+          validateFinishing(
+            activeSource,
+            result,
+            0.8,
+            (message) => post("progress", { message }),
+            manufacturingMesh,
+          ),
+        );
+        cached = { key, result, validation, positions: raw };
       }
       const { result, validation } = cached!;
-      const positions = new Float64Array(result.mesh.faces.length * 9);
-      let offset = 0;
-      for (const f of result.mesh.faces)
-        for (const i of f)
-          for (const value of result.mesh.vertices[i])
-            positions[offset++] = value;
+      // Transfer only a copy; retain exactly one immutable packed preview for cache hits.
+      const positions = withGeometryTiming("worker.packResponse", () =>
+        cached!.positions.slice(),
+      );
       post(
         "preview",
         {
@@ -101,6 +136,7 @@ self.onmessage = async ({ data }) => {
               validation.maxManufacturingEncodingDisplacementMm,
             validationMs: validation.validationMs,
             cacheHit,
+            requestMs: performance.now() - requestStart,
           },
           audit: result.audit,
           surface: validation.surface,
@@ -113,5 +149,7 @@ self.onmessage = async ({ data }) => {
     post("error", {
       message: error instanceof Error ? error.message : String(error),
     });
+  } finally {
+    observeGeometryTiming();
   }
 };

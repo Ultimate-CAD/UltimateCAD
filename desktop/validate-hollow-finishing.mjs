@@ -2,6 +2,7 @@ import { _electron as electron } from "playwright-core";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { unzipSync, strFromU8, zipSync, strToU8 } from "fflate";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
@@ -10,12 +11,17 @@ const output = path.resolve(process.env.LAYERLING_HOLLOW_FINISHING_VALIDATION_DI
 const fixtureOverride = process.env.LAYERLING_FINISH_FIXTURE ? path.resolve(process.env.LAYERLING_FINISH_FIXTURE) : null;
 const cutPosition = Number(process.env.LAYERLING_FINISH_POSITION ?? 3.1);
 const expectThinWarning = process.env.LAYERLING_FINISH_EXPECT_THIN_WARNING === "1";
+const stressOnly = process.env.LAYERLING_GEOMETRY_STRESS_ONLY === "1";
+const interactionEnabled = process.env.LAYERLING_GEOMETRY_INTERACTION === "1" || stressOnly;
+const expectedAppVersion = process.env.LAYERLING_EXPECTED_APP_VERSION;
 assert.ok(Number.isFinite(cutPosition), "LAYERLING_FINISH_POSITION must be a finite number");
+assert.ok(expectedAppVersion && /\.(?:8|9)$/.test(expectedAppVersion), "Set LAYERLING_EXPECTED_APP_VERSION to the exact .8 or .9 package version");
 const profile = path.join(output, `isolated-profile-${Date.now()}`);
 mkdirSync(output, { recursive: true });
 const checks = [], errors = [], requests = [];
-let app, page, connection, editorId, sourceObject, exportAudits = {}, workerTrace = [], memoryTimer, memorySampling = false;
+let app, page, connection, editorId, sourceObject, appVersion, appliedMeshAssetSha256 = null, exportAudits = {}, workerTrace = [], memoryTimer, memorySampling = false;
 const memorySamples = [];
+const interaction = { enabled: interactionEnabled, stressOnly, metricDefinition: "WebGL API call CPU time only; no GPU completion inferred", previewLatenciesMs: [], snapshots: {}, planeMotion: null, staleInjection: null };
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pass = (name, detail) => { checks.push({ name, detail }); console.log("PASS", name, detail ?? ""); };
 
@@ -94,6 +100,149 @@ async function waitFinishingPreview(dialog) {
   },null,{timeout:180000});
   assert.equal(await dialog.getByRole("alert").count(),0,await dialog.innerText());
   assert.equal(await dialog.getByRole("button",{name:"Apply",exact:true}).isEnabled(),true);
+  const latency = await page.evaluate(() => {
+    const apply=[...(document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]')?.querySelectorAll("button")||[])].find(b=>b.textContent?.trim()==="Apply");
+    const previews=(window.__hollowFinishWorkerTrace||[]).filter(w=>w.name==="layerling-hollow-finishing").flatMap(w=>w.incoming).filter(m=>m.type==="preview");
+    const last=previews.at(-1);
+    const uiEnabledObservedAt=performance.now();
+    return last&&apply&&!apply.disabled?{workerPreviewReceivedAt:last.at,uiEnabledObservedAt,latencyMs:uiEnabledObservedAt-last.at}:null;
+  });
+  if(latency&&interactionEnabled) interaction.previewLatenciesMs.push(latency);
+}
+async function interactionSnapshot(label) {
+  if(!interactionEnabled||!page)return null;
+  const snapshot=await page.evaluate((name)=>{
+    const metrics=window.__hollowRenderMetrics;
+    if(!metrics)return null;
+    const canvas=metrics.canvas;
+    const operations=Object.fromEntries(Object.entries(metrics.operations).map(([key,value])=>[key,{...value}]));
+    const snapshot={label:name,at:performance.now(),canvas:{width:canvas?.width||0,height:canvas?.height||0,clientWidth:canvas?.clientWidth||0,clientHeight:canvas?.clientHeight||0,devicePixelRatio},drawCalls:Object.entries(operations).filter(([k])=>k.startsWith("draw")).reduce((n,[,v])=>n+v.count,0),drawCallCPUms:Object.entries(operations).filter(([k])=>k.startsWith("draw")).reduce((n,[,v])=>n+v.callCPUms,0),bufferUploadCalls:Object.entries(operations).filter(([k])=>k==="bufferData"||k==="bufferSubData").reduce((n,[,v])=>n+v.count,0),bufferUploadCPUms:Object.entries(operations).filter(([k])=>k==="bufferData"||k==="bufferSubData").reduce((n,[,v])=>n+v.callCPUms,0),operations,longTaskCount:metrics.longTasks.length,longTaskTotalMs:metrics.longTasks.reduce((n,x)=>n+x.durationMs,0),contextEvents:[...metrics.contextEvents]};
+    const measured=performance.getEntriesByType("measure").filter(entry=>entry.name.startsWith("layerling.finishing."));
+    snapshot.performanceMeasureCount=measured.length;
+    snapshot.performanceMeasures=measured.slice(-200).map(entry=>({name:entry.name,durationMs:entry.duration,startTimeMs:entry.startTime}));
+    snapshot.performancePhaseTotalsMs=Object.fromEntries([...new Set(measured.map(entry=>entry.name))].map(name=>[name,measured.filter(entry=>entry.name===name).reduce((n,entry)=>n+entry.duration,0)]));
+    return snapshot;
+  },label);
+  if(snapshot)interaction.snapshots[label]=snapshot;
+  return snapshot;
+}
+async function installInteractionMonitor() {
+  if(!interactionEnabled)return;
+  await page.evaluate(()=>{
+    const canvas=document.querySelector('[role="dialog"][aria-label="Open Hollow Base"] canvas');
+    if(!canvas)throw new Error("Open Hollow Base WebGL canvas was not found after source readiness");
+    window.__layerlingGeometryDiagnostics=true;
+    const metrics=window.__hollowRenderMetrics={canvas,operations:{},frames:[],longTasks:[],contextEvents:[]};
+    const record=(name,context,start)=>{
+      if(context.canvas!==canvas)return;
+      const elapsed=performance.now()-start;
+      const value=metrics.operations[name]||{count:0,callCPUms:0};
+      value.count++; value.callCPUms+=elapsed; metrics.operations[name]=value;
+    };
+    const methods=["drawArrays","drawElements","drawRangeElements","drawArraysInstanced","drawElementsInstanced","drawArraysInstancedANGLE","drawElementsInstancedANGLE","bufferData","bufferSubData"];
+    const contexts=[window.WebGLRenderingContext?.prototype,window.WebGL2RenderingContext?.prototype].filter(Boolean);
+    for(const proto of contexts)for(const name of methods){
+      if(!Object.prototype.hasOwnProperty.call(proto,name)||typeof proto[name]!=="function"||proto[name].__hollowMetricsWrapped)continue;
+      const original=proto[name];
+      const wrapped=function(...args){
+        if(this.canvas!==canvas)return original.apply(this,args);
+        const start=performance.now();
+        try{return original.apply(this,args)}finally{record(name,this,start)}
+      };
+      Object.defineProperty(wrapped,"__hollowMetricsWrapped",{value:true});
+      proto[name]=wrapped;
+    }
+    canvas.addEventListener("webglcontextlost",event=>metrics.contextEvents.push({type:"lost",at:performance.now(),statusMessage:event.statusMessage||""}));
+    canvas.addEventListener("webglcontextrestored",()=>metrics.contextEvents.push({type:"restored",at:performance.now()}));
+    let previous=null;
+    const frame=at=>{if(previous!==null&&metrics.frames.length<100000)metrics.frames.push(at-previous);previous=at;requestAnimationFrame(frame)};
+    requestAnimationFrame(frame);
+    if(window.PerformanceObserver&&PerformanceObserver.supportedEntryTypes?.includes("longtask")){
+      const observer=new PerformanceObserver(list=>{for(const entry of list.getEntries())metrics.longTasks.push({startMs:entry.startTime,durationMs:entry.duration})});
+      observer.observe({type:"longtask",buffered:true});
+    }
+  });
+}
+function percentile(values,p){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.max(0,Math.ceil(sorted.length*p)-1)]}
+async function runPlaneInteraction(dialog) {
+  if(!interactionEnabled)return;
+  await pause(100);
+  await interactionSnapshot("source-idle-start");
+  const idleStart=await page.evaluate(()=>({frameIndex:window.__hollowRenderMetrics.frames.length,at:performance.now()}));
+  await pause(1000);
+  const idleEnd=await page.evaluate(()=>({frameIndex:window.__hollowRenderMetrics.frames.length,at:performance.now()}));
+  const idle=await interactionSnapshot("source-idle-1s");
+  const idleStartSnapshot=interaction.snapshots["source-idle-start"];
+  const workerState=await page.evaluate(()=>{
+    const record=[...(window.__hollowFinishWorkerTrace||[])].reverse().find(w=>w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="ready"));
+    const apply=[...(document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]')?.querySelectorAll("button")||[])].find(b=>b.textContent?.trim()==="Apply");
+    return {workerId:record?.id,previewCount:record?.outgoing.filter(m=>m.type==="preview").length||0,applyDisabled:!!apply?.disabled};
+  });
+  assert.ok(workerState.workerId!==undefined,"No ready finishing worker found for plane interaction");
+  assert.equal(workerState.applyDisabled,true,"Apply must be disabled before plane interaction");
+  const frameBegin=await page.evaluate(()=>window.__hollowRenderMetrics.frames.length);
+  const motion=await page.evaluate(async({workerId,initialPreviewCount,center,frameBegin})=>{
+    const dialog=document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]');
+    const slider=dialog?.querySelector('input[aria-label="Plane position slider"]');
+    const apply=[...(dialog?.querySelectorAll("button")||[])].find(b=>b.textContent?.trim()==="Apply");
+    const record=window.__hollowFinishWorkerTrace?.[workerId];
+    if(!slider||!record)throw new Error("Plane slider or finishing worker record disappeared");
+    const setValue=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;
+    const min=Number(slider.min),max=Number(slider.max),span=max-min,amplitude=span*0.12;
+    let events=0;
+    const startedAt=performance.now();
+    for(let i=0;i<120;i++){
+      const value=Math.min(max,Math.max(min,center+amplitude*Math.sin(i*0.37)));
+      setValue.call(slider,String(value));
+      slider.dispatchEvent(new Event("input",{bubbles:true}));
+      events++;
+      if(i%12===11){
+        await new Promise(resolve=>setTimeout(resolve,1));
+        if(!apply?.disabled)throw new Error("Apply became enabled during plane interaction");
+        if(record.outgoing.filter(m=>m.type==="preview").length!==initialPreviewCount)throw new Error("Worker received a preview during plane interaction");
+      }
+      await new Promise(resolve=>setTimeout(resolve,1000/60));
+    }
+    const endedAt=performance.now();
+    return {events,startedAt,endedAt,min,max,span,finalSliderValue:Number(slider.value),frames:window.__hollowRenderMetrics.frames.slice(frameBegin)};
+  },{workerId:workerState.workerId,initialPreviewCount:workerState.previewCount,center:cutPosition,frameBegin});
+  const positionInput=dialog.getByLabel("Cut position (mm)");
+  await positionInput.fill(String(cutPosition));
+  const restored=Number(await positionInput.inputValue());
+  assert.equal(restored,cutPosition,"Plane interaction did not restore the exact cut position");
+  const after=await page.evaluate((workerId)=>{
+    const record=window.__hollowFinishWorkerTrace?.[workerId];
+    const apply=[...(document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]')?.querySelectorAll("button")||[])].find(b=>b.textContent?.trim()==="Apply");
+    return {previewCount:record?.outgoing.filter(m=>m.type==="preview").length||0,applyDisabled:!!apply?.disabled,frameCount:window.__hollowRenderMetrics.frames.length,longTaskCount:window.__hollowRenderMetrics.longTasks.length};
+  },workerState.workerId);
+  assert.equal(after.applyDisabled,true,"Restoring cut position left Apply enabled");
+  assert.equal(after.previewCount,workerState.previewCount,"Plane interaction emitted a worker preview");
+  const fps=motion.frames.filter(ms=>ms>0).map(ms=>1000/ms);
+  interaction.sourceIdle={durationMs:idleEnd.at-idleStart.at,frameSamples:idleEnd.frameIndex-idleStart.frameIndex,idleDrawCalls:Math.max(0,(idle?.drawCalls||0)-(idleStartSnapshot?.drawCalls||0)),idleBufferUploadCalls:Math.max(0,(idle?.bufferUploadCalls||0)-(idleStartSnapshot?.bufferUploadCalls||0)),longTaskCount:Math.max(0,(idle?.longTaskCount||0)-(idleStartSnapshot?.longTaskCount||0)),longTaskDurationMs:Math.max(0,(idle?.longTaskTotalMs||0)-(idleStartSnapshot?.longTaskTotalMs||0))};
+  interaction.planeMotion={events:motion.events,durationMs:motion.endedAt-motion.startedAt,rangeMm:{min:motion.min,max:motion.max},restoredCutPositionMm:restored,applyDisabledDuring:true,outgoingPreviewDelta:after.previewCount-workerState.previewCount,fpsSamples:fps.length,fpsP50:percentile(fps,.5),fpsP95:percentile(fps,.95),longTaskCountDuring:Math.max(0,after.longTaskCount-(idle?.longTaskCount||0))};
+  await interactionSnapshot("after-plane-interaction");
+}
+async function injectStalePreviews(dialog, terminatedWorkerId) {
+  if(!interactionEnabled)return;
+  const errorsBefore=errors.length;
+  const injected=await page.evaluate((oldId)=>{
+    const trace=window.__hollowFinishWorkerTrace||[];
+    const refs=window.__hollowFinishWorkerInstances||[];
+    const currentRecord=[...trace].reverse().find(w=>w.id>oldId&&w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="ready"));
+    const oldRecord=trace.find(w=>w.id===oldId);
+    if(!currentRecord||!refs[oldId]||!refs[currentRecord.id])throw new Error("Finishing worker instance references missing for stale-message injection");
+    const oldPreview=[...oldRecord.outgoing].reverse().find(m=>m.type==="preview");
+    if(!oldPreview)throw new Error("Canceled worker did not send a preview request");
+    refs[oldId].dispatchEvent(new MessageEvent("message",{data:{type:"preview",revision:oldPreview.revision,positions:new Float64Array(0)}}));
+    refs[currentRecord.id].dispatchEvent(new MessageEvent("message",{data:{type:"preview",revision:0,positions:new Float64Array(0)}}));
+    return {terminatedWorkerId:oldId,currentWorkerId:currentRecord.id,lateRevision:oldPreview.revision,staleRevision:0};
+  },terminatedWorkerId);
+  await pause(100);
+  const apply=dialog.getByRole("button",{name:"Apply",exact:true});
+  assert.equal(await apply.isEnabled(),false,"Stale preview message made Apply available");
+  assert.equal(await dialog.getByRole("alert").count(),0,"Stale preview message produced a dialog error");
+  assert.equal(errors.length,errorsBefore,"Stale preview message produced a page error");
+  interaction.staleInjection={...injected,applyDisabledAfter:true,noDialogError:true,noPageError:true};
 }
 async function sampleAppMemory() {
   if(!app||memorySampling)return;
@@ -185,7 +334,7 @@ function assertStrictMesh(report,label){
   for(const key of ["boundaryEdges","nonManifoldEdges","windingMismatches","degenerateFaces","duplicateFaces","nonManifoldVertices"])assert.equal(report[key],0,`${label} has ${report[key]} ${key}`);
   assert.ok(report.signedVolumeMm3>0,`${label} has non-positive signed volume`);
 }
-async function savedProject() {
+async function savedProject(decodePositions=true) {
   const saved=await command("save_project",{history:"all"});
   const archive=unzipSync(Buffer.from(saved.base64,"base64"));
   const project=JSON.parse(strFromU8(archive["project.json"]));
@@ -196,9 +345,13 @@ async function savedProject() {
   const asset=project.assets.find((a)=>a.id===(node.importedMesh.meshAssetId||node.importedMesh.sourceAssetId));
   assert.ok(asset,"Saved mesh asset is missing");
   const bytes=archive[asset.path];
-  if(node.importedMesh.meshAssetId){const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);const count=v.getUint32(8,true);positions=Array.from({length:count},(_,i)=>v.getFloat64(16+i*8,true));}
-  else {const g=new STLLoader().parse(bytes.slice().buffer),p=g.attributes.position;positions=Array.from({length:p.count},(_,i)=>[p.getX(i),p.getZ(i),-p.getY(i)]).flat();g.dispose();}
-  return {saved,archive,project,state,node:{...node,importedMesh:{...node.importedMesh,positions}}};
+  const meshResourceSha256=createHash("sha256").update(bytes).digest("hex");
+  if(node.importedMesh.meshAssetId){
+    if(decodePositions){const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);const count=v.getUint32(8,true);positions=Array.from({length:count},(_,i)=>v.getFloat64(16+i*8,true));}
+    return {saved,archive,project,state,node:{...node,importedMesh:decodePositions?{...node.importedMesh,positions}:node.importedMesh},meshAssetSha256:meshResourceSha256,meshResourceSha256};
+  }
+  if(decodePositions){const g=new STLLoader().parse(bytes.slice().buffer),p=g.attributes.position;positions=Array.from({length:p.count},(_,i)=>[p.getX(i),p.getZ(i),-p.getY(i)]).flat();g.dispose();}
+  return {saved,archive,project,state,node:{...node,importedMesh:decodePositions?{...node.importedMesh,positions}:node.importedMesh},meshAssetSha256:null,meshResourceSha256};
 }
 function fingerprint(project) { assert.ok(project.node?.importedMesh?.positions?.length); return JSON.stringify(project.node.importedMesh.positions); }
 function checkpoint(archive, project, label) {
@@ -214,20 +367,21 @@ async function reopen(file, projectName) {
 try {
   app=await electron.launch({executablePath:executable,cwd:output,timeout:90000,env:{...process.env,ELECTRON_RUN_AS_NODE:undefined,PATH:process.env.SystemRoot+"\\System32",LAYERLING_DESKTOP_PROFILE:profile,LAYERLING_DESKTOP_TEST:"1"}});
   page=await app.firstWindow();
-  const appVersion=await app.evaluate(({app})=>app.getVersion());
-  assert.equal(appVersion,process.env.LAYERLING_EXPECTED_APP_VERSION||appVersion);
-  assert.ok(appVersion.endsWith(".8"),`Expected packaged .8 build, got ${appVersion}`);
+  appVersion=await app.evaluate(({app})=>app.getVersion());
+  assert.equal(appVersion,expectedAppVersion,"Packaged app version did not match LAYERLING_EXPECTED_APP_VERSION exactly");
+  assert.ok(/\.(?:8|9)$/.test(appVersion),`Expected packaged .8 or .9 build, got ${appVersion}`);
   page.setDefaultTimeout(30000); page.on("pageerror",e=>errors.push(e.message)); page.on("request",r=>requests.push(r.url()));
+  if(interactionEnabled)await page.evaluate(()=>{window.__layerlingGeometryDiagnostics=true});
   await page.evaluate(()=>{
-    const NativeWorker=window.Worker, records=[];
+    const NativeWorker=window.Worker, records=[],instances=[];
     class ObservedWorker extends NativeWorker {
       constructor(url,options){
         super(url,options);
         const record={id:records.length,url:String(url),name:options?.name||null,createdAt:performance.now(),outgoing:[],incoming:[],terminateCalls:[]};
-        this.__finishRecord=record; records.push(record);
+        this.__finishRecord=record; records.push(record); instances[record.id]=this;
         this.addEventListener("message",event=>{
           const d=event.data||{};
-          record.incoming.push({at:performance.now(),type:d.type,revision:d.revision,message:d.message,error:d.error,stats:d.stats,audit:d.audit,surface:d.surface,encodedSurface:d.encodedSurface,surfaceCompletion:d.surfaceCompletion});
+          record.incoming.push({at:performance.now(),type:d.type,revision:d.revision,message:d.message,error:d.error,stats:d.stats,timings:d.timings,requestMs:d.requestMs,audit:d.audit,surface:d.surface,encodedSurface:d.encodedSurface,surfaceCompletion:d.surfaceCompletion});
         });
         this.addEventListener("error",event=>record.incoming.push({at:performance.now(),type:"error-event",message:event.message}));
       }
@@ -242,6 +396,7 @@ try {
     }
     Object.defineProperty(window,"Worker",{configurable:true,writable:true,value:ObservedWorker});
     window.__hollowFinishWorkerTrace=records;
+    window.__hollowFinishWorkerInstances=instances;
   });
   await sampleAppMemory();
   memoryTimer=setInterval(()=>{void sampleAppMemory();},1000);
@@ -267,7 +422,9 @@ try {
   }
   assert.ok(sourceObject,"No imported mesh was found in the selected fixture");
   await command("select_objects",{ids:[sourceObject.id]});
-  const original=await savedProject(), originalFingerprint=fingerprint(original);
+  const original=await savedProject(!stressOnly), originalFingerprint=stressOnly?original.meshResourceSha256:fingerprint(original);
+  if(stressOnly){assert.ok(originalFingerprint,"Stress-only source mesh asset is missing");interaction.sourceMeshResourceSha256=originalFingerprint;}
+  if(!stressOnly){
   await page.getByRole("button",{name:"Open Hollow Base",exact:true}).click();
   const dialog=page.getByRole("dialog",{name:"Open Hollow Base"}); await dialog.waitFor();
   await waitPreviewReady(dialog);
@@ -284,20 +441,55 @@ try {
   const cancelApply=dialog.getByRole("button",{name:"Apply",exact:true});
   await cancelApply.waitFor({state:"visible"});
   assert.equal(await cancelApply.isEnabled(),false,"Canceled preview remained applicable");
+  await injectStalePreviews(dialog,canceledWorker.id);
   assert.equal(fingerprint(await savedProject()),originalFingerprint,"Canceled preview changed source mesh");
   await dialog.getByRole("button",{name:"Cancel",exact:true}).click(); await dialog.waitFor({state:"detached"});
   assert.equal(fingerprint(await savedProject()),originalFingerprint,"Cancel changed the source mesh");
   pass("Cancel discards preview and leaves source mesh intact");
+  }
   await page.getByRole("button",{name:"Open Hollow Base",exact:true}).click();
   const applyDialog=page.getByRole("dialog",{name:"Open Hollow Base"}); await applyDialog.waitFor();
   await waitPreviewReady(applyDialog);
+  await installInteractionMonitor();
   await applyDialog.getByLabel("Cutting axis").selectOption("1");
   await applyDialog.getByLabel("Retained side").selectOption("positive");
   await applyDialog.getByLabel("Cut position (mm)").fill(String(cutPosition));
+  await runPlaneInteraction(applyDialog);
+  if(interactionEnabled)await interactionSnapshot("before-first-preview");
+  if(stressOnly){
+    await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
+    await applyDialog.getByRole("button",{name:"Cancel preview",exact:true}).click();
+    await waitPreviewReady(applyDialog);
+    const trace=await page.evaluate(()=>window.__hollowFinishWorkerTrace||[]);
+    const canceled=trace.filter(w=>w.name==="layerling-hollow-finishing"&&w.outgoing.some(m=>m.type==="preview")&&w.terminateCalls.length>0).at(-1);
+    assert.ok(canceled,"Stress preview cancellation did not terminate its worker");
+    assert.ok(trace.some(w=>w.id>canceled.id&&w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="ready")),"Stress preview cancellation did not initialize a replacement worker");
+    await injectStalePreviews(applyDialog,canceled.id);
+    const afterPreviewCancel=await savedProject(false);
+    assert.equal(afterPreviewCancel.meshResourceSha256,originalFingerprint,"Canceled stress preview changed the source mesh");
+    assert.equal(afterPreviewCancel.node.objectId,sourceObject.id,"Canceled stress preview changed source object identity");
+    await applyDialog.getByRole("button",{name:"Cancel",exact:true}).click(); await applyDialog.waitFor({state:"detached"});
+    const afterFullCancel=await savedProject(false);
+    assert.equal(afterFullCancel.meshResourceSha256,originalFingerprint,"Full stress dialog cancel changed the source mesh");
+    assert.equal(afterFullCancel.node.objectId,sourceObject.id,"Full stress dialog cancel changed source object identity");
+    pass("Stress-only interaction, immediate preview cancel, replacement readiness, stale reply guards, and full cancel passed",{sourceRetained:true,sourceMeshResourceSha256:originalFingerprint,manufacturingReadiness:"not measured"});
+  } else {
   await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
   await waitFinishingPreview(applyDialog);
+  if(interactionEnabled){
+    await pause(100);
+    interaction.firstValidPreview=await interactionSnapshot("first-valid-preview");
+  }
   await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
   await waitFinishingPreview(applyDialog);
+  if(interactionEnabled){
+    await pause(100);
+    interaction.identicalCachedPreview=await interactionSnapshot("identical-cached-preview");
+    const first=interaction.snapshots["first-valid-preview"],cached=interaction.snapshots["identical-cached-preview"];
+    const uploadDelta=(cached?.bufferUploadCalls||0)-(first?.bufferUploadCalls||0);
+    interaction.cachedUploadDeltaCalls=uploadDelta;
+    if(appVersion.endsWith(".9"))assert.equal(uploadDelta,0,".9 identical cached preview issued additional WebGL buffer uploads");
+  }
   assert.match(await applyDialog.innerText(),/\(cached\)/,"Second identical preview did not report a cache hit");
   let finishingTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace);
   assert.ok(finishingTrace.some(w=>w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="preview"&&m.stats?.cacheHit===true)),"Finishing worker did not report stats.cacheHit=true for repeated preview");
@@ -321,6 +513,9 @@ try {
   await page.screenshot({path:path.join(output,"hollow-finishing-preview.png"),fullPage:true});
   await applyDialog.getByRole("button",{name:"Apply",exact:true}).click(); await applyDialog.waitFor({state:"detached"});
   const applied=await savedProject(), appliedFingerprint=fingerprint(applied);
+  appliedMeshAssetSha256=applied.meshAssetSha256;
+  assert.ok(appliedMeshAssetSha256,"Applied result did not save a Float64 mesh asset for SHA256 comparison");
+  interaction.appliedMeshAssetSha256=appliedMeshAssetSha256;
   assert.notEqual(appliedFingerprint,originalFingerprint,"Apply did not change mesh positions");
   assert.equal(applied.node.objectId,sourceObject.id,"Apply changed object identity");
   pass("Plane cut preview applies to the same object",{id:sourceObject.id,axis:"local Y",positionMm:cutPosition,retainedSide:"positive",triangles:applied.node.importedMesh.triangleCount});
@@ -379,6 +574,7 @@ try {
     pass(`${format.toUpperCase()} export passes exact-weld topology audit and independent editor reimport`,{bytes:bytes.byteLength,...exportAudits[format]});
   }
   writeFileSync(path.join(output,"mesh-audits.json"),JSON.stringify(exportAudits,null,2));
+  }
   assert.deepEqual(errors,[]);
   pass("Packaged app launched with restricted PATH and external network blocked",{externalRequests:requests.filter(u=>/^https?:/i.test(u)&&!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(u)).length});
 } catch(error){errors.push(error.stack||String(error));console.error(error);if(page)await page.screenshot({path:path.join(output,"failure.png"),fullPage:true}).catch(()=>{});process.exitCode=1;}
@@ -387,6 +583,17 @@ finally{
   while(memorySampling)await pause(25);
   await sampleAppMemory();
   if(page)workerTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace||[]).catch(()=>[]);
+  if(interactionEnabled&&page){
+    try{
+      interaction.appVersion=appVersion;
+      interaction.fixture=fixtureOverride||"synthetic closed hollow cylinder";
+      interaction.cutPositionMm=cutPosition;
+      await interactionSnapshot("before-app-close");
+      const finalSnapshot=interaction.snapshots["before-app-close"];
+      interaction.contextLossEvents=finalSnapshot?.contextEvents||[];
+      interaction.renderingStateAtClose=finalSnapshot?{canvas:finalSnapshot.canvas,drawCalls:finalSnapshot.drawCalls,drawCallCPUms:finalSnapshot.drawCallCPUms,bufferUploadCalls:finalSnapshot.bufferUploadCalls,bufferUploadCPUms:finalSnapshot.bufferUploadCPUms,longTaskCount:finalSnapshot.longTaskCount,longTaskTotalMs:finalSnapshot.longTaskTotalMs}:null;
+    }catch(error){interaction.captureError=String(error)}
+  }
   const memoryValues=memorySamples.flatMap(s=>s.processes||[]).map(p=>p.memory||{});
   const peakMemory={
     peakWorkingSetSizeKiB:Math.max(0,...memoryValues.map(m=>m.peakWorkingSetSize||0)),
@@ -394,8 +601,12 @@ finally{
     maxPrivateBytes:Math.max(0,...memoryValues.map(m=>m.privateBytes||0)),
   };
   writeFileSync(path.join(output,"mesh-audits.json"),JSON.stringify(exportAudits,null,2));
-  writeFileSync(path.join(output,"measurements.json"),JSON.stringify({fixture:fixtureOverride||"synthetic closed hollow cylinder",cutPositionMm:cutPosition,expectThinWarning,memorySource:"Electron app.getAppMetrics",peakMemory,memorySamples,workers:workerTrace},null,2));
-  writeFileSync(path.join(output,"results.json"),JSON.stringify({executable,profile,checks,errors,exportAudits,peakMemory},null,2));
-  if(app)await app.close().catch(()=>{});
+  if(interactionEnabled)writeFileSync(path.join(output,"interaction.json"),JSON.stringify(interaction,null,2));
+  writeFileSync(path.join(output,"measurements.json"),JSON.stringify({appVersion,stressOnly,fixture:fixtureOverride||"synthetic closed hollow cylinder",cutPositionMm:cutPosition,expectThinWarning,memorySource:"Electron app.getAppMetrics",peakMemory,memorySamples,workers:workerTrace,interaction:interactionEnabled?interaction:undefined,appliedMeshAssetSha256},null,2));
+  writeFileSync(path.join(output,"results.json"),JSON.stringify({executable,appVersion,stressOnly,profile,checks,errors,exportAudits,peakMemory,appliedMeshAssetSha256},null,2));
+  if(app){
+    await app.evaluate(({BrowserWindow})=>{for(const window of BrowserWindow.getAllWindows())window.webContents.on("will-prevent-unload",event=>event.preventDefault());}).catch(()=>{});
+    await app.close().catch(()=>{});
+  }
   if(errors.length)process.exitCode=1;
 }

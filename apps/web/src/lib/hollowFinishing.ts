@@ -2,9 +2,14 @@ import type { ManifoldToplevel, Vec2 } from "manifold-3d";
 import type { StlExportMesh } from "@/lib/stlExport";
 import {
   auditManufacturingMesh,
+  auditIndexedManufacturingMesh,
   indexManufacturingMesh,
 } from "@/lib/manufacturingMesh";
-import { manufacturingSurfaceChecks } from "@/lib/meshManufacturingQa";
+import {
+  manufacturingSurfaceChecks,
+  manufacturingIndexedSurfaceChecks,
+} from "@/lib/meshManufacturingQa";
+import { startGeometryTiming, withGeometryTiming } from "@/lib/geometryTiming";
 
 type Point = [number, number, number];
 type Face = [number, number, number];
@@ -22,7 +27,7 @@ export function prepareFinishingSource(input: StlExportMesh) {
       "This finishing worker supports up to 2 million input triangles. Source was retained.",
     );
   const mesh = indexManufacturingMesh(input);
-  const audit = auditManufacturingMesh(mesh);
+  const audit = auditIndexedManufacturingMesh(mesh);
   if (!audit.valid || audit.solidComponents !== 1)
     throw new Error(
       "Select one closed, consistently oriented manifold material body. Repair invalid or separate bodies explicitly before finishing.",
@@ -96,8 +101,8 @@ export function cutHollowBase(
     original = new Map<number, number>(),
     crossings = new Map<string, number>();
   const onPlane = new Set<number>();
-  const distance = mesh.vertices.map(
-    (p) => (p[axis] - position) * (keepPositive ? 1 : -1),
+  const distance = withGeometryTiming("cut.classify", () =>
+    mesh.vertices.map((p) => (p[axis] - position) * (keepPositive ? 1 : -1)),
   );
   let retainedTriangles = 0,
     clippedTriangles = 0,
@@ -133,6 +138,7 @@ export function cutHollowBase(
     }
     return n;
   };
+  const endClip = startGeometryTiming("cut.clip");
   for (const face of mesh.faces) {
     const d = face.map((i) => distance[i]);
     if (d.every((x) => x === 0))
@@ -163,6 +169,7 @@ export function cutHollowBase(
       faces.push([polygon[0], polygon[j], polygon[j + 1]]);
     clippedTriangles++;
   }
+  endClip();
   if (!removedTriangles && !clippedTriangles)
     throw new Error("The plane removes no material. Move it inside the body.");
   if (!faces.length)
@@ -171,6 +178,7 @@ export function cutHollowBase(
     );
 
   // Only planar edges can become a cut boundary; every crossing is shared by its source edge ID.
+  const endContours = startGeometryTiming("cut.contours");
   const planeEdges = new Map<string, { a: number; b: number; count: number }>();
   for (const f of faces)
     for (let j = 0; j < 3; j++) {
@@ -240,7 +248,10 @@ export function cutHollowBase(
     polygons = loops.map((l) =>
       l.map((i) => [vertices[i][u], vertices[i][v]] as Vec2),
     );
-  const caps = runtime.triangulate(polygons, 0, false);
+  endContours();
+  const caps = withGeometryTiming("cut.rim", () =>
+    runtime.triangulate(polygons, 0, false),
+  );
   const rimStart = faces.length;
   for (const [a, b, c] of caps)
     faces.push(
@@ -308,14 +319,12 @@ export function validateFinishing(
     mesh: StlExportMesh,
     audit: ReturnType<typeof auditManufacturingMesh>,
     label: string,
+    canonical = false,
   ) => {
     progress(label);
-    const surface = manufacturingSurfaceChecks(
-      mesh,
-      true,
-      minWallMm,
-      audit.shellSeeds,
-    );
+    const surface = (
+      canonical ? manufacturingIndexedSurfaceChecks : manufacturingSurfaceChecks
+    )(mesh, true, minWallMm, audit.shellSeeds);
     if (
       !surface.selfIntersections.complete ||
       surface.selfIntersections.found ||
@@ -327,12 +336,17 @@ export function validateFinishing(
     return surface;
   };
   if (!source.surfaceChecked) {
-    verify(source.mesh, source.audit, "Validating original material surface");
+    verify(
+      source.mesh,
+      source.audit,
+      "Validating original material surface",
+      true,
+    );
     source.surfaceChecked = true;
   }
   const surface = verify(result.mesh, result.audit, "Validating cut and rim");
   const encoded = indexManufacturingMesh(manufacturingMesh, true),
-    encodedAudit = auditManufacturingMesh(encoded);
+    encodedAudit = auditIndexedManufacturingMesh(encoded);
   if (
     !encodedAudit.valid ||
     encodedAudit.solidComponents !== source.audit.solidComponents
@@ -344,6 +358,7 @@ export function validateFinishing(
     encoded,
     encodedAudit,
     "Validating float32 manufacturing surface",
+    true,
   );
   let maxManufacturingEncodingDisplacementMm = 0;
   for (const p of manufacturingMesh.vertices)

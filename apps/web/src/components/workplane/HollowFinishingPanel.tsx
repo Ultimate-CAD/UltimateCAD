@@ -26,9 +26,28 @@ type Result = {
 };
 type View = {
   cut: (cut: HollowCut) => void;
-  result: (positions: Float64Array, rimTriangles: number) => void;
+  result: (
+    positions: Float64Array,
+    rimTriangles: number,
+    cacheHit: boolean,
+  ) => void;
   restore: () => void;
 };
+
+const noUiTrace = () => {};
+function startUiTrace(name: string) {
+  if (
+    !(window as Window & { __layerlingGeometryDiagnostics?: boolean })
+      .__layerlingGeometryDiagnostics
+  )
+    return noUiTrace;
+  const start = performance.now();
+  return () =>
+    performance.measure(`layerling.finishing.${name}`, {
+      start,
+      end: performance.now(),
+    });
+}
 
 export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
   const host = useRef<HTMLDivElement>(null),
@@ -126,17 +145,27 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
       }
       if (data.type === "ready") {
         setReady(true);
-        setStatus("Ready");
+        setStatus(
+          "Ready — visual plane only; Preview is required before Apply",
+        );
         return;
       }
       if (data.type === "preview") {
         setBusy(false);
         setResult(data);
         setStatus("Validated preview — Apply to keep this result");
-        view.current?.result(data.positions, data.stats.rimTriangles);
+        const endInstall = startUiTrace("installPreview");
+        view.current?.result(
+          data.positions,
+          data.stats.rimTriangles,
+          data.stats.cacheHit,
+        );
+        endInstall();
       }
     };
+    const endInput = startUiTrace("packInput");
     const positions = finishingSourcePositions(shape);
+    endInput();
     const {
       x,
       z,
@@ -202,6 +231,7 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.set(1, 2, 3);
     scene.add(light);
+    const endSourceDisplay = startUiTrace("sourceDisplay");
     const sourceGeometry = new THREE.BufferGeometry(),
       raw = finishingSourcePositions(shape);
     sourceGeometry.setAttribute(
@@ -210,6 +240,7 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
     );
     sourceGeometry.computeVertexNormals();
     sourceGeometry.computeBoundingBox();
+    endSourceDisplay();
     const box = sourceGeometry.boundingBox!,
       size = box.getSize(new THREE.Vector3()),
       center = box.getCenter(new THREE.Vector3());
@@ -266,7 +297,9 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
       dirty = true;
     };
     controls.addEventListener("change", invalidate);
+    let cachedGeometryKey = "";
     const clearResult = () => {
+      cachedGeometryKey = "";
       if (resultObject) scene.remove(resultObject);
       if (rimObject) scene.remove(rimObject);
       resultGeometry?.dispose();
@@ -275,7 +308,8 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
       resultObject = rimObject = undefined;
     };
     const restore = () => {
-      clearResult();
+      if (resultObject) resultObject.visible = false;
+      if (rimObject) rimObject.visible = false;
       kept.visible = removed.visible = planeObject.visible = true;
       dirty = true;
     };
@@ -298,8 +332,21 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
         );
         dirty = true;
       },
-      result: (positions, rimTriangles) => {
+      result: (positions, rimTriangles, cacheHit) => {
+        const key = JSON.stringify(currentCut.current);
+        if (
+          cacheHit &&
+          cachedGeometryKey === key &&
+          resultObject &&
+          rimObject
+        ) {
+          kept.visible = removed.visible = planeObject.visible = false;
+          resultObject.visible = rimObject.visible = true;
+          dirty = true;
+          return;
+        }
         clearResult();
+        cachedGeometryKey = key;
         kept.visible = removed.visible = planeObject.visible = false;
         const split = positions.length - rimTriangles * 9;
         resultGeometry = new THREE.BufferGeometry();
@@ -363,7 +410,9 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
       if (disposed) return;
       const changed = controls.update();
       if (dirty || changed) {
+        const endRender = startUiTrace("render");
         renderer.render(scene, camera);
+        endRender();
         dirty = false;
       }
       frame = requestAnimationFrame(render);
@@ -402,7 +451,11 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
     setCut(next);
     setResult(null);
     setError("");
-    setStatus(ready ? "Ready" : "Source retained");
+    setStatus(
+      ready
+        ? "Ready — visual plane only; Preview is required before Apply"
+        : "Source retained",
+    );
     if (Number.isFinite(next.position)) view.current?.cut(next);
     else view.current?.restore();
   };

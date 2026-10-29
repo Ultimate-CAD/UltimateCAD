@@ -210,7 +210,7 @@ try {
   await page.waitForFunction(() => { const d=document.querySelector('[role="dialog"][aria-label="Smooth Mesh"]'); const b=[...(d?.querySelectorAll('button')??[])].find(x=>x.textContent?.includes('Apply smoothing')); return d?.querySelector('[role="alert"]')?.textContent?.trim() || (b&&!b.disabled); });
   assert.equal(await dialog2.getByRole("alert").count(), 0, await dialog2.innerText());
   assert.equal(await dialog2.getByRole("button", { name: "Apply smoothing", exact: true }).isEnabled(), true);
-  if(/ultimate\.(7|8)$/.test(process.env.LAYERLING_EXPECTED_APP_VERSION??'')){
+  if(/ultimate\.(7|8|9)$/.test(process.env.LAYERLING_EXPECTED_APP_VERSION??'')){
     await dialog2.getByLabel('Smoothing iterations').fill('21');
     assert.equal(await dialog2.getByRole('button',{name:'Apply smoothing',exact:true}).isEnabled(),false,'Changed iterations left stale preview applicable');
     await dialog2.getByLabel('Smoothing iterations').fill('20');
@@ -236,7 +236,7 @@ try {
   await waitForObject(sourceObject.id, (object) => object.importedTriangles === afterApply.importedTriangles, "Redo to smoothed source");
   smoothedProject = await savedProject();
   assert.equal(sourceFingerprint(smoothedProject.node), smoothedSource, "Redo did not restore smoothed positions");
-  if(/ultimate\.(7|8)$/.test(process.env.LAYERLING_EXPECTED_APP_VERSION??''))for(let cycle=0;cycle<2;cycle++){
+  if(/ultimate\.(7|8|9)$/.test(process.env.LAYERLING_EXPECTED_APP_VERSION??''))for(let cycle=0;cycle<2;cycle++){
     await page.getByRole('button',{name:'Undo',exact:true}).click();
     assert.equal(sourceFingerprint((await savedProject()).node),initialSource,'Repeated Undo changed source');
     await page.getByRole('button',{name:'Redo',exact:true}).click();

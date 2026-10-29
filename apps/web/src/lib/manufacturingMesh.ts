@@ -1,4 +1,5 @@
 import type { StlExportMesh } from "@/lib/stlExport";
+import { withGeometryTiming } from "@/lib/geometryTiming";
 
 export type ManufacturingAudit = {
   triangles: number;
@@ -22,6 +23,9 @@ export type ManufacturingAudit = {
 
 /** Exact coordinate welding, deliberately without a rounding grid that can merge real features. */
 export function indexManufacturingMesh(mesh: StlExportMesh, float32 = false) {
+  return withGeometryTiming("mesh.index", () => indexMesh(mesh, float32));
+}
+function indexMesh(mesh: StlExportMesh, float32: boolean) {
   const vertices: [number, number, number][] = [],
     ids = new Map<string, number>();
   const remap = mesh.vertices.map((p) => {
@@ -60,10 +64,52 @@ export function auditManufacturingMesh(
   mesh: StlExportMesh,
   float32 = false,
 ): ManufacturingAudit {
-  const { vertices, faces } = indexManufacturingMesh(mesh, float32);
-  const edges = new Map<string, { faces: number[]; direction: number }>();
-  const seen = new Set<string>(),
-    incident: number[][] = Array.from({ length: vertices.length }, () => []);
+  return withGeometryTiming("mesh.topology", () => auditMesh(mesh, float32));
+}
+function auditMesh(mesh: StlExportMesh, float32: boolean): ManufacturingAudit {
+  return auditIndexedMesh(indexManufacturingMesh(mesh, float32));
+}
+/** For an owned canonical mesh just returned by indexManufacturingMesh.
+ * No implicit global caching or assumption about arbitrary caller-owned arrays.
+ */
+export function auditIndexedManufacturingMesh(
+  mesh: StlExportMesh,
+): ManufacturingAudit {
+  return withGeometryTiming("mesh.topology", () => auditIndexedMesh(mesh));
+}
+function auditIndexedMesh({
+  vertices,
+  faces,
+}: StlExportMesh): ManufacturingAudit {
+  type Edge = {
+    a: number;
+    b: number;
+    first: number;
+    second: number;
+    extra: number[] | undefined;
+    count: number;
+    direction: number;
+  };
+  const edges = new Map<number | string, Edge>();
+  const numericEdges =
+    vertices.length <= Math.floor(Math.sqrt(Number.MAX_SAFE_INTEGER));
+  const seen = new Set<string>();
+  // Each unique face corner is a node in the incident-vertex fan. Join it only
+  // across an actual shared edge, exactly as the former per-vertex graph did.
+  if (faces.length > Math.floor(0xffffffff / 3))
+    throw new Error("Mesh exceeds topology index capacity");
+  const cornerParent = new Uint32Array(faces.length * 3);
+  for (let i = 0; i < cornerParent.length; i++) cornerParent[i] = i;
+  const cornerRoot = (n: number): number => {
+    while (cornerParent[n] !== n) {
+      cornerParent[n] = cornerParent[cornerParent[n]];
+      n = cornerParent[n];
+    }
+    return n;
+  };
+  const joinCorner = (a: number, b: number) => {
+    cornerParent[cornerRoot(a)] = cornerRoot(b);
+  };
   const parent = faces.map((_, i) => i);
   const root = (n: number): number => {
     while (parent[n] !== n) {
@@ -84,68 +130,103 @@ export function auditManufacturingMesh(
   const live: number[] = [];
   faces.forEach(([ai, bi, ci], i) => {
     const [a, b, c] = [vertices[ai], vertices[bi], vertices[ci]];
-    const u = b.map((v, j) => v - a[j]),
-      v = c.map((v, j) => v - a[j]);
+    const ux = b[0] - a[0],
+      uy = b[1] - a[1],
+      uz = b[2] - a[2],
+      vx = c[0] - a[0],
+      vy = c[1] - a[1],
+      vz = c[2] - a[2];
     const twiceArea = Math.hypot(
-      u[1] * v[2] - u[2] * v[1],
-      u[2] * v[0] - u[0] * v[2],
-      u[0] * v[1] - u[1] * v[0],
+      uy * vz - uz * vy,
+      uz * vx - ux * vz,
+      ux * vy - uy * vx,
     );
     if (twiceArea < 2e-8) smallFaces++;
     faceAreas.push(twiceArea);
     if (twiceArea === 0) degenerateFaces++;
-    const key = [ai, bi, ci].sort((a, b) => a - b).join(":");
+    let first = ai,
+      middle = bi,
+      last = ci;
+    if (first > middle) [first, middle] = [middle, first];
+    if (middle > last) [middle, last] = [last, middle];
+    if (first > middle) [first, middle] = [middle, first];
+    const key = `${first}:${middle}:${last}`;
     if (seen.has(key)) duplicateFaces++;
     seen.add(key);
     // Count degenerate faces in the topology too: they must never masquerade as a valid cap.
-    for (const vertex of new Set([ai, bi, ci])) incident[vertex].push(i);
     live.push(i);
     for (const [a, b] of [
       [ai, bi],
       [bi, ci],
       [ci, ai],
     ]) {
-      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-      const edge = edges.get(key) ?? { faces: [], direction: 0 };
-      edge.faces.push(i);
+      const low = Math.min(a, b),
+        high = Math.max(a, b);
+      const key = numericEdges
+        ? low * vertices.length + high
+        : `${low}:${high}`;
+      let edge = edges.get(key);
+      if (!edge) {
+        edge = {
+          a: low,
+          b: high,
+          first: i,
+          second: -1,
+          extra: undefined,
+          count: 0,
+          direction: 0,
+        };
+        edges.set(key, edge);
+      } else if (edge.second === -1) edge.second = i;
+      else {
+        edge.extra ??= [];
+        edge.extra.push(i);
+      }
+      edge.count++;
       edge.direction += a < b ? 1 : -1;
-      edges.set(key, edge);
     }
   });
   let boundaryEdges = 0,
     nonManifoldEdges = 0,
     windingMismatches = 0;
-  const links: [number, number][][] = Array.from(
-    { length: vertices.length },
-    () => [],
-  );
-  for (const [key, edge] of edges) {
-    if (edge.faces.length === 1) boundaryEdges++;
-    if (edge.faces.length > 2) nonManifoldEdges++;
-    if (edge.faces.length === 2 && edge.direction !== 0) windingMismatches++;
-    for (let i = 1; i < edge.faces.length; i++) {
-      join(edge.faces[0], edge.faces[i]);
-      for (const v of key.split(":").map(Number))
-        links[v].push([edge.faces[0], edge.faces[i]]);
-    }
+  const joinEdge = (edge: Edge, current: number) => {
+    const first = edge.first;
+    join(first, current);
+    joinCorner(
+      first * 3 + faces[first].indexOf(edge.a),
+      current * 3 + faces[current].indexOf(edge.a),
+    );
+    joinCorner(
+      first * 3 + faces[first].indexOf(edge.b),
+      current * 3 + faces[current].indexOf(edge.b),
+    );
+  };
+  for (const edge of edges.values()) {
+    if (edge.count === 1) boundaryEdges++;
+    if (edge.count > 2) nonManifoldEdges++;
+    if (edge.count === 2 && edge.direction !== 0) windingMismatches++;
+    if (edge.second !== -1) joinEdge(edge, edge.second);
+    if (edge.extra) for (const face of edge.extra) joinEdge(edge, face);
   }
   let nonManifoldVertices = 0;
-  incident.forEach((faces, vertex) => {
-    if (!faces.length) return;
-    const adjacency = new Map(faces.map((f) => [f, [] as number[]]));
-    for (const [a, b] of links[vertex]) {
-      adjacency.get(a)!.push(b);
-      adjacency.get(b)!.push(a);
+  const firstFan = new Float64Array(vertices.length);
+  firstFan.fill(-1);
+  const multipleFans = new Uint8Array(vertices.length);
+  faces.forEach((face, i) => {
+    for (let corner = 0; corner < 3; corner++) {
+      const vertex = face[corner];
+      if (
+        (corner > 0 && vertex === face[0]) ||
+        (corner === 2 && vertex === face[1])
+      )
+        continue;
+      const root = cornerRoot(i * 3 + corner);
+      if (firstFan[vertex] === -1) firstFan[vertex] = root;
+      else if (firstFan[vertex] !== root && !multipleFans[vertex]) {
+        multipleFans[vertex] = 1;
+        nonManifoldVertices++;
+      }
     }
-    const visited = new Set<number>(),
-      pending = [faces[0]];
-    while (pending.length) {
-      const f = pending.pop()!;
-      if (visited.has(f)) continue;
-      visited.add(f);
-      pending.push(...adjacency.get(f)!);
-    }
-    if (visited.size !== faces.length) nonManifoldVertices++;
   });
   const dimensionsMm = [0, 1, 2].map((axis) => {
     let min = Infinity,
@@ -166,13 +247,22 @@ export function auditManufacturingMesh(
       origin = vertices[face[0]];
       shellOrigins.set(r, origin);
     }
-    const [a, b, c] = face.map((j) =>
-      vertices[j].map((v, k) => v - origin![k]),
-    );
+    const a = vertices[face[0]],
+      b = vertices[face[1]],
+      c = vertices[face[2]];
+    const ax = a[0] - origin[0],
+      ay = a[1] - origin[1],
+      az = a[2] - origin[2],
+      bx = b[0] - origin[0],
+      by = b[1] - origin[1],
+      bz = b[2] - origin[2],
+      cx = c[0] - origin[0],
+      cy = c[1] - origin[1],
+      cz = c[2] - origin[2];
     const volume =
-      (a[0] * (b[1] * c[2] - b[2] * c[1]) +
-        a[1] * (b[2] * c[0] - b[0] * c[2]) +
-        a[2] * (b[0] * c[1] - b[1] * c[0])) /
+      (ax * (by * cz - bz * cy) +
+        ay * (bz * cx - bx * cz) +
+        az * (bx * cy - by * cx)) /
       6;
     faceVolumes.push(volume);
     signedVolumeMm3 += volume;

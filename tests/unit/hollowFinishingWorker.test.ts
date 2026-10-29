@@ -14,7 +14,8 @@ it("isolates source, caches a validated cut, and echoes revisions on failures", 
   const messages: any[] = [];
   const worker = {
     onmessage: null as any,
-    postMessage: (m: any) => messages.push(m),
+    postMessage: (m: any, options?: { transfer: Transferable[] }) =>
+      messages.push(structuredClone(m, { transfer: options?.transfer ?? [] })),
   };
   vi.stubGlobal("self", worker);
   try {

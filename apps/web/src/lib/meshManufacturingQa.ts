@@ -9,7 +9,8 @@ import {
 import { MeshBVH } from "three-mesh-bvh";
 import type { StlExportMesh } from "@/lib/stlExport";
 import { indexManufacturingMesh } from "@/lib/manufacturingMesh";
-import { intersectsBeyondSharedContact } from "@/lib/triangleSharedContact";
+import { intersectsOverlappingTrianglesBeyondSharedContact } from "@/lib/triangleSharedContact";
+import { startGeometryTiming, withGeometryTiming } from "@/lib/geometryTiming";
 
 function acceleration(mesh: StlExportMesh) {
   const geometry = new BufferGeometry();
@@ -136,20 +137,58 @@ export function manufacturingSurfaceChecks(
   minWallMm: number,
   shellSeeds: { position: number[]; normal: number[] }[] = [],
 ) {
-  const indexed = indexManufacturingMesh(mesh),
-    { geometry, bvh } = acceleration(indexed),
+  return indexedSurfaceChecks(
+    indexManufacturingMesh(mesh),
+    checkIntersections,
+    minWallMm,
+    shellSeeds,
+    mesh,
+  );
+}
+
+/** Only for a fresh canonical index owned by the calling geometry operation. */
+export function manufacturingIndexedSurfaceChecks(
+  mesh: StlExportMesh,
+  checkIntersections: boolean,
+  minWallMm: number,
+  shellSeeds: { position: number[]; normal: number[] }[] = [],
+) {
+  return indexedSurfaceChecks(
+    mesh,
+    checkIntersections,
+    minWallMm,
+    shellSeeds,
+    mesh,
+  );
+}
+
+function indexedSurfaceChecks(
+  indexed: StlExportMesh,
+  checkIntersections: boolean,
+  minWallMm: number,
+  shellSeeds: { position: number[]; normal: number[] }[],
+  mesh: StlExportMesh,
+) {
+  const { geometry, bvh } = withGeometryTiming("surface.bvh", () =>
+      acceleration(indexed),
+    ),
     started = performance.now();
   // Leaf BVH boxes overlap for many triangle pairs whose exact boxes are disjoint.
   // Reject those pairs before shared-contact allocation and the candidate budget.
   // This is the same strict separation already checked by the narrow phase.
-  const triangleBounds = new Float64Array(checkIntersections ? indexed.faces.length * 6 : 0);
-  if (checkIntersections) indexed.faces.forEach((face, i) => {
-    const [a, b, c] = face.map(j => indexed.vertices[j]);
-    for (let axis = 0; axis < 3; axis++) {
-      triangleBounds[i * 6 + axis] = Math.min(a[axis], b[axis], c[axis]);
-      triangleBounds[i * 6 + axis + 3] = Math.max(a[axis], b[axis], c[axis]);
-    }
-  });
+  const endBounds = startGeometryTiming("surface.bounds");
+  const triangleBounds = new Float64Array(
+    checkIntersections ? indexed.faces.length * 6 : 0,
+  );
+  if (checkIntersections)
+    indexed.faces.forEach((face, i) => {
+      const [a, b, c] = face.map((j) => indexed.vertices[j]);
+      for (let axis = 0; axis < 3; axis++) {
+        triangleBounds[i * 6 + axis] = Math.min(a[axis], b[axis], c[axis]);
+        triangleBounds[i * 6 + axis + 3] = Math.max(a[axis], b[axis], c[axis]);
+      }
+    });
+  endBounds();
   let pairs = 0,
     boundsRejectedPairs = 0,
     intersections = 0,
@@ -159,7 +198,13 @@ export function manufacturingSurfaceChecks(
   const intersectionFaces: number[][] = [];
   const notes: string[] = [];
   let shellOrientationConcerns = 0;
+  // Borrow canonical coordinate tuples; these scratch lists are consumed synchronously.
+  // Avoid millions of transient point arrays, coordinate strings and Sets per validation.
+  const triangleA = new Array<readonly [number, number, number]>(3);
+  const triangleB = new Array<readonly [number, number, number]>(3);
+  const shared: (readonly [number, number, number])[] = [];
   try {
+    const endIntersections = startGeometryTiming("surface.intersections");
     if (checkIntersections)
       bvh.bvhcast(bvh, new Matrix4(), {
         intersectsTriangles: (a, b, i, j) => {
@@ -167,10 +212,20 @@ export function manufacturingSurfaceChecks(
           const ti = bvh.resolveTriangleIndex(i),
             tj = bvh.resolveTriangleIndex(j);
           for (let axis = 0; axis < 3; axis++) {
-            if (triangleBounds[ti * 6 + axis + 3] < triangleBounds[tj * 6 + axis] || triangleBounds[tj * 6 + axis + 3] < triangleBounds[ti * 6 + axis]) {
+            if (
+              triangleBounds[ti * 6 + axis + 3] <
+                triangleBounds[tj * 6 + axis] ||
+              triangleBounds[tj * 6 + axis + 3] < triangleBounds[ti * 6 + axis]
+            ) {
               boundsRejectedPairs++;
               // Enforce the time budget even when a dense broad phase is disjoint.
-              if ((boundsRejectedPairs & 4095) === 0 && performance.now() - started > 30000) { complete = false; return true; }
+              if (
+                (boundsRejectedPairs & 4095) === 0 &&
+                performance.now() - started > 30000
+              ) {
+                complete = false;
+                return true;
+              }
               return false;
             }
           }
@@ -178,10 +233,35 @@ export function manufacturingSurfaceChecks(
             complete = false;
             return true;
           }
-          const shared = [...new Set(indexed.faces[ti])]
-            .filter((v) => indexed.faces[tj].includes(v))
-            .map((v) => indexed.vertices[v]);
-          if (intersectsBeyondSharedContact(a, b, shared)) {
+          const fa = indexed.faces[ti],
+            fb = indexed.faces[tj];
+          for (let k = 0; k < 3; k++) {
+            triangleA[k] = indexed.vertices[fa[k]];
+            triangleB[k] = indexed.vertices[fb[k]];
+          }
+          shared.length = 0;
+          if (fa[0] === fb[0] || fa[0] === fb[1] || fa[0] === fb[2])
+            shared.push(triangleA[0]);
+          if (
+            fa[1] !== fa[0] &&
+            (fa[1] === fb[0] || fa[1] === fb[1] || fa[1] === fb[2])
+          )
+            shared.push(triangleA[1]);
+          if (
+            fa[2] !== fa[0] &&
+            fa[2] !== fa[1] &&
+            (fa[2] === fb[0] || fa[2] === fb[1] || fa[2] === fb[2])
+          )
+            shared.push(triangleA[2]);
+          if (
+            intersectsOverlappingTrianglesBeyondSharedContact(
+              a,
+              b,
+              shared,
+              triangleA,
+              triangleB,
+            )
+          ) {
             intersections++;
             intersectionFaces.push([ti, tj]);
             return true;
@@ -189,6 +269,7 @@ export function manufacturingSurfaceChecks(
           return false;
         },
       });
+    endIntersections();
     if (!checkIntersections)
       notes.push(
         "Self-intersection checking was disabled; manufacturing readiness is unverified.",
@@ -197,6 +278,7 @@ export function manufacturingSurfaceChecks(
       notes.push(
         "Self-intersection search reached its 30 s / 5 million candidate budget; result is incomplete.",
       );
+    const endContainment = startGeometryTiming("surface.containment");
     const direction = new Vector3(0.389, 0.739, 0.547).normalize();
     const parity = (p: Vector3) => {
       const hits = bvh
@@ -225,6 +307,8 @@ export function manufacturingSurfaceChecks(
       notes.push(
         `${shellOrientationConcerns} shell orientation/containment probes disagree with a positive solid and negative cavity convention.`,
       );
+    endContainment();
+    const endThickness = startGeometryTiming("surface.thickness");
     const stride = Math.max(1, Math.ceil(mesh.faces.length / 10000));
     for (let i = 0; i < mesh.faces.length; i += stride) {
       const p = mesh.faces[i].map((i) => new Vector3(...mesh.vertices[i])),
@@ -254,6 +338,7 @@ export function manufacturingSurfaceChecks(
         thicknessSamples++;
       }
     }
+    endThickness();
     const wallConcern =
       Number.isFinite(minSampledThicknessMm) &&
       minSampledThicknessMm < minWallMm;

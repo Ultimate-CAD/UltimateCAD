@@ -60,6 +60,8 @@ import { holePatternShapes, readPerforableFace, type PerforableFace } from "@/li
 import { honeycombReplacementParts } from "@/lib/honeycombMigration";
 import { MeshSimplifyPanel } from "./workplane/MeshSimplifyPanel";
 import { MeshSmoothPanel } from "./workplane/MeshSmoothPanel";
+import { HollowFinishingPanel } from "./workplane/HollowFinishingPanel";
+import { finishedMeshShape } from "@/lib/hollowFinishingShape";
 import { addCustomFontFile, customFontErrorMessage, FontManagerPanel } from "./workplane/FontManagerPanel";
 import { onFontManagerRequested } from "@/lib/fontManagerEvents";
 import { customFontList, onCustomFontsChanged, textFontLabel } from "@/lib/textFonts";
@@ -3032,6 +3034,7 @@ export function LayerlingEditor({
   const [cutOutTool, setCutOutTool] = useState<{ partId: string; hostId: string; clearance: number; busy: boolean; error: string | null } | null>(null);
   const [simplifyToolId, setSimplifyToolId] = useState<string | null>(null);
   const [smoothSource, setSmoothSource] = useState<WorkplaneShape | null>(null);
+  const [finishingSource, setFinishingSource] = useState<WorkplaneShape | null>(null);
   /** The window for fonts of one's own (#customFonts), opened from a text's font select. */
   const [fontManagerOpen, setFontManagerOpen] = useState(false);
   // A font that came or went changes the font select and maybe the letters drawn: draw again.
@@ -14094,7 +14097,16 @@ export function LayerlingEditor({
           onClose={() => setFontManagerOpen(false)}
         />
       ) : null}
-      {selectedShapes.length === 1 && selectedShape?.kind === "mesh" && selectedShape.importedMesh && !selectedShape.parametricSource && !shapeHasShapeDeform(selectedShape) && !selectedShape.cadBrep && !selectedShape.importedMesh.brepStep && !selectedShape.locked && !smoothSource ? (
+      {selectedShapes.length === 1 && selectedShape?.kind === "mesh" && selectedShape.importedMesh && !selectedShape.parametricSource && !shapeHasShapeDeform(selectedShape) && !selectedShape.cadBrep && !selectedShape.importedMesh.brepStep && !selectedShape.locked && !smoothSource && !finishingSource ? (
+        <button style={{position:'absolute',left:16,bottom:110,zIndex:35}} onClick={()=>setFinishingSource(selectedShape)}>Open Hollow Base</button>
+      ) : null}
+      {finishingSource ? <HollowFinishingPanel shape={finishingSource} onCancel={()=>setFinishingSource(null)} onApply={(positions)=>{
+        const current=shapesRef.current.find(s=>s.id===finishingSource.id);
+        if(current!==finishingSource || current.locked){setNotice('Source changed while finishing. Reopen Open Hollow Base.');setFinishingSource(null);return;}
+        const modified=canonicalizeShape(finishedMeshShape(current,positions));
+        commitShapes(shapesRef.current.map(s=>s.id===current.id?modified:s),[current.id],'Open hollow base');setFinishingSource(null);
+      }}/> : null}
+      {selectedShapes.length === 1 && selectedShape?.kind === "mesh" && selectedShape.importedMesh && !selectedShape.parametricSource && !shapeHasShapeDeform(selectedShape) && !selectedShape.cadBrep && !selectedShape.importedMesh.brepStep && !selectedShape.locked && !smoothSource && !finishingSource ? (
         <button style={{position:'absolute',left:16,bottom:70,zIndex:35}} onClick={()=>setSmoothSource(selectedShape)}>Smooth Mesh</button>
       ) : null}
       {smoothSource ? <MeshSmoothPanel shape={smoothSource} onCancel={()=>setSmoothSource(null)} onApply={(positions)=>{

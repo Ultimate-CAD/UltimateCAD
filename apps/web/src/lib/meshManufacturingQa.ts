@@ -139,7 +139,19 @@ export function manufacturingSurfaceChecks(
   const indexed = indexManufacturingMesh(mesh),
     { geometry, bvh } = acceleration(indexed),
     started = performance.now();
+  // Leaf BVH boxes overlap for many triangle pairs whose exact boxes are disjoint.
+  // Reject those pairs before shared-contact allocation and the candidate budget.
+  // This is the same strict separation already checked by the narrow phase.
+  const triangleBounds = new Float64Array(checkIntersections ? indexed.faces.length * 6 : 0);
+  if (checkIntersections) indexed.faces.forEach((face, i) => {
+    const [a, b, c] = face.map(j => indexed.vertices[j]);
+    for (let axis = 0; axis < 3; axis++) {
+      triangleBounds[i * 6 + axis] = Math.min(a[axis], b[axis], c[axis]);
+      triangleBounds[i * 6 + axis + 3] = Math.max(a[axis], b[axis], c[axis]);
+    }
+  });
   let pairs = 0,
+    boundsRejectedPairs = 0,
     intersections = 0,
     complete = checkIntersections,
     minSampledThicknessMm = Infinity,
@@ -152,12 +164,20 @@ export function manufacturingSurfaceChecks(
       bvh.bvhcast(bvh, new Matrix4(), {
         intersectsTriangles: (a, b, i, j) => {
           if (i >= j) return false;
+          const ti = bvh.resolveTriangleIndex(i),
+            tj = bvh.resolveTriangleIndex(j);
+          for (let axis = 0; axis < 3; axis++) {
+            if (triangleBounds[ti * 6 + axis + 3] < triangleBounds[tj * 6 + axis] || triangleBounds[tj * 6 + axis + 3] < triangleBounds[ti * 6 + axis]) {
+              boundsRejectedPairs++;
+              // Enforce the time budget even when a dense broad phase is disjoint.
+              if ((boundsRejectedPairs & 4095) === 0 && performance.now() - started > 30000) { complete = false; return true; }
+              return false;
+            }
+          }
           if (++pairs > 5_000_000 || performance.now() - started > 30000) {
             complete = false;
             return true;
           }
-          const ti = bvh.resolveTriangleIndex(i),
-            tj = bvh.resolveTriangleIndex(j);
           const shared = [...new Set(indexed.faces[ti])]
             .filter((v) => indexed.faces[tj].includes(v))
             .map((v) => indexed.vertices[v]);
@@ -246,6 +266,7 @@ export function manufacturingSurfaceChecks(
         found: intersections,
         complete,
         candidatePairs: pairs,
+        boundsRejectedPairs,
         exampleFaces: intersectionFaces,
         method:
           "Double-precision BVH triangle intersections; shared pairs checked beyond their expected simplex with robust orientation predicates",

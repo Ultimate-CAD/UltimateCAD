@@ -1164,7 +1164,13 @@ export default function Home() {
     window.localStorage.removeItem("layerling.activeChallengeTutorial");
     // The design name stays in the toolbar; the old switch is gone.
     window.localStorage.removeItem("layerling.showProjectNameInToolbar");
-    const storedTheme = readStoredAppTheme(window.localStorage);
+    let storedTheme = readStoredAppTheme(window.localStorage);
+    // Justin's requested desktop appearance: apply once, then respect later theme choices.
+    if ("layerlingFiles" in window && window.localStorage.getItem("layerling.midnight-blue.v1") !== "applied") {
+      storedTheme = "midnight";
+      storeAppTheme(window.localStorage, storedTheme);
+      window.localStorage.setItem("layerling.midnight-blue.v1", "applied");
+    }
     // A first visit takes the theme the server suggests (LAYERLING_DEFAULT_THEME), if it has one;
     // a browser that already has a theme on record keeps it. A static copy has no server to ask.
     const themeOnRecord = hasStoredAppTheme(window.localStorage);

@@ -5,6 +5,7 @@ export const APP_THEME_OPTIONS = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
   { value: "graphite", label: "Graphite" },
+  { value: "midnight", label: "Midnight Blue" },
 ] as const;
 
 export type AppThemePreference = (typeof APP_THEME_OPTIONS)[number]["value"];
@@ -14,19 +15,19 @@ export type AppThemePreference = (typeof APP_THEME_OPTIONS)[number]["value"];
  * dark keeps working; the palette on top only swaps colours.
  */
 export type ResolvedAppTheme = "light" | "dark";
-export type AppThemePalette = "default" | "graphite";
+export type AppThemePalette = "default" | "graphite" | "midnight";
 
 export function appThemePalette(preference: AppThemePreference): AppThemePalette {
-  return preference === "graphite" ? "graphite" : "default";
+  return preference === "midnight" ? "midnight" : preference === "graphite" ? "graphite" : "default";
 }
 
 export function normalizeAppThemePreference(value: unknown): AppThemePreference {
-  return value === "light" || value === "dark" || value === "graphite" || value === "system" ? value : "system";
+  return value === "light" || value === "dark" || value === "graphite" || value === "midnight" || value === "system" ? value : "system";
 }
 
 export function resolveAppTheme(preference: AppThemePreference, prefersDark: boolean): ResolvedAppTheme {
   if (preference === "system") return prefersDark ? "dark" : "light";
-  return preference === "graphite" ? "dark" : preference;
+  return preference === "graphite" || preference === "midnight" ? "dark" : preference;
 }
 
 export function readStoredAppTheme(storage: Pick<Storage, "getItem"> | null | undefined): AppThemePreference {
@@ -74,6 +75,13 @@ export function applyAppTheme(preference: AppThemePreference, prefersDark?: bool
   else document.documentElement.dataset.palette = palette;
   document.documentElement.style.colorScheme = resolved;
   if (palette === "graphite") ensureGraphiteStylesheet();
+  if (palette === "midnight" && !document.getElementById("layerling-midnight-theme")) {
+    const link = document.createElement("link");
+    link.id = "layerling-midnight-theme";
+    link.rel = "stylesheet";
+    link.href = `/assets/theme/midnight-theme.css${appVersion ? `?v=${appVersion}` : ""}`;
+    document.head.appendChild(link);
+  }
 }
 
 export const GRAPHITE_STYLESHEET_ID = "layerling-graphite-theme";

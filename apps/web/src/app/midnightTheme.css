@@ -1,0 +1,36 @@
+/* Personal desktop preset, matching Justin's supplied ChatGPT appearance. */
+html[data-theme="dark"][data-palette="midnight"] {
+  --background:#111111; --foreground:#fcfcfc; --topbar:#181818; --subbar:#202020;
+  --panel:#262626; --tile:#2c2c2c; --tile-hover:#353535;
+  --border:#494949; --border-strong:#616161; --muted:#8d8d8d; --muted-strong:#bdbdbd;
+  --primary:#0169cc; --active-tab:#0169cc; --nav-text:#fcfcfc;
+  --font-ui:"MS PGothic","MS Pゴシック","Segoe UI",sans-serif;
+  --toolbar-bg:#202020; --toolbar-edge:#494949; --toolbar-divider:#3b3b3b;
+  --toolbar-label:#c7c7c7; --toolbar-icon:#fcfcfc; --toolbar-icon-disabled:#737373;
+  --toolbar-tile:#262626; --toolbar-hover-bg:#323232; --toolbar-hover-ring:#0169cc;
+  --group-neutral:#bdbdbd; --shadow:0 8px 24px #0006;
+  color-scheme:dark;
+}
+html[data-palette="midnight"] body { background:#111111; color:#fcfcfc; font:400 16px/1.45 var(--font-ui); }
+html[data-palette="midnight"] :is(button,input,select,textarea) { font-family:var(--font-ui); font-weight:400; }
+html[data-palette="midnight"] :is(input:not([type="range"]):not([type="checkbox"]):not([type="color"]),select,textarea) { font-size:16px; }
+html[data-palette="midnight"] :is(button,a,select,[role="button"],input[type="checkbox"],input[type="range"]) { cursor:pointer; }
+html[data-palette="midnight"] :is(input,textarea) { caret-color:#58a6ff; accent-color:#0169cc; }
+html[data-palette="midnight"] :is(button,input,select,textarea,a):focus-visible { outline:2px solid #66b3ff; outline-offset:2px; }
+html[data-palette="midnight"] ::selection { background:#0169cc; color:#fcfcfc; }
+html[data-palette="midnight"] .toolbar-section { --group-color:#0169cc !important; }
+html[data-palette="midnight"] :is(.toolbar-workspace-tabs button.active,.theme-dropdown-item.active,.theme-check,.theme-switch-button.active) { color:#71b7ff; border-color:#0169cc; }
+html[data-palette="midnight"] :is(.toolbar-title-row,.dashboard-topbar) { background:#181818; color:#fcfcfc; border-color:#494949; }
+html[data-palette="midnight"] :is(.theme-dropdown-menu,.language-dropdown-menu,.workspace-settings-modal,.shape-menu-dropdown) { background:#262626; color:#fcfcfc; border-color:#494949; border-radius:12px; }
+html[data-palette="midnight"] :is(.shape-inspector,.shape-menu-body) { background:rgba(38,38,38,.94); color:#fcfcfc; border-color:#494949; backdrop-filter:blur(6px); }
+html[data-palette="midnight"] .shape-inspector { width:350px; }
+html[data-palette="midnight"] :is(.theme-dropdown-item,.workspace-settings-content,.shape-inspector label) { font-size:16px; }
+html[data-palette="midnight"] :is(.shape-inspector input,.shape-inspector select) { min-height:28px; }
+html[data-palette="midnight"] :is(pre,code,textarea[aria-label="SCAD source"]) { font:400 16px/1.5 ui-monospace,Consolas,monospace; }
+html[data-palette="midnight"] .openscad-workbench :is(textarea,input:not([type="checkbox"]),select) { background:#191919; color:#fcfcfc; border-color:#494949; }
+html[data-palette="midnight"] [role="dialog"][aria-label="Open Hollow Base"],
+html[data-palette="midnight"] [role="dialog"][aria-label="Smooth Mesh"] { background:#262626 !important; color:#fcfcfc !important; border-color:#494949 !important; }
+html[data-palette="midnight"] [role="dialog"] :is(button,input,select) { border-radius:6px; }
+html[data-palette="midnight"] [role="dialog"] button:not(:disabled) { padding:5px 10px; }
+html[data-palette="midnight"] :is(.dashboard-action-tile.create,.workspace-settings-modal .primary,button.primary) { background:#0169cc; color:#fcfcfc; border-color:#0169cc; }
+html[data-palette="midnight"] :is(.precision-studio,.openscad-workbench) { background:#262626; color:#fcfcfc; border-color:#494949; }

@@ -53,7 +53,7 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#20252b");
+    scene.background = new THREE.Color(document.documentElement.dataset.palette === "midnight" ? "#111111" : "#20252b");
     const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.mouseButtons = {

@@ -122,7 +122,7 @@ function baseWorkplaneGridPalette(theme: ResolvedAppTheme, configuredColor: stri
       border: { color: configuredColor, opacity: 0.9 },
     };
   }
-  if (theme === "dark" && palette === "graphite") {
+  if (theme === "dark" && (palette === "graphite" || palette === "midnight")) {
     // Light grey lines on a neutral ground, no yellow cast.
     return {
       minor: { color: "#8c8c8c", opacity: 0.45 },
@@ -157,10 +157,10 @@ export function workplaneThemePalette(
 ): WorkplaneThemePalette {
   // The background and the surface colour belong to the light theme; the dark
   // themes keep their own, so a light choice cannot spoil them.
-  if (theme === "dark" && palette === "graphite") {
+  if (theme === "dark" && (palette === "graphite" || palette === "midnight")) {
     return {
-      sceneBackground: "#1e1e1e",
-      surface: { color: "#343434", opacity: 0.9 },
+      sceneBackground: palette === "midnight" ? "#111111" : "#1e1e1e",
+      surface: { color: palette === "midnight" ? "#262626" : "#343434", opacity: 0.9 },
       grid: workplaneGridPalette("dark", configuredGridColor, "graphite", configuredMajorColor),
     };
   }

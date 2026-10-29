@@ -220,7 +220,7 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
     }
     const container = host.current!,
       scene = new THREE.Scene();
-    scene.background = new THREE.Color("#20252b");
+    scene.background = new THREE.Color(document.documentElement.dataset.palette === "midnight" ? "#111111" : "#20252b");
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.localClippingEnabled = true;
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

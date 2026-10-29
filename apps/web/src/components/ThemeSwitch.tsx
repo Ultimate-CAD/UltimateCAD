@@ -6,19 +6,22 @@ import { APP_THEME_OPTIONS, setAppTheme, type AppThemePreference } from "@/lib/a
 import { t, type MessageKey } from "@/lib/i18n";
 import { useAppTheme } from "@/lib/useAppTheme";
 
-const THEME_LABEL_KEYS: Record<AppThemePreference, MessageKey> = {
+const THEME_LABEL_KEYS: Record<AppThemePreference, MessageKey | null> = {
   system: "workspace.themeSystem",
   light: "workspace.themeLight",
   dark: "workspace.themeDark",
   graphite: "workspace.themeGraphite",
+  midnight: null,
 };
 
-const THEME_SHORT_KEYS: Record<AppThemePreference, MessageKey> = {
+const THEME_SHORT_KEYS: Record<AppThemePreference, MessageKey | null> = {
   system: "theme.short.system",
   light: "theme.short.light",
   dark: "theme.short.dark",
   graphite: "theme.short.graphite",
+  midnight: null,
 };
+const label = (key: MessageKey | null) => key ? t(key) : "Midnight Blue";
 
 export function ThemeSwitch() {
   const theme = useAppTheme();
@@ -54,10 +57,10 @@ export function ThemeSwitch() {
         aria-label={t("common.theme")}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        title={`${t("common.theme")}: ${t(THEME_LABEL_KEYS[theme])}`}
+        title={`${t("common.theme")}: ${label(THEME_LABEL_KEYS[theme])}`}
       >
         <Palette size={14} className="theme-switch-icon" aria-hidden="true" />
-        <span className="theme-switch-label">{t(THEME_SHORT_KEYS[theme])}</span>
+        <span className="theme-switch-label">{label(THEME_SHORT_KEYS[theme])}</span>
         <ChevronDown size={11} className={`theme-chevron${isOpen ? " open" : ""}`} aria-hidden="true" />
       </button>
 
@@ -76,7 +79,7 @@ export function ThemeSwitch() {
                   setIsOpen(false);
                 }}
               >
-                <span className="theme-item-label">{t(THEME_LABEL_KEYS[option.value])}</span>
+                <span className="theme-item-label">{label(THEME_LABEL_KEYS[option.value])}</span>
                 {isSelected ? <Check size={13} className="theme-check" aria-hidden="true" /> : null}
               </button>
             );

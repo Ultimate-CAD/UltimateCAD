@@ -107,11 +107,12 @@ const PRINTERS_BY_VENDOR = new Map(PRINTER_VENDORS.map((vendor) => [
 ]));
 const GRID_BLOCK_PRESETS = ["1 mm", "2.5 mm", "5 mm", "10 mm", "20 mm", "50 mm", "100 mm", "Custom"] as const;
 /** Nur die freie Wahl wird uebersetzt; Masse bleiben Masse. */
-const THEME_LABEL_KEYS: Record<AppThemePreference, MessageKey> = {
+const THEME_LABEL_KEYS: Record<AppThemePreference, MessageKey | null> = {
   system: "workspace.themeSystem",
   light: "workspace.themeLight",
   dark: "workspace.themeDark",
   graphite: "workspace.themeGraphite",
+  midnight: null,
 };
 
 const TOOLBAR_SIZE_LABEL_KEYS: Record<ToolbarSize, MessageKey> = {
@@ -751,7 +752,7 @@ export function WorkspaceSettingsModal({
                     >
                       {APP_THEME_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
-                          {t(THEME_LABEL_KEYS[option.value])}
+                          {THEME_LABEL_KEYS[option.value] ? t(THEME_LABEL_KEYS[option.value]!) : option.label}
                         </option>
                       ))}
                     </select>

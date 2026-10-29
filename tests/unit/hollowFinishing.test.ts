@@ -10,7 +10,10 @@ import {
 import { auditManufacturingMesh } from "@/lib/manufacturingMesh";
 import { importedShapeFromTriangleSoup } from "@/lib/stlImport";
 import { exportLylProject } from "@/lib/lylProject";
-import { DEFAULT_WORKPLANE_WORKSPACE, DEFAULT_SNAP_GRID } from "@/lib/workplaneSettings";
+import {
+  DEFAULT_WORKPLANE_WORKSPACE,
+  DEFAULT_SNAP_GRID,
+} from "@/lib/workplaneSettings";
 import { exportMeshesToStl } from "@/lib/stlExport";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import {
@@ -19,6 +22,7 @@ import {
 } from "@/lib/hollowFinishingShape";
 import { meshForShape } from "@/lib/editorMeshCore";
 import type { WorkplaneShape } from "@/types/layerling";
+import { retainedCutEvidence } from "../helpers/retainedCutEvidence";
 
 let runtime: ManifoldToplevel;
 beforeAll(async () => {
@@ -94,6 +98,11 @@ describe("open hollow base", () => {
         solidComponents: 1,
       });
       expect(result.audit.dimensionsMm[1]).toBeCloseTo(16.9, 10);
+      if (!flared) {
+        const expected =
+          16 * Math.sin((2 * Math.PI) / 32) * (100 * 16.9 - 64 * 14.9);
+        expect(result.audit.signedVolumeMm3).toBeCloseTo(expected, 7);
+      }
       expect(result.stats).toMatchObject({
         contours: 2,
         openings: 1,
@@ -140,6 +149,39 @@ describe("open hollow base", () => {
     });
     expect(result.audit.valid).toBe(true);
     validateFinishing(source, result);
+  });
+  it.each([0, 2] as const)(
+    "opens a cavity on local axis %s with the correct rim orientation",
+    (axis) => {
+      const source = prepareFinishingSource(closedHollowFixture());
+      const result = cutHollowBase(runtime, source, {
+        axis,
+        position: 1.123,
+        keepPositive: true,
+      });
+      expect(result.audit.valid).toBe(true);
+      expect(result.stats.openings).toBe(1);
+      validateFinishing(source, result);
+    },
+  );
+  it("keeps a thin wall and exposes its warning without thickening", () => {
+    const mesh = closedHollowFixture();
+    for (const p of mesh.vertices)
+      if (Math.hypot(p[0], p[2]) > 7.9 && Math.hypot(p[0], p[2]) < 8.1) {
+        p[0] *= 9.8 / 8;
+        p[2] *= 9.8 / 8;
+      }
+    const source = prepareFinishingSource(mesh),
+      before = JSON.stringify(mesh);
+    const result = cutHollowBase(runtime, source, {
+      axis: 1,
+      position: 3.1,
+      keepPositive: true,
+    });
+    const qa = validateFinishing(source, result);
+    expect(qa.surface.wallConcern).toBe(true);
+    expect(qa.encodedSurface.wallConcern).toBe(true);
+    expect(JSON.stringify(mesh)).toBe(before);
   });
   it("refuses a plane missing the cavity, an entire face, or an empty retained side", () => {
     const source = prepareFinishingSource(closedHollowFixture());
@@ -309,14 +351,36 @@ it.skipIf(!process.env.LAYERLING_FINISH_ORGANIC)(
     });
     const qa = validateFinishing(source, result);
     mkdirSync(".codex-run/finishing8", { recursive: true });
-    const uprightSource = importedShapeFromTriangleSoup("Captured upright hollow organic", p, undefined, "json");
-    const project = await exportLylProject({ projectId: "organic-finishing8-source-copy", projectName: "Captured upright hollow organic", createdAt: 1, modifiedAt: 2, shapes: [uprightSource], history: [], historyIndex: 0, assets: [], workspace: DEFAULT_WORKPLANE_WORKSPACE, snapGrid: DEFAULT_SNAP_GRID, placementElevation: 0 });
+    const uprightSource = importedShapeFromTriangleSoup(
+      "Captured upright hollow organic",
+      p,
+      undefined,
+      "json",
+    );
+    const project = await exportLylProject({
+      projectId: "organic-finishing8-source-copy",
+      projectName: "Captured upright hollow organic",
+      createdAt: 1,
+      modifiedAt: 2,
+      shapes: [uprightSource],
+      history: [],
+      historyIndex: 0,
+      assets: [],
+      workspace: DEFAULT_WORKPLANE_WORKSPACE,
+      snapGrid: DEFAULT_SNAP_GRID,
+      placementElevation: 0,
+    });
     writeFileSync(".codex-run/finishing8/organic-upright.lyl", project);
     writeFileSync(
       ".codex-run/finishing8/organic-result.json",
       JSON.stringify(
         {
           stats: result.stats,
+          retained: retainedCutEvidence(source.mesh, result.mesh, {
+            axis: 1,
+            position: Number(process.env.LAYERLING_FINISH_POSITION || 5.123),
+            keepPositive: true,
+          }),
           audit: result.audit,
           qa,
           totalMs: performance.now() - started,
@@ -337,7 +401,7 @@ it.skipIf(!process.env.LAYERLING_FINISH_ORGANIC)(
 
 it.skipIf(!process.env.LAYERLING_FINISH_BENCH)(
   "benchmarks 100k and 500k with complete applicable validation",
-  () => {
+  async () => {
     const records = [];
     for (const [segments, rows] of [
       [250, 100],
@@ -368,6 +432,11 @@ it.skipIf(!process.env.LAYERLING_FINISH_BENCH)(
         initializeMs: initialized - prepared,
         firstMs,
         stats: result.stats,
+        retained: retainedCutEvidence(source.mesh, result.mesh, {
+          axis: 1,
+          position: 3.123,
+          keepPositive: true,
+        }),
         validationMs: qa.validationMs,
         repeatStats: second.stats,
         repeatValidationMs: qa2.validationMs,
@@ -383,6 +452,53 @@ it.skipIf(!process.env.LAYERLING_FINISH_BENCH)(
         ".codex-run/finishing8/benchmark.json",
         JSON.stringify(records, null, 2),
       );
+      if (process.env.LAYERLING_FINISH_WRITE_FIXTURES) {
+        const positions = mesh.faces.flatMap((f) =>
+          f.flatMap((i) => mesh.vertices[i]),
+        );
+        const [width, height, depth] = source.audit.dimensionsMm;
+        const shape = {
+          id: `finishing-${mesh.faces.length}`,
+          name: `Closed flared hollow ${mesh.faces.length}`,
+          kind: "mesh",
+          x: 0,
+          z: 0,
+          elevation: 0,
+          width,
+          depth,
+          height,
+          size: Math.max(width, depth),
+          rotation: 0,
+          locked: false,
+          hidden: false,
+          color: "#0098c7",
+          importedMesh: {
+            positions,
+            baseWidth: width,
+            baseHeight: height,
+            baseDepth: depth,
+            triangleCount: mesh.faces.length,
+            sourceFormat: "json",
+          },
+        } as WorkplaneShape;
+        const project = await exportLylProject({
+          projectId: `finishing-${mesh.faces.length}-source`,
+          projectName: shape.name,
+          createdAt: 1,
+          modifiedAt: 2,
+          shapes: [shape],
+          history: [],
+          historyIndex: 0,
+          assets: [],
+          workspace: DEFAULT_WORKPLANE_WORKSPACE,
+          snapGrid: DEFAULT_SNAP_GRID,
+          placementElevation: 0,
+        });
+        writeFileSync(
+          `.codex-run/finishing8/closed-hollow-${mesh.faces.length}.lyl`,
+          project,
+        );
+      }
     }
   },
   240000,

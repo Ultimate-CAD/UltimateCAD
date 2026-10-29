@@ -17,7 +17,7 @@ User authorizes continuing all milestones without routine approval.
 - [x] Double-precision clipping, contour classification, established rim triangulation; focused tests.
 - [x] Isolated cancellable worker, minimal plane/result UI, same-ID undoable apply.
 - [x] Manufacturing/export, organic and 100k/500k performance tests.
-- [ ] Packaged acceptance, .8 executable/installer, final report and commits.
+- [x] Packaged acceptance, .8 executable/installer, final report and commits.
 
 ## State handoff
-Focused correctness/precision export tests pass; 100k and 500k complete surface checks pass after strict disjoint triangle-AABB rejection. Preparing packaged acceptance. No SDF or main renderer changes. Incomplete validation blocks Apply.
+COMPLETE. Packaged runtime a227520661a90f545c8a6542320aee40d27825d4. Thirty focused tests, fifteen integration tests and 68 packaged checks pass. Organic/100k/500k maintain thickness concerns and are not labeled print-ready. See HOLLOW_BODY_FINISHING.md for exact measurements, accepted reports, paths, hashes and limitations. Baseline .7 remains recoverable; no push or installed-app replacement.

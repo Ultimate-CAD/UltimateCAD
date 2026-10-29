@@ -172,7 +172,10 @@ function audit3mf(bytes) {
     if(!localFaces.length)continue;
     const objectAudit=auditTopology(localVertices,localFaces); assertStrictMesh(objectAudit,`3MF object ${id}`);
     objects.push({id,name,...objectAudit});
-    const base=vertices.length; vertices.push(...localVertices); faces.push(...localFaces.map(f=>f.map(i=>i+base))); meshObjects++;
+    const base=vertices.length;
+    for(const vertex of localVertices)vertices.push(vertex);
+    for(const face of localFaces)faces.push(face.map(i=>i+base));
+    meshObjects++;
   }
   assert.ok(meshObjects>0,"3MF model has no explicit triangle meshes");
   return {...auditTopology(vertices,faces),meshObjects,objects};

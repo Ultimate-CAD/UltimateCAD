@@ -9,16 +9,23 @@ import {
   smoothingTopology,
 } from "@/lib/localizedSmoothing";
 import type { StlExportMesh } from "@/lib/stlExport";
+import {
+  packSmoothingPositions,
+  SmoothingDisplayCache,
+} from "@/lib/smoothingDisplay";
 
 let mesh: StlExportMesh;
 let topology: ReturnType<typeof smoothingTopology>;
 let weights: Float64Array;
 let grid = new Map<string, number[]>();
 let cell = 1;
+let displayCache: SmoothingDisplayCache | undefined;
+let sourceSurfaceChecked = false;
 
 self.onmessage = ({ data }) => {
   try {
     if (data.type === "init") {
+      sourceSurfaceChecked = false;
       const vertices: [number, number, number][] = [];
       const faces: [number, number, number][] = [];
 
@@ -42,13 +49,8 @@ self.onmessage = ({ data }) => {
         audit.duplicateFaces ||
         audit.windingMismatches
       ) {
-        throw Error("Source has invalid topology. Smooth Mesh does not repair it.");
-      }
-
-      const surface = manufacturingSurfaceChecks(mesh, true, 0);
-      if (surface.selfIntersections.found || !surface.selfIntersections.complete) {
         throw Error(
-          "Source has intersecting or unverified surfaces. Smooth Mesh does not repair it.",
+          "Source has invalid topology. Smooth Mesh does not repair it.",
         );
       }
 
@@ -62,7 +64,14 @@ self.onmessage = ({ data }) => {
         list.push(index);
         grid.set(key, list);
       });
-      self.postMessage({ type: "ready", mesh, weights });
+      displayCache?.dispose();
+      displayCache = new SmoothingDisplayCache(mesh);
+      const prepared = displayCache.snapshot();
+      const positions = packSmoothingPositions(mesh);
+      self.postMessage(
+        { type: "ready", positions, weights, display: prepared.display },
+        [...prepared.transfer, positions.buffer],
+      );
     } else if (data.type === "paint") {
       const { point, radius, subtract } = data;
       if (
@@ -74,9 +83,15 @@ self.onmessage = ({ data }) => {
         throw Error("Invalid brush");
       }
 
-      const min = point.map((value: number) => Math.floor((value - radius) / cell));
-      const max = point.map((value: number) => Math.floor((value + radius) / cell));
+      const min = point.map((value: number) =>
+        Math.floor((value - radius) / cell),
+      );
+      const max = point.map((value: number) =>
+        Math.floor((value + radius) / cell),
+      );
       const candidates: number[][] = [];
+      const changed: number[] = [];
+      const values: number[] = [];
       if (
         (max[0] - min[0] + 1) *
           (max[1] - min[1] + 1) *
@@ -114,13 +129,36 @@ self.onmessage = ({ data }) => {
             ),
             radius,
           );
-          weights[index] = subtract
+          const next = subtract
             ? weights[index] * (1 - weight)
             : Math.max(weights[index], weight);
+          if (next !== weights[index]) {
+            weights[index] = next;
+            changed.push(index);
+            values.push(next);
+          }
         }
       }
-      self.postMessage({ type: "selection", weights });
+      const indices = Uint32Array.from(changed);
+      const delta = Float64Array.from(values);
+      self.postMessage(
+        { type: "selection", indices, weights: delta },
+        [indices.buffer, delta.buffer],
+      );
     } else if (data.type === "preview") {
+      if (!sourceSurfaceChecked) {
+        const surface = manufacturingSurfaceChecks(mesh, true, 0);
+        if (
+          surface.selfIntersections.found ||
+          !surface.selfIntersections.complete
+        ) {
+          throw Error(
+            "Source has intersecting or unverified surfaces. Smooth Mesh does not repair it.",
+          );
+        }
+
+        sourceSurfaceChecked = true;
+      }
       const result = localizedSmooth(
         mesh,
         weights,
@@ -129,24 +167,52 @@ self.onmessage = ({ data }) => {
         topology,
       );
       if (!result.stats.maxDisplacementMm) {
-        throw Error("Paint a movable region first. Open boundary vertices stay fixed.");
+        throw Error(
+          "Paint a movable region first. Open boundary vertices stay fixed.",
+        );
       }
 
       const surface = manufacturingSurfaceChecks(result.mesh, true, 0);
-      if (surface.selfIntersections.found || !surface.selfIntersections.complete) {
+      if (
+        surface.selfIntersections.found ||
+        !surface.selfIntersections.complete
+      ) {
         throw Error(
           "Preview has intersecting or unverified surfaces; source retained. Reduce the region or smoothing strength.",
         );
       }
-      self.postMessage({ type: "preview", ...result });
+      displayCache!.update(result.mesh);
+      const prepared = displayCache!.snapshot();
+      const positions = packSmoothingPositions(result.mesh);
+      self.postMessage(
+        {
+          type: "preview",
+          positions,
+          stats: result.stats,
+          audit: result.audit,
+          revision: data.revision,
+          display: prepared.display,
+        },
+        [...prepared.transfer, positions.buffer],
+      );
     } else if (data.type === "clear") {
+      const changed: number[] = [];
+      weights.forEach((value, i) => {
+        if (value) changed.push(i);
+      });
       weights.fill(0);
-      self.postMessage({ type: "selection", weights });
+      const indices = Uint32Array.from(changed);
+      const delta = new Float64Array(changed.length);
+      self.postMessage(
+        { type: "selection", indices, weights: delta },
+        [indices.buffer, delta.buffer],
+      );
     }
   } catch (error) {
     self.postMessage({
       type: "error",
       message: error instanceof Error ? error.message : String(error),
+      revision: data.type === "preview" ? data.revision : undefined,
     });
   }
 };

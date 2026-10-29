@@ -126,6 +126,7 @@ try {
   app = await electron.launch({ executablePath: executable, cwd: output, timeout: 90000,
     env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, PATH: process.env.SystemRoot + "\\System32", LAYERLING_DESKTOP_PROFILE: profile, LAYERLING_DESKTOP_TEST: "1" } });
   page = await app.firstWindow();
+  if(process.env.LAYERLING_EXPECTED_APP_VERSION)assert.equal(await app.evaluate(({app})=>app.getVersion()),process.env.LAYERLING_EXPECTED_APP_VERSION);
   page.setDefaultTimeout(30000);
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => requests.push(request.url()));
@@ -209,6 +210,14 @@ try {
   await page.waitForFunction(() => { const d=document.querySelector('[role="dialog"][aria-label="Smooth Mesh"]'); const b=[...(d?.querySelectorAll('button')??[])].find(x=>x.textContent?.includes('Apply smoothing')); return d?.querySelector('[role="alert"]')?.textContent?.trim() || (b&&!b.disabled); });
   assert.equal(await dialog2.getByRole("alert").count(), 0, await dialog2.innerText());
   assert.equal(await dialog2.getByRole("button", { name: "Apply smoothing", exact: true }).isEnabled(), true);
+  if(process.env.LAYERLING_EXPECTED_APP_VERSION?.endsWith('.7')){
+    await dialog2.getByLabel('Smoothing iterations').fill('21');
+    assert.equal(await dialog2.getByRole('button',{name:'Apply smoothing',exact:true}).isEnabled(),false,'Changed iterations left stale preview applicable');
+    await dialog2.getByLabel('Smoothing iterations').fill('20');
+    await dialog2.getByRole('button',{name:'Preview',exact:true}).click();
+    await page.waitForFunction(()=>{const d=document.querySelector('[aria-label="Smooth Mesh"]');return d?.querySelector('[role="alert"]')||[...d.querySelectorAll('button')].some(b=>b.textContent==='Apply smoothing'&&!b.disabled);});
+    assert.equal(await dialog2.getByRole('alert').count(),0,await dialog2.innerText());
+  }
   await dialog2.getByRole("button", { name: "Apply smoothing", exact: true }).click();
   await dialog2.waitFor({ state: "detached" });
   let smoothedProject = await savedProject();

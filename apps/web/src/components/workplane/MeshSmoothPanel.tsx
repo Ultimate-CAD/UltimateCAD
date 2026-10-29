@@ -3,14 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { StlExportMesh } from "@/lib/stlExport";
+import { acceleratedRaycast, MeshBVH } from "three-mesh-bvh";
+import { updateSmoothingColors, type SmoothingDisplay } from "@/lib/smoothingDisplay";
 import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import type { WorkplaneShape } from "@/types/layerling";
 
 type MeshView = {
   geometry: THREE.BufferGeometry;
   mesh: THREE.Mesh;
-  source: StlExportMesh;
+  source: Float64Array;
+  display: SmoothingDisplay;
+  restore: () => void;
 };
 
 type Props = {
@@ -30,12 +33,13 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [stats, setStats] = useState<Record<string, number> | null>(null);
-  const [preview, setPreview] = useState<StlExportMesh | null>(null);
+  const [preview, setPreview] = useState<Float64Array | null>(null);
   const brush = useRef({ radius, subtract });
   brush.current = { radius, subtract };
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const revision = useRef(0);
 
   useEffect(() => {
     const container = host.current!;
@@ -78,24 +82,33 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
     worker.current = smoothingWorker;
     const timeout = () => {
       smoothingWorker.terminate();
+      worker.current = null;
       setError("Smoothing timed out. Cancel and reopen the tool; source was retained.");
       setBusy(false);
       setPreview(null);
     };
     timer.current = setTimeout(timeout, 120000);
 
-    const display = (mesh: StlExportMesh) => {
-      geometry.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(mesh.vertices.flat(), 3),
-      );
-      geometry.setIndex(mesh.faces.flat());
-      geometry.computeVertexNormals();
-      geometry.computeBoundingSphere();
+    let needsRender = true;
+    const invalidateCamera = () => { needsRender = true; };
+    controls.addEventListener("change", invalidateCamera);
+    object.raycast = acceleratedRaycast;
+    const display = (prepared: SmoothingDisplay) => {
+      for (const [name, array] of [["position", prepared.position], ["normal", prepared.normal]] as const) {
+        const existing = geometry.getAttribute(name) as THREE.BufferAttribute | undefined;
+        if (existing) { existing.array = array;existing.needsUpdate = true; }
+        else geometry.setAttribute(name, new THREE.BufferAttribute(array, 3));
+      }
+      if (!geometry.index) geometry.setIndex(new THREE.BufferAttribute(prepared.bvh.index!, 1));
+      geometry.boundsTree = MeshBVH.deserialize(prepared.bvh, geometry, { setIndex: false });
+      geometry.boundingBox = new THREE.Box3(new THREE.Vector3(...prepared.bounds.slice(0,3)),new THREE.Vector3(...prepared.bounds.slice(3,6)));
+      geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
+      needsRender = true;
     };
 
     smoothingWorker.onmessage = ({ data }) => {
       if (disposed) return;
+      if ((data.type === "preview" || data.type === "error") && data.revision !== undefined && data.revision !== revision.current) return;
       if (["ready", "preview", "error"].includes(data.type)) {
         clearTimeout(timer.current);
       }
@@ -106,8 +119,8 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
         return;
       }
       if (data.type === "ready") {
-        display(data.mesh);
-        view.current = { geometry, mesh: object, source: data.mesh };
+        display(data.display);
+        view.current = { geometry, mesh: object, source: data.positions, display: data.display, restore: () => { display(data.display);showingPreview = false; } };
         const bounds = new THREE.Box3().setFromObject(object);
         const center = bounds.getCenter(new THREE.Vector3());
         const size = bounds.getSize(new THREE.Vector3()).length();
@@ -121,21 +134,19 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
         setBusy(false);
       }
       if (data.weights) {
-        const colors = new Float32Array(data.weights.length * 3);
-        for (let i = 0; i < data.weights.length; i += 1) {
-          const weight = data.weights[i];
-          colors.set(
-            [0.1 + 0.9 * weight, 0.65 - 0.25 * weight, 0.85 - 0.75 * weight],
-            i * 3,
-          );
+        let attribute = geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
+        if (!attribute) {
+          attribute = new THREE.BufferAttribute(new Float32Array(data.weights.length * 3),3);
+          geometry.setAttribute("color",attribute);
         }
-        geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+        updateSmoothingColors(attribute,data.indices ?? Uint32Array.from({length:data.weights.length},(_,i)=>i),data.weights);
+        needsRender = true;
         pending = false;
       }
       if (data.type === "preview") {
-        display(data.mesh);
+        display(data.display);
         showingPreview = true;
-        setPreview(data.mesh);
+        setPreview(data.positions);
         setStats(data.stats);
         setBusy(false);
       }
@@ -143,6 +154,7 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
     smoothingWorker.onerror = (event) => {
       clearTimeout(timer.current);
       smoothingWorker.terminate();
+      worker.current = null;
       setError(event.message || "Smoothing worker failed");
       setBusy(false);
     };
@@ -153,12 +165,12 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       shape.height / source.baseHeight,
       shapeDepth(shape) / source.baseDepth,
     ];
-    smoothingWorker.postMessage({
-      type: "init",
-      positions: source.positions.map((value, index) => value * scale[index % 3]),
-    });
+    const positions = new Float64Array(source.positions.length);
+    for (let i = 0; i < positions.length; i++) positions[i] = source.positions[i] * scale[i % 3];
+    smoothingWorker.postMessage({ type: "init", positions }, [positions.buffer]);
 
     const raycaster = new THREE.Raycaster();
+    raycaster.firstHitOnly = true;
     let lastPaint = 0;
     const paint = (event: PointerEvent) => {
       if (
@@ -186,8 +198,9 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       pending = true;
       setPreview(null);
       setStats(null);
+      revision.current++;
       if (showingPreview) {
-        display(view.current.source);
+        display(view.current.display);
         showingPreview = false;
       }
       smoothingWorker.postMessage({
@@ -218,13 +231,14 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       renderer.setSize(width, height);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      needsRender = true;
     });
     resize.observe(container);
 
     const render = () => {
       if (disposed) return;
-      controls.update();
-      renderer.render(scene, camera);
+      const cameraChanged = controls.update();
+      if (cameraChanged || needsRender) { renderer.render(scene, camera);needsRender = false; }
       frame = requestAnimationFrame(render);
     };
     render();
@@ -237,10 +251,12 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       smoothingWorker.terminate();
       worker.current = null;
       view.current = null;
+      controls.removeEventListener("change", invalidateCamera);
       controls.dispose();
       geometry.dispose();
       material.dispose();
       renderer.dispose();
+      renderer.forceContextLoss();
       renderer.domElement.remove();
     };
   }, [shape]);
@@ -253,17 +269,14 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       shape.height / source.baseHeight,
       shapeDepth(shape) / source.baseDepth,
     ];
-    onApply(
-      preview.faces.flatMap((face, faceIndex) =>
-        face.flatMap((index, corner) =>
-          preview.vertices[index].map((value, axis) =>
-            value === view.current?.source.vertices[index][axis]
-              ? source.positions[faceIndex * 9 + corner * 3 + axis]
-              : value / scale[axis],
-          ),
-        ),
-      ),
-    );
+    const viewState = view.current;
+    if (!viewState?.geometry.index) return;
+    const indices = viewState.geometry.index.array, positions = new Array<number>(indices.length * 3);
+    for (let i = 0; i < indices.length; i++) for (let axis = 0; axis < 3; axis++) {
+      const indexed = indices[i] * 3 + axis, raw = i * 3 + axis, value = preview[indexed];
+      positions[raw] = value === viewState.source[indexed] ? source.positions[raw] : value / scale[axis];
+    }
+    onApply(positions);
   };
 
   return (
@@ -288,6 +301,7 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       <p>
         Left drag: paint · Shift: subtract · Right drag: rotate · Middle drag: pan ·
         Wheel: zoom. Orange marks the weighted region. Open boundaries stay fixed.
+        Preview validates source and result surfaces before Apply is enabled.
       </p>
       <div ref={host} style={{ flex: 1, minHeight: 240 }} />
       <fieldset disabled={busy} style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -323,7 +337,9 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
             value={strength}
             onChange={(event) => {
               setStrength(Number(event.target.value));
+              revision.current++;
               setPreview(null);
+              setStats(null);
             }}
           />
         </label>
@@ -335,11 +351,11 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
             min="1"
             max="100"
             value={iterations}
-            onChange={(event) =>
+            onChange={(event) => {
               setIterations(
                 Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))),
-              )
-            }
+              );revision.current++;setPreview(null);setStats(null);
+            }}
           />
         </label>
       </fieldset>
@@ -365,7 +381,8 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
               setBusy(false);
               setError("Preview timed out; source retained. Cancel and reopen the tool.");
             }, 120000);
-            worker.current?.postMessage({ type: "preview", strength, iterations });
+            const requestRevision = ++revision.current;
+            worker.current?.postMessage({ type: "preview", strength, iterations, revision: requestRevision });
           }}
         >
           Preview
@@ -378,16 +395,10 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
           disabled={busy}
           onClick={() => {
             worker.current?.postMessage({ type: "clear" });
+            revision.current++;
             setPreview(null);
             setStats(null);
-            if (view.current) {
-              const { source, geometry } = view.current;
-              geometry.setAttribute(
-                "position",
-                new THREE.Float32BufferAttribute(source.vertices.flat(), 3),
-              );
-              geometry.computeVertexNormals();
-            }
+            view.current?.restore();
           }}
         >
           Clear selection

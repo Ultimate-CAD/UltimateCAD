@@ -17,7 +17,7 @@ it('initializes, paints, and validates a worker preview with actual messages',as
       const raw=readFileSync(process.env.LAYERLING_SMOOTH_ORGANIC),shape=importedShapeFromStl('organic.stl',raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength)),positions=shape.importedMesh!.positions,start=performance.now();
       worker.onmessage({data:{type:'init',positions}});
       expect(messages.at(-1),JSON.stringify(messages.at(-1))).toMatchObject({type:'ready'});
-      const ready=messages.at(-1),point=ready.mesh.vertices[Math.floor(ready.mesh.vertices.length/2)];
+      const ready=messages.at(-1),offset=Math.floor(ready.positions.length/6)*3,point=Array.from(ready.positions.slice(offset,offset+3));
       worker.onmessage({data:{type:'paint',point,radius:5,subtract:false}});
       worker.onmessage({data:{type:'preview',strength:.2,iterations:3}});
       expect(messages.at(-1),JSON.stringify(messages.at(-1))).toMatchObject({type:'preview'});

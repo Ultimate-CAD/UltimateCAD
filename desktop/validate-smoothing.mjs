@@ -215,8 +215,10 @@ try {
     assert.equal(await dialog2.getByRole('button',{name:'Apply smoothing',exact:true}).isEnabled(),false,'Changed iterations left stale preview applicable');
     await dialog2.getByLabel('Smoothing iterations').fill('20');
     await dialog2.getByRole('button',{name:'Preview',exact:true}).click();
+    await command('select_objects',{ids:[]});
     await page.waitForFunction(()=>{const d=document.querySelector('[aria-label="Smooth Mesh"]');return d?.querySelector('[role="alert"]')||[...d.querySelectorAll('button')].some(b=>b.textContent==='Apply smoothing'&&!b.disabled);});
     assert.equal(await dialog2.getByRole('alert').count(),0,await dialog2.innerText());
+    await command('select_objects',{ids:[sourceObject.id]});
   }
   await dialog2.getByRole("button", { name: "Apply smoothing", exact: true }).click();
   await dialog2.waitFor({ state: "detached" });
@@ -234,6 +236,12 @@ try {
   await waitForObject(sourceObject.id, (object) => object.importedTriangles === afterApply.importedTriangles, "Redo to smoothed source");
   smoothedProject = await savedProject();
   assert.equal(sourceFingerprint(smoothedProject.node), smoothedSource, "Redo did not restore smoothed positions");
+  if(process.env.LAYERLING_EXPECTED_APP_VERSION?.endsWith('.7'))for(let cycle=0;cycle<2;cycle++){
+    await page.getByRole('button',{name:'Undo',exact:true}).click();
+    assert.equal(sourceFingerprint((await savedProject()).node),initialSource,'Repeated Undo changed source');
+    await page.getByRole('button',{name:'Redo',exact:true}).click();
+    smoothedProject=await savedProject();assert.equal(sourceFingerprint(smoothedProject.node),smoothedSource,'Repeated Redo changed result');
+  }
   const finalFile = checkpoint(smoothedProject.archive, smoothedProject.project, "smoothing-applied-checkpoint.lyl", "applied");
   const finalName = "Smoothing applied checkpoint";
   await reopen(finalFile, finalName);

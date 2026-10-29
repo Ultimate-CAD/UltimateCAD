@@ -17,8 +17,8 @@ User explicitly authorizes continuous implementation, verification and packaging
 - [x] Preserve clean .8 baseline and captured fixtures.
 - [x] Reproduce exact packaged organic /500k fixtures; profile stage costs and CPU before optimizing.
 - [x] Implement highest-value safe optimization, compare correctness/geometry hashes, remeasure.
-- [ ] Responsive visual-only plane manipulation, precise final preview gate; resource/stale/cancel tests.
-- [ ] Final focused/package regressions, .9 executable/installer, report and local commits.
+- [x] Responsive visual-only plane manipulation, precise final preview gate; resource/stale/cancel tests.
+- [x] Final focused/package regressions, .9 executable/installer, report and local commits.
 
 ## State
-Optimized predicates/typed vertex fans/canonical indexing; CPU-profiled preview 2.075s organic /8.823s 500k, both geometry hashes identical to baseline. Topology and intersection differential tests pass. Packed response and GPU cache reuse implemented. Interaction baseline and focused regressions precede the .9 package; no validation policy/resolution change.
+COMPLETE. Runtime 62d9dfad56f3020dfc6d3300270660b01ce24aa4. Packaged UI-ready preview organic4.631→2.190s,500k22.981→8.562s; byte-identical applied F64 assets and unchanged complete QA. 55 focused/integration tests and78 packaged checks pass. 2M visual/cancel and20 repeated-cache probes pass;500k workflowpeakWS+6.1% reported. See HIGH_SPEED_GEOMETRY_ENGINE.md for exact evidence/paths/hashes/limits. .8 rollback preserved; no installed-app replacement or push.

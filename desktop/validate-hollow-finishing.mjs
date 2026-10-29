@@ -12,7 +12,13 @@ const fixtureOverride = process.env.LAYERLING_FINISH_FIXTURE ? path.resolve(proc
 const cutPosition = Number(process.env.LAYERLING_FINISH_POSITION ?? 3.1);
 const expectThinWarning = process.env.LAYERLING_FINISH_EXPECT_THIN_WARNING === "1";
 const stressOnly = process.env.LAYERLING_GEOMETRY_STRESS_ONLY === "1";
+const repeatPreviewsRaw = process.env.LAYERLING_GEOMETRY_REPEAT_PREVIEWS ?? "0";
+assert.ok(/^(?:0|[1-9]\d*)$/.test(repeatPreviewsRaw), "LAYERLING_GEOMETRY_REPEAT_PREVIEWS must be an integer from 0 through 30");
+const repeatPreviewCount = Number(repeatPreviewsRaw);
+assert.ok(repeatPreviewCount<=30, "LAYERLING_GEOMETRY_REPEAT_PREVIEWS must be an integer from 0 through 30");
+assert.ok(!stressOnly||repeatPreviewCount===0,"Repeated cache probes require normal mode, not stress-only mode");
 const interactionEnabled = process.env.LAYERLING_GEOMETRY_INTERACTION === "1" || stressOnly;
+const renderInstrumentationEnabled = interactionEnabled || repeatPreviewCount>0;
 const expectedAppVersion = process.env.LAYERLING_EXPECTED_APP_VERSION;
 assert.ok(Number.isFinite(cutPosition), "LAYERLING_FINISH_POSITION must be a finite number");
 assert.ok(expectedAppVersion && /\.(?:8|9)$/.test(expectedAppVersion), "Set LAYERLING_EXPECTED_APP_VERSION to the exact .8 or .9 package version");
@@ -21,7 +27,8 @@ mkdirSync(output, { recursive: true });
 const checks = [], errors = [], requests = [];
 let app, page, connection, editorId, sourceObject, appVersion, appliedMeshAssetSha256 = null, exportAudits = {}, workerTrace = [], memoryTimer, memorySampling = false;
 const memorySamples = [];
-const interaction = { enabled: interactionEnabled, stressOnly, metricDefinition: "WebGL API call CPU time only; no GPU completion inferred", previewLatenciesMs: [], snapshots: {}, planeMotion: null, staleInjection: null };
+const interaction = { enabled: interactionEnabled, stressOnly, repeatPreviewCount, metricDefinition: "WebGL API call CPU time only; no GPU completion inferred", previewLatenciesMs: [], snapshots: {}, planeMotion: null, staleInjection: null };
+const repeatedPreviewProbe = repeatPreviewCount ? { requestedCount: repeatPreviewCount, pacingMs: 100, forcedGCInterval: 5, forcedGCs: [], previews: [], memorySnapshots: [], sourceGeometryUnchanged: null, webglUploadDeltaCalls: null, note: "Forced page HeapProfiler GC does not collect the finishing worker heap; WebGL API upload calls do not imply GPU completion." } : null;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pass = (name, detail) => { checks.push({ name, detail }); console.log("PASS", name, detail ?? ""); };
 
@@ -107,10 +114,10 @@ async function waitFinishingPreview(dialog) {
     const uiEnabledObservedAt=performance.now();
     return last&&apply&&!apply.disabled?{workerPreviewReceivedAt:last.at,uiEnabledObservedAt,latencyMs:uiEnabledObservedAt-last.at}:null;
   });
-  if(latency&&interactionEnabled) interaction.previewLatenciesMs.push(latency);
+  if(latency&&renderInstrumentationEnabled) interaction.previewLatenciesMs.push(latency);
 }
 async function interactionSnapshot(label) {
-  if(!interactionEnabled||!page)return null;
+  if(!renderInstrumentationEnabled||!page)return null;
   const snapshot=await page.evaluate((name)=>{
     const metrics=window.__hollowRenderMetrics;
     if(!metrics)return null;
@@ -127,7 +134,7 @@ async function interactionSnapshot(label) {
   return snapshot;
 }
 async function installInteractionMonitor() {
-  if(!interactionEnabled)return;
+  if(!renderInstrumentationEnabled)return;
   await page.evaluate(()=>{
     const canvas=document.querySelector('[role="dialog"][aria-label="Open Hollow Base"] canvas');
     if(!canvas)throw new Error("Open Hollow Base WebGL canvas was not found after source readiness");
@@ -164,6 +171,81 @@ async function installInteractionMonitor() {
   });
 }
 function percentile(values,p){if(!values.length)return null;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.max(0,Math.ceil(sorted.length*p)-1)]}
+async function webglUploadCounts(){
+  if(!page)return null;
+  return page.evaluate(()=>{
+    const operations=window.__hollowRenderMetrics?.operations||{};
+    return {calls:(operations.bufferData?.count||0)+(operations.bufferSubData?.count||0),callCPUms:(operations.bufferData?.callCPUms||0)+(operations.bufferSubData?.callCPUms||0),bufferDataCalls:operations.bufferData?.count||0,bufferSubDataCalls:operations.bufferSubData?.count||0};
+  });
+}
+async function captureProbeMemory(label,completedPreviews){
+  while(memorySampling)await pause(25);
+  memorySampling=true;
+  try{
+    const jsHeap=await page.evaluate(()=>{
+      const m=performance.memory;
+      return m?{usedJSHeapSize:m.usedJSHeapSize,totalJSHeapSize:m.totalJSHeapSize,jsHeapSizeLimit:m.jsHeapSizeLimit}:null;
+    });
+    const processes=await app.evaluate(({app})=>app.getAppMetrics());
+    repeatedPreviewProbe.memorySnapshots.push({label,completedPreviews,at:new Date().toISOString(),rendererPerformanceMemory:jsHeap,appMetrics:processes.map(p=>({pid:p.pid,type:p.type,memory:p.memory}))});
+  }finally{memorySampling=false}
+}
+async function runRepeatedCachedPreviewProbe(dialog,sourceMeshResourceSha256){
+  if(!repeatPreviewCount)return;
+  repeatedPreviewProbe.sourceMeshResourceSha256=sourceMeshResourceSha256;
+  interaction.repeatedPreviewProbe=repeatedPreviewProbe;
+  const cdp=await page.context().newCDPSession(page);
+  try{
+    await cdp.send("HeapProfiler.enable");
+    await captureProbeMemory("before-probe",0);
+    for(let index=1;index<=repeatPreviewCount;index++){
+      await pause(repeatedPreviewProbe.pacingMs);
+      const uploadsBefore=await webglUploadCounts();
+      const requestStartedAt=await page.evaluate(()=>performance.now());
+      await dialog.getByRole("button",{name:"Preview",exact:true}).click();
+      await waitFinishingPreview(dialog);
+      assert.match(await dialog.innerText(),/\(cached\)/,`Repeat preview ${index} was not reported as cached`);
+      const received=await page.evaluate(start=>{
+        const records=window.__hollowFinishWorkerTrace||[];
+        for(let wi=records.length-1;wi>=0;wi--){
+          const record=records[wi];if(record.name!=="layerling-hollow-finishing")continue;
+          for(let mi=record.incoming.length-1;mi>=0;mi--){
+            const message=record.incoming[mi];
+            if(message.type!=="preview"||message.at<start)continue;
+            const sent=[...record.outgoing].reverse().find(x=>x.type==="preview"&&x.revision===message.revision&&x.at>=start);
+            if(sent)return {workerId:record.id,revision:message.revision,receivedAt:message.at,sentAt:sent.at,cacheHit:message.stats?.cacheHit,requestMs:message.requestMs,geometryMs:message.stats?.geometryMs,validationMs:message.stats?.validationMs,workerRoundTripMs:message.at-sent.at};
+          }
+        }
+        return null;
+      },requestStartedAt);
+      assert.ok(received,`Repeat preview ${index} had no matching worker response`);
+      assert.equal(received.cacheHit,true,`Repeat preview ${index} did not hit the worker cache`);
+      const ui=interaction.previewLatenciesMs.at(-1);
+      const uploadsAfter=await webglUploadCounts();
+      const uploadDeltaCalls=(uploadsAfter?.calls||0)-(uploadsBefore?.calls||0);
+      const uploadDeltaCPUms=(uploadsAfter?.callCPUms||0)-(uploadsBefore?.callCPUms||0);
+      if(appVersion.endsWith(".9"))assert.equal(uploadDeltaCalls,0,`.9 repeat preview ${index} uploaded WebGL buffers`);
+      repeatedPreviewProbe.previews.push({index,requestStartedAt,requestToUiEnabledMs:ui?ui.uiEnabledObservedAt-requestStartedAt:null,workerToUiEnabledMs:ui?.latencyMs??null,...received,uploadDeltaCalls,uploadDeltaCPUms});
+      if(index%repeatedPreviewProbe.forcedGCInterval===0){
+        await captureProbeMemory("before-forced-page-gc",index);
+        const startedAt=await page.evaluate(()=>performance.now());
+        await cdp.send("HeapProfiler.collectGarbage");
+        const endedAt=await page.evaluate(()=>performance.now());
+        repeatedPreviewProbe.forcedGCs.push({completedPreviews:index,startedAt,endedAt,durationMs:endedAt-startedAt,scope:"renderer page V8 heap; finishing worker heap is not forced"});
+        await captureProbeMemory("after-forced-page-gc",index);
+      }
+    }
+    const sourceAfter=await savedProject(false);
+    repeatedPreviewProbe.sourceGeometryUnchanged=sourceAfter.meshResourceSha256===sourceMeshResourceSha256;
+    assert.equal(repeatedPreviewProbe.sourceGeometryUnchanged,true,"Repeated cached previews changed the saved source geometry asset");
+    repeatedPreviewProbe.webglUploadDeltaCalls=repeatedPreviewProbe.previews.reduce((sum,x)=>sum+x.uploadDeltaCalls,0);
+    if(appVersion.endsWith(".9"))assert.equal(repeatedPreviewProbe.webglUploadDeltaCalls,0,".9 repeated cached previews uploaded WebGL buffers");
+    await captureProbeMemory("after-probe",repeatPreviewCount);
+    interaction.repeatedPreviewProbe=repeatedPreviewProbe;
+  }finally{
+    await cdp.detach().catch(()=>{});
+  }
+}
 async function runPlaneInteraction(dialog) {
   if(!interactionEnabled)return;
   await pause(100);
@@ -371,7 +453,7 @@ try {
   assert.equal(appVersion,expectedAppVersion,"Packaged app version did not match LAYERLING_EXPECTED_APP_VERSION exactly");
   assert.ok(/\.(?:8|9)$/.test(appVersion),`Expected packaged .8 or .9 build, got ${appVersion}`);
   page.setDefaultTimeout(30000); page.on("pageerror",e=>errors.push(e.message)); page.on("request",r=>requests.push(r.url()));
-  if(interactionEnabled)await page.evaluate(()=>{window.__layerlingGeometryDiagnostics=true});
+  if(renderInstrumentationEnabled)await page.evaluate(()=>{window.__layerlingGeometryDiagnostics=true});
   await page.evaluate(()=>{
     const NativeWorker=window.Worker, records=[],instances=[];
     class ObservedWorker extends NativeWorker {
@@ -405,15 +487,18 @@ try {
   assert.equal(await page.evaluate(async()=>{try{await fetch("https://example.com");return false;}catch{return true;}}),true,"External network access was not blocked");
   let fixture;
   if(fixtureOverride && fixtureOverride.toLowerCase().endsWith(".lyl")) {
+    const fixtureProject=JSON.parse(strFromU8(unzipSync(readFileSync(fixtureOverride))["project.json"]));
+    const expectedProjectName=fixtureProject.metadata?.projectName;
+    assert.ok(typeof expectedProjectName==="string"&&expectedProjectName.length,`LYL fixture has no projectName metadata: ${fixtureOverride}`);
     await page.locator('input[type="file"][accept*=".lyl"]').first().setInputFiles(fixtureOverride);
-    await ready();
+    await ready(expectedProjectName);
   } else {
     await page.getByRole("button",{name:"Create new 3D design",exact:true}).click(); await ready();
     if(fixtureOverride) fixture=fixtureOverride;
     else { fixture=path.join(output,"closed-hollow-cylinder.stl"); writeFileSync(fixture,hollowCylinderStl()); }
     assert.ok(fixture.toLowerCase().endsWith(".stl"),"LAYERLING_FINISH_FIXTURE must be an STL or LYL file");
     await page.locator('input[type="file"][accept*=".stl"]').first().setInputFiles(fixture);
-    await ready(fixtureOverride ? undefined : "closed-hollow-cylinder");
+    await ready(path.basename(fixture).replace(/\.[^.]+$/,""));
   }
   for(let i=0;i<150;i++){
     const objects=(await command("list_objects")).objects;
@@ -455,7 +540,7 @@ try {
   await applyDialog.getByLabel("Retained side").selectOption("positive");
   await applyDialog.getByLabel("Cut position (mm)").fill(String(cutPosition));
   await runPlaneInteraction(applyDialog);
-  if(interactionEnabled)await interactionSnapshot("before-first-preview");
+  if(renderInstrumentationEnabled)await interactionSnapshot("before-first-preview");
   if(stressOnly){
     await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
     await applyDialog.getByRole("button",{name:"Cancel preview",exact:true}).click();
@@ -476,13 +561,13 @@ try {
   } else {
   await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
   await waitFinishingPreview(applyDialog);
-  if(interactionEnabled){
+  if(renderInstrumentationEnabled){
     await pause(100);
     interaction.firstValidPreview=await interactionSnapshot("first-valid-preview");
   }
   await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
   await waitFinishingPreview(applyDialog);
-  if(interactionEnabled){
+  if(renderInstrumentationEnabled){
     await pause(100);
     interaction.identicalCachedPreview=await interactionSnapshot("identical-cached-preview");
     const first=interaction.snapshots["first-valid-preview"],cached=interaction.snapshots["identical-cached-preview"];
@@ -493,6 +578,7 @@ try {
   assert.match(await applyDialog.innerText(),/\(cached\)/,"Second identical preview did not report a cache hit");
   let finishingTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace);
   assert.ok(finishingTrace.some(w=>w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="preview"&&m.stats?.cacheHit===true)),"Finishing worker did not report stats.cacheHit=true for repeated preview");
+  await runRepeatedCachedPreviewProbe(applyDialog,original.meshResourceSha256);
   const positionInput=applyDialog.getByLabel("Cut position (mm)");
   await positionInput.fill(String(cutPosition+0.2));
   const applyButton=applyDialog.getByRole("button",{name:"Apply",exact:true});
@@ -583,7 +669,7 @@ finally{
   while(memorySampling)await pause(25);
   await sampleAppMemory();
   if(page)workerTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace||[]).catch(()=>[]);
-  if(interactionEnabled&&page){
+  if(renderInstrumentationEnabled&&page){
     try{
       interaction.appVersion=appVersion;
       interaction.fixture=fixtureOverride||"synthetic closed hollow cylinder";
@@ -601,9 +687,9 @@ finally{
     maxPrivateBytes:Math.max(0,...memoryValues.map(m=>m.privateBytes||0)),
   };
   writeFileSync(path.join(output,"mesh-audits.json"),JSON.stringify(exportAudits,null,2));
-  if(interactionEnabled)writeFileSync(path.join(output,"interaction.json"),JSON.stringify(interaction,null,2));
-  writeFileSync(path.join(output,"measurements.json"),JSON.stringify({appVersion,stressOnly,fixture:fixtureOverride||"synthetic closed hollow cylinder",cutPositionMm:cutPosition,expectThinWarning,memorySource:"Electron app.getAppMetrics",peakMemory,memorySamples,workers:workerTrace,interaction:interactionEnabled?interaction:undefined,appliedMeshAssetSha256},null,2));
-  writeFileSync(path.join(output,"results.json"),JSON.stringify({executable,appVersion,stressOnly,profile,checks,errors,exportAudits,peakMemory,appliedMeshAssetSha256},null,2));
+  if(renderInstrumentationEnabled)writeFileSync(path.join(output,"interaction.json"),JSON.stringify(interaction,null,2));
+  writeFileSync(path.join(output,"measurements.json"),JSON.stringify({appVersion,stressOnly,repeatPreviewCount,fixture:fixtureOverride||"synthetic closed hollow cylinder",cutPositionMm:cutPosition,expectThinWarning,memorySource:"Electron app.getAppMetrics",peakMemory,memorySamples,workers:workerTrace,interaction:renderInstrumentationEnabled?interaction:undefined,resourceProbe:repeatedPreviewProbe||undefined,appliedMeshAssetSha256},null,2));
+  writeFileSync(path.join(output,"results.json"),JSON.stringify({executable,appVersion,stressOnly,repeatPreviewCount,profile,checks,errors,exportAudits,peakMemory,resourceProbe:repeatedPreviewProbe||undefined,appliedMeshAssetSha256},null,2));
   if(app){
     await app.evaluate(({BrowserWindow})=>{for(const window of BrowserWindow.getAllWindows())window.webContents.on("will-prevent-unload",event=>event.preventDefault());}).catch(()=>{});
     await app.close().catch(()=>{});

@@ -182,6 +182,13 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
   };
 
   useEffect(() => {
+    if (shape.importedMesh!.positions.length / 9 > 2_000_000) {
+      setError(
+        "Open Hollow Base supports up to 2 million input triangles in its isolated worker. Source retained.",
+      );
+      setStatus("Source retained");
+      return;
+    }
     const container = host.current!,
       scene = new THREE.Scene();
     scene.background = new THREE.Color("#20252b");
@@ -316,6 +323,20 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
         resultObject = new THREE.Mesh(resultGeometry, resultMaterial);
         rimObject = new THREE.Mesh(rimGeometry, rimMaterial);
         scene.add(resultObject, rimObject);
+        // A bottom cut is hidden from the initial above-body inspection view.
+        // Face the removed side on explicit Preview so its cavity and rim are visible.
+        const resultCenter = new THREE.Box3()
+          .setFromObject(resultObject)
+          .getCenter(new THREE.Vector3());
+        const openingView = new THREE.Vector3(0.6, 0.6, 0.6)
+          .setComponent(
+            currentCut.current.axis,
+            currentCut.current.keepPositive ? -1 : 1,
+          )
+          .multiplyScalar(size.length());
+        controls.target.copy(resultCenter);
+        camera.position.copy(resultCenter).add(openingView);
+        controls.update();
         dirty = true;
       },
     };

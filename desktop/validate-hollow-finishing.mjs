@@ -9,11 +9,13 @@ const executable = path.resolve(process.argv.slice(2).find((s) => s.endsWith(".e
 const output = path.resolve(process.env.LAYERLING_HOLLOW_FINISHING_VALIDATION_DIR || "dist/ultimate/windows/hollow-finishing-validation");
 const fixtureOverride = process.env.LAYERLING_FINISH_FIXTURE ? path.resolve(process.env.LAYERLING_FINISH_FIXTURE) : null;
 const cutPosition = Number(process.env.LAYERLING_FINISH_POSITION ?? 3.1);
+const expectThinWarning = process.env.LAYERLING_FINISH_EXPECT_THIN_WARNING === "1";
 assert.ok(Number.isFinite(cutPosition), "LAYERLING_FINISH_POSITION must be a finite number");
 const profile = path.join(output, `isolated-profile-${Date.now()}`);
 mkdirSync(output, { recursive: true });
 const checks = [], errors = [], requests = [];
-let app, page, connection, editorId, sourceObject, exportAudits = {};
+let app, page, connection, editorId, sourceObject, exportAudits = {}, workerTrace = [], memoryTimer, memorySampling = false;
+const memorySamples = [];
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pass = (name, detail) => { checks.push({ name, detail }); console.log("PASS", name, detail ?? ""); };
 
@@ -79,10 +81,28 @@ async function waitPreviewReady(dialog) {
     const d=document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]');
     const preview=[...(d?.querySelectorAll('button')||[])].find(b=>b.textContent?.trim()==="Preview");
     return d?.innerText.includes("Ready") && preview && !preview.disabled;
-  });
+  },null,{timeout:180000});
   assert.match(await dialog.innerText(),/Ready/);
   await dialog.getByRole("button",{name:"Preview",exact:true}).waitFor({state:"visible"});
   assert.equal(await dialog.getByRole("button",{name:"Preview",exact:true}).isEnabled(),true);
+}
+async function waitFinishingPreview(dialog) {
+  await page.waitForFunction(()=>{
+    const d=document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]');
+    const apply=[...(d?.querySelectorAll('button')||[])].find(b=>b.textContent?.trim()==="Apply");
+    return d?.querySelector('[role="alert"]') || (apply && !apply.disabled);
+  },null,{timeout:180000});
+  assert.equal(await dialog.getByRole("alert").count(),0,await dialog.innerText());
+  assert.equal(await dialog.getByRole("button",{name:"Apply",exact:true}).isEnabled(),true);
+}
+async function sampleAppMemory() {
+  if(!app||memorySampling)return;
+  memorySampling=true;
+  try {
+    const processes=await app.evaluate(({app})=>app.getAppMetrics());
+    memorySamples.push({at:new Date().toISOString(),processes:processes.map(p=>({pid:p.pid,type:p.type,memory:p.memory}))});
+  } catch(error) { memorySamples.push({at:new Date().toISOString(),error:String(error)}); }
+  finally { memorySampling=false; }
 }
 function auditTopology(vertices, faces) {
   const pointKey = p => p.map(v => Object.is(v,-0) ? "0" : String(v)).join(",");
@@ -195,6 +215,33 @@ try {
   assert.equal(appVersion,process.env.LAYERLING_EXPECTED_APP_VERSION||appVersion);
   assert.ok(appVersion.endsWith(".8"),`Expected packaged .8 build, got ${appVersion}`);
   page.setDefaultTimeout(30000); page.on("pageerror",e=>errors.push(e.message)); page.on("request",r=>requests.push(r.url()));
+  await page.evaluate(()=>{
+    const NativeWorker=window.Worker, records=[];
+    class ObservedWorker extends NativeWorker {
+      constructor(url,options){
+        super(url,options);
+        const record={id:records.length,url:String(url),name:options?.name||null,createdAt:performance.now(),outgoing:[],incoming:[],terminateCalls:[]};
+        this.__finishRecord=record; records.push(record);
+        this.addEventListener("message",event=>{
+          const d=event.data||{};
+          record.incoming.push({at:performance.now(),type:d.type,revision:d.revision,message:d.message,error:d.error,stats:d.stats,audit:d.audit,surface:d.surface,encodedSurface:d.encodedSurface,surfaceCompletion:d.surfaceCompletion});
+        });
+        this.addEventListener("error",event=>record.incoming.push({at:performance.now(),type:"error-event",message:event.message}));
+      }
+      postMessage(message,...transfer){
+        this.__finishRecord?.outgoing.push({at:performance.now(),type:message?.type,revision:message?.revision});
+        return super.postMessage(message,...transfer);
+      }
+      terminate(){
+        this.__finishRecord?.terminateCalls.push({at:performance.now()});
+        return super.terminate();
+      }
+    }
+    Object.defineProperty(window,"Worker",{configurable:true,writable:true,value:ObservedWorker});
+    window.__hollowFinishWorkerTrace=records;
+  });
+  await sampleAppMemory();
+  memoryTimer=setInterval(()=>{void sampleAppMemory();},1000);
   await page.getByRole("button",{name:"Create new 3D design",exact:true}).waitFor({timeout:90000});
   connection=JSON.parse(readFileSync(path.join(profile,"connection.json"),"utf8"));
   assert.equal(await page.evaluate(async()=>{try{await fetch("https://example.com");return false;}catch{return true;}}),true,"External network access was not blocked");
@@ -227,6 +274,10 @@ try {
   await dialog.getByRole("button",{name:"Preview",exact:true}).click();
   await dialog.getByRole("button",{name:"Cancel preview",exact:true}).click();
   await waitPreviewReady(dialog);
+  const cancelTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace);
+  const canceledWorker=cancelTrace.find(w=>w.name==="layerling-hollow-finishing"&&w.outgoing.some(m=>m.type==="preview")&&w.terminateCalls.length>0);
+  assert.ok(canceledWorker,"Cancel preview did not terminate the active finishing worker");
+  assert.ok(cancelTrace.some(w=>w.id>canceledWorker.id&&w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="ready")),"Cancel preview did not initialize a replacement finishing worker");
   const cancelApply=dialog.getByRole("button",{name:"Apply",exact:true});
   await cancelApply.waitFor({state:"visible"});
   assert.equal(await cancelApply.isEnabled(),false,"Canceled preview remained applicable");
@@ -241,9 +292,29 @@ try {
   await applyDialog.getByLabel("Retained side").selectOption("positive");
   await applyDialog.getByLabel("Cut position (mm)").fill(String(cutPosition));
   await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
-  await page.waitForFunction(()=>{const d=document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]');return d?.querySelector('[role="alert"]')||[...(d?.querySelectorAll('button')||[])].some(b=>b.textContent?.trim()==="Apply"&&!b.disabled);});
-  assert.equal(await applyDialog.getByRole("alert").count(),0,await applyDialog.innerText());
-  assert.equal(await applyDialog.getByRole("button",{name:"Apply",exact:true}).isEnabled(),true);
+  await waitFinishingPreview(applyDialog);
+  await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
+  await waitFinishingPreview(applyDialog);
+  assert.match(await applyDialog.innerText(),/\(cached\)/,"Second identical preview did not report a cache hit");
+  let finishingTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace);
+  assert.ok(finishingTrace.some(w=>w.name==="layerling-hollow-finishing"&&w.incoming.some(m=>m.type==="preview"&&m.stats?.cacheHit===true)),"Finishing worker did not report stats.cacheHit=true for repeated preview");
+  const positionInput=applyDialog.getByLabel("Cut position (mm)");
+  await positionInput.fill(String(cutPosition+0.2));
+  const applyButton=applyDialog.getByRole("button",{name:"Apply",exact:true});
+  await page.waitForFunction(()=>{
+    const b=[...(document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]')?.querySelectorAll("button")||[])].find(x=>x.textContent?.trim()==="Apply");
+    return b?.disabled===true;
+  },null,{timeout:10000});
+  assert.equal(await applyButton.isEnabled(),false,"Changing cut position left stale preview applicable");
+  await positionInput.fill(String(cutPosition));
+  await page.waitForFunction(()=>{
+    const b=[...(document.querySelector('[role="dialog"][aria-label="Open Hollow Base"]')?.querySelectorAll("button")||[])].find(x=>x.textContent?.trim()==="Apply");
+    return b?.disabled===true;
+  },null,{timeout:10000});
+  assert.equal(await applyButton.isEnabled(),false,"Restoring cut position incorrectly reused a stale applicable preview");
+  await applyDialog.getByRole("button",{name:"Preview",exact:true}).click();
+  await waitFinishingPreview(applyDialog);
+  assert.match(await applyDialog.innerText(),/\(cached\)/,"Restored cut position did not reuse its cached preview");
   await page.screenshot({path:path.join(output,"hollow-finishing-preview.png"),fullPage:true});
   await applyDialog.getByRole("button",{name:"Apply",exact:true}).click(); await applyDialog.waitFor({state:"detached"});
   const applied=await savedProject(), appliedFingerprint=fingerprint(applied);
@@ -274,9 +345,16 @@ try {
   const precisionAlert=studio.getByRole("alert");
   if(await precisionAlert.count())throw Error(`Precision Mesh Studio rejected finished mesh: ${await precisionAlert.innerText()}`);
   const precisionReady=await page.locator(".precision-results").getAttribute("data-ready");
-  assert.equal(precisionReady,"true","Precision Mesh Studio did not validate the finished mesh");
+  if(expectThinWarning){
+    assert.equal(precisionReady,"false","Thin-wall mode must retain the manufacturing warning and must not claim print-ready");
+    const thicknessWarning=studio.getByText(/Sampled normal-ray thickness .* below .* mm/i);
+    await thicknessWarning.waitFor({state:"visible",timeout:180000});
+    pass("Precision Mesh Studio retains sampled-thickness warning; geometry checks continue without marking print-ready",{warning:await thicknessWarning.innerText(),dataReady:precisionReady});
+  } else {
+    assert.equal(precisionReady,"true","Precision Mesh Studio did not validate the finished mesh");
+    pass("Precision Mesh Studio preview marks the finished mesh ready");
+  }
   await page.screenshot({path:path.join(output,"hollow-finishing-precision.png"),fullPage:true});
-  pass("Precision Mesh Studio preview marks the finished mesh ready");
   // `export_mesh` is the MCP bridge action used by packaged validators; there is no `export_file` action.
   for(const format of ["stl","3mf"]){
     const exported=await command("export_mesh",{format,ids:[sourceObject.id]});
@@ -287,13 +365,13 @@ try {
       exportAudits[format]=auditStl(bytes);
       assertStrictMesh(exportAudits[format],"Exported STL");
       const imported=await command("import_file",{fileName:`hollow-finished-reimport.${format}`,base64:exported.base64});
-      assert.ok(imported.objects?.length,"STL reimport returned no objects");
+      assert.ok(imported.imported?.length,"STL reimport returned no objects");
     } else {
       assert.ok(bytes.byteLength>100,"Exported 3MF is unexpectedly small");
       exportAudits[format]=audit3mf(bytes);
       assertStrictMesh(exportAudits[format],"Exported 3MF");
       const imported=await command("import_file",{fileName:`hollow-finished-reimport.${format}`,base64:exported.base64});
-      assert.ok(imported.objects?.length,"3MF reimport returned no objects");
+      assert.ok(imported.imported?.length,"3MF reimport returned no objects");
     }
     pass(`${format.toUpperCase()} export passes exact-weld topology audit and independent editor reimport`,{bytes:bytes.byteLength,...exportAudits[format]});
   }
@@ -301,4 +379,20 @@ try {
   assert.deepEqual(errors,[]);
   pass("Packaged app launched with restricted PATH and external network blocked",{externalRequests:requests.filter(u=>/^https?:/i.test(u)&&!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(u)).length});
 } catch(error){errors.push(error.stack||String(error));console.error(error);if(page)await page.screenshot({path:path.join(output,"failure.png"),fullPage:true}).catch(()=>{});process.exitCode=1;}
-finally{writeFileSync(path.join(output,"mesh-audits.json"),JSON.stringify(exportAudits,null,2));writeFileSync(path.join(output,"results.json"),JSON.stringify({executable,profile,checks,errors,exportAudits},null,2));if(app)await app.close().catch(()=>{});}
+finally{
+  if(memoryTimer)clearInterval(memoryTimer);
+  while(memorySampling)await pause(25);
+  await sampleAppMemory();
+  if(page)workerTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace||[]).catch(()=>[]);
+  const memoryValues=memorySamples.flatMap(s=>s.processes||[]).map(p=>p.memory||{});
+  const peakMemory={
+    peakWorkingSetSizeKiB:Math.max(0,...memoryValues.map(m=>m.peakWorkingSetSize||0)),
+    maxObservedWorkingSetSizeKiB:Math.max(0,...memoryValues.map(m=>m.workingSetSize||0)),
+    maxPrivateBytes:Math.max(0,...memoryValues.map(m=>m.privateBytes||0)),
+  };
+  writeFileSync(path.join(output,"mesh-audits.json"),JSON.stringify(exportAudits,null,2));
+  writeFileSync(path.join(output,"measurements.json"),JSON.stringify({fixture:fixtureOverride||"synthetic closed hollow cylinder",cutPositionMm:cutPosition,expectThinWarning,memorySource:"Electron app.getAppMetrics",peakMemory,memorySamples,workers:workerTrace},null,2));
+  writeFileSync(path.join(output,"results.json"),JSON.stringify({executable,profile,checks,errors,exportAudits,peakMemory},null,2));
+  if(app)await app.close().catch(()=>{});
+  if(errors.length)process.exitCode=1;
+}

@@ -42,6 +42,10 @@ self.onmessage = async ({ data }) => {
         faces: [number, number, number][] = [];
       const p: Float64Array = data.positions;
       if (p.length % 9) throw new Error("Invalid source triangle data");
+      if (p.length / 9 > 2_000_000)
+        throw new Error(
+          "Open Hollow Base supports up to 2 million input triangles. Source retained.",
+        );
       for (let i = 0; i < p.length; i += 3)
         vertices.push([p[i], p[i + 1], p[i + 2]]);
       for (let i = 0; i < vertices.length; i += 3)

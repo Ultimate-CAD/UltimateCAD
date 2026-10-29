@@ -13,6 +13,8 @@ try{
   await page.waitForFunction(()=>document.documentElement.dataset.palette==='midnight'&&getComputedStyle(document.body).backgroundColor==='rgb(17, 17, 17)');
   const style=await page.evaluate(()=>{const s=getComputedStyle(document.body);return {palette:document.documentElement.dataset.palette,background:s.backgroundColor,foreground:s.color,font:s.fontFamily,fontSize:s.fontSize,accent:getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()};});
   assert.equal(style.background,'rgb(17, 17, 17)');assert.equal(style.foreground,'rgb(252, 252, 252)');assert.equal(style.fontSize,'16px');assert.match(style.font,/MS PGothic/);assert.equal(style.accent,'#0169cc');checks.push({name:'Requested palette and font applied',style});
+  // Theme colors transition; inspect the settled palette rather than an intermediate frame.
+  await page.waitForFunction(()=>{const e=document.querySelector('.dashboard-action-tile:not(.create)');if(!e)return false;const rgb=getComputedStyle(e).backgroundColor.match(/\d+/g).map(Number);return rgb[0]===rgb[1]&&rgb[1]===rgb[2];});
   const tile=await page.locator('.dashboard-action-tile:not(.create)').first().evaluate(e=>getComputedStyle(e).backgroundColor);
   const rgb=tile.match(/\d+/g).map(Number);assert.equal(rgb[0],rgb[1],`Panel retained a warm tint: ${tile}`);assert.equal(rgb[1],rgb[2]);checks.push({name:'Dashboard panels are neutral gray',color:tile});
   await page.screenshot({path:path.join(out,'dashboard.png'),fullPage:true});
@@ -22,8 +24,9 @@ try{
   await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
   await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
   await page.getByRole('button',{name:'Theme',exact:true}).click();await page.getByRole('menuitem',{name:'Midnight Blue',exact:true}).click();
-  await page.waitForFunction(()=>document.documentElement.dataset.palette==='midnight');
+  await page.waitForFunction(()=>document.documentElement.dataset.palette==='midnight'&&getComputedStyle(document.body).backgroundColor==='rgb(17, 17, 17)');
   checks.push({name:'Theme is selectable; original light theme still works'});
+  await page.evaluate(()=>Promise.all(document.getAnimations().map(animation=>animation.finished.catch(()=>{}))));
   await page.screenshot({path:path.join(out,'editor.png'),fullPage:true});
   await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.palette==='midnight');
   assert.equal(await page.evaluate(()=>localStorage.getItem('layerling.theme')),'midnight');checks.push({name:'Theme persists after reload'});

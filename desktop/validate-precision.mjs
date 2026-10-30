@@ -495,7 +495,7 @@ try {
     let organic;
     for (let i = 0; i < 100; i++) {
       organic = (await command("list_objects")).objects.find(
-        (o) => o.importedTriangles === 171914,
+        (o) => o.importedTriangles > 100000 && o.edgeTreatments?.some(feature=>feature.meshHollow?.method==='mesh-sdf'),
       );
       if (organic) break;
       await pause(100);

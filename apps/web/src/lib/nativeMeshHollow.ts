@@ -13,7 +13,7 @@ export async function nativeMeshHollow(input:MeshHollowInput,signal?:AbortSignal
  view.setUint32(0,0x31474c4c,true);view.setUint32(4,1,true);view.setUint32(8,pn,true);view.setUint32(12,tn,true);view.setFloat64(16,input.thickness,true);view.setFloat64(24,input.options?.maxErrorMm??.1,true);
  for(let i=0;i<pn;i++){if(!Number.isFinite(input.positions[i]))throw new Error('Mesh contains non-finite coordinates');view.setFloat64(48+i*8,input.positions[i],true);}
  for(let i=0;i<tn;i++){const index=input.indices[i];if(!Number.isInteger(index)||index<0||index>=pn/3)throw new Error('Mesh contains invalid triangle indices');view.setUint32(48+pn*8+i*4,index,true);}
- const id=crypto.randomUUID(),unsubscribe=bridge.onProgress(id,text=>progress?.(text.trim()));
+ const id=crypto.randomUUID(),unsubscribe=bridge.onProgress(id,text=>{if(!signal?.aborted)progress?.(text.trim());});
  const abort=()=>bridge.cancel(id);signal?.addEventListener('abort',abort,{once:true});
  try{
    const reply=await bridge.run(id,bytes);

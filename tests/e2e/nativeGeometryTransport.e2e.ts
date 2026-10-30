@@ -12,10 +12,14 @@ it.skipIf(!existsSync(exe))('isolates malformed inputs and cancellation then acc
   const truncated=good.subarray(0,good.length-1);expect(()=>validateRequest(truncated)).toThrow();
   const invalid=Buffer.from(good);invalid.writeDoubleLE(NaN,48);
   await expect(jobs.run('invalid',invalid)).rejects.toThrow(/Non-finite/);
+  const immediate=jobs.run('immediate',good);jobs.cancel('immediate');await expect(immediate).rejects.toThrow(/cancelled/);
   const running=jobs.run('cancel',good);await new Promise(resolve=>setTimeout(resolve,30));jobs.cancel('cancel');
   await expect(running).rejects.toThrow(/cancelled/);
   const timed=new NativeGeometryJobs(exe,path.join(root,'timeout'),{timeoutMs:1});
   await expect(timed.run('timeout',good)).rejects.toThrow(/time budget/);
+  const crashed=jobs.run('crash',good);const rejection=expect(crashed).rejects.toThrow(/stopped/);
+  for(let i=0;i<100&&!jobs.jobs.get('crash')?.child;i++)await new Promise(resolve=>setTimeout(resolve,2));
+  jobs.jobs.get('crash').child.kill();await rejection;
   const result=await jobs.run('restart',good);expect(result.stats.measuredErrorMm).toBeLessThanOrEqual(.1);expect(jobs.jobs.size).toBe(0);
  }finally{jobs.close();rmSync(root,{recursive:true,force:true});}
 },120000);

@@ -8,10 +8,10 @@ const require=createRequire(import.meta.url),{NativeGeometryJobs}=require('../de
 const label=process.argv[2];if(!label||!/^[a-z0-9-]+$/i.test(label))throw new Error('Unique benchmark label required');
 const out=path.resolve('.codex-run/adaptive10',label);if(existsSync(out))throw new Error('Benchmark artifact already exists');mkdirSync(out,{recursive:true});
 const fixture=process.argv[3]||'.codex-run/organic-repro/source.stl';let geometry;
-if(fixture==='dense-cone')geometry=new CylinderGeometry(0,20,80,512,1024,false);
+if(['dense-cone','cone-100k','cone-500k'].includes(fixture))geometry=new CylinderGeometry(0,20,80,512,fixture==='dense-cone'?1024:fixture==='cone-100k'?100:500,false);
 else{const source=readFileSync(fixture);geometry=new STLLoader().parse(source.buffer.slice(source.byteOffset,source.byteOffset+source.byteLength));}
 const positions=geometry.attributes.position.array,indices=geometry.index?.array??Uint32Array.from({length:positions.length/3},(_,i)=>i);
-if(fixture!=='dense-cone')for(let i=0;i<positions.length;i+=3){const y=positions[i+2];positions[i+2]=-positions[i+1];positions[i+1]=y;}
+if(!['dense-cone','cone-100k','cone-500k'].includes(fixture))for(let i=0;i<positions.length;i+=3){const y=positions[i+2];positions[i+2]=-positions[i+1];positions[i+1]=y;}
 const t=performance.now(),input=encodeRequest({positions,indices,thickness:2,options:{maxErrorMm:.1}});
 input.writeUInt32LE(Number(process.env.LAYERLING_NATIVE_THREADS||0),44);
 const jobs=new NativeGeometryJobs(path.resolve('.codex-run/adaptive10/build/Release/layerling-geometry.exe'),path.join(out,'jobs'));

@@ -44,6 +44,7 @@ it.skipIf(!process.env.LAYERLING_HOLLOW_BENCH)(
     const inputSha256 = createHash("sha256")
       .update(Buffer.from(Float64Array.from(positions).buffer))
       .digest("hex");
+    const profiling = process.env.LAYERLING_HOLLOW_NO_PROFILE !== '1';
     const profiler = new Session();
     profiler.connect();
     const post = (method: string) =>
@@ -52,8 +53,7 @@ it.skipIf(!process.env.LAYERLING_HOLLOW_BENCH)(
           error ? reject(error) : resolve(result),
         ),
       );
-    await post("Profiler.enable");
-    await post("Profiler.start");
+    if(profiling){await post("Profiler.enable");await post("Profiler.start");}
     const start = performance.now(),
       memoryBefore = process.memoryUsage();
     const result = hollowMesh(
@@ -75,11 +75,11 @@ it.skipIf(!process.env.LAYERLING_HOLLOW_BENCH)(
     );
     const durationMs = performance.now() - start,
       memoryAfter = process.memoryUsage();
-    const { profile } = await post("Profiler.stop");
+    if(profiling){const { profile } = await post("Profiler.stop");
     writeFileSync(
       `.codex-run/overnight-hollow/${variant}.cpuprofile`,
       JSON.stringify(profile),
-    );
+    );}
     profiler.disconnect();
     const p = Float64Array.from(result.positions),
       i = Uint32Array.from(result.indices),

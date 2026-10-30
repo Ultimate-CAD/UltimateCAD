@@ -13,7 +13,7 @@ User authorizes continued autonomous implementation through validation and packa
 - [x] Inspect clean baseline, verify .9 installer checksum, preserve .9.1, create dedicated branch.
 - [x] A: establish reproducible focused baseline and sampling/resource measurements.
 - [x] B: C++20 native query/hollowing proof of concept and dependency comparison.
-- [ ] C/D: integrate only validated native/adaptive improvements; retain fallback and safeguards.
+- [x] C/D: integrate only validated native/adaptive improvements; retain fallback and safeguards.
 - [ ] E: geometry, exports, cancellation, crash and performance verification.
 - [ ] F: package only a stable verified release; otherwise retain an explicit development checkpoint.
 

@@ -10,9 +10,10 @@ class NativeGeometryJobs {
     if(typeof id!=='string'||!/^[a-z0-9-]{1,80}$/i.test(id)||this.jobs.has(id))throw new Error('Invalid native job identity');
     if(this.jobs.size)throw new Error('A native hollowing job is already running; cancel it before starting another');
     const buffer=validateRequest(bytes);
-    try{await fs.access(this.executable);}catch{const e=new Error('Native geometry backend unavailable; use the WASM engine');e.code='NATIVE_UNAVAILABLE';throw e;}
     const job={child:null,cancelled:false};this.jobs.set(id,job);let dir,timer;
     try{
+      try{await fs.access(this.executable);}catch{const e=new Error('Native geometry backend unavailable; use the WASM engine');e.code='NATIVE_UNAVAILABLE';throw e;}
+      if(job.cancelled)throw new Error('Native geometry cancelled');
       await fs.mkdir(this.root,{recursive:true});dir=await fs.mkdtemp(path.join(this.root,'job-'));
       const request=path.join(dir,'request.bin'),result=path.join(dir,'result.bin');
       await fs.writeFile(request,buffer);if(job.cancelled)throw new Error('Native geometry cancelled');
@@ -27,9 +28,10 @@ class NativeGeometryJobs {
       });
       if((await fs.stat(result)).size>MAX_BYTES)throw new Error('Native result exceeds its transport budget');
       const output=await fs.readFile(result);decodeResult(output,false);
+      if(stats.resultTriangles!==output.readUInt32LE(12)/3||!Number.isFinite(stats.maxErrorMm)||!Number.isFinite(stats.resultVolumeMm3)||stats.resultVolumeMm3<=0)throw new Error('Native statistics do not match the validated mesh');
       if(job.cancelled)throw new Error('Native geometry cancelled');
       return {bytes:new Uint8Array(output.buffer,output.byteOffset,output.byteLength),stats};
-    }finally{clearTimeout(timer);this.jobs.delete(id);if(dir)await fs.rm(dir,{recursive:true,force:true});}
+    }finally{clearTimeout(timer);this.jobs.delete(id);if(dir){const resolved=path.resolve(dir);if(path.dirname(resolved)!==path.resolve(this.root)||!path.basename(resolved).startsWith('job-'))throw new Error('Invalid native job cleanup path');await fs.rm(resolved,{recursive:true,force:true});}}
   }
 }
 module.exports={NativeGeometryJobs};

@@ -99,6 +99,7 @@ int main(int argc,char** argv){
   const auto cuttingStart=Clock::now();auto result=source-cavity;valid(result,"Native cavity did not leave a valid hollow solid");
   if(result.Volume()>=sourceVolume)throw std::runtime_error("Native cavity did not remove positive volume");
   const auto output=result.GetMeshGL();std::ofstream out(argv[2],std::ios::binary|std::ios::trunc);
+  if(16ull+output.NumVert()*3ull*8+output.triVerts.size()*4ull>720'000'048)throw std::runtime_error("Native result exceeds its binary transport budget");
   write(out,uint32_t(0x31524c4c));write(out,uint32_t(1));write(out,uint32_t(output.NumVert()*3));write(out,uint32_t(output.triVerts.size()));
   for(size_t i=0;i<output.vertProperties.size();i+=output.numProp)for(int j=0;j<3;++j)write(out,double(output.vertProperties[i+j]));
   for(auto index:output.triVerts)write(out,uint32_t(index));out.close();if(!out)throw std::runtime_error("Native result write failed");

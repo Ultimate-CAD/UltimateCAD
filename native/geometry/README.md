@@ -7,11 +7,13 @@ cmake -S native/geometry -B .codex-run/adaptive10/build -G "Visual Studio 18 202
 cmake --build .codex-run/adaptive10/build --config Release --parallel 8
 ```
 
-Dependencies: Manifold 3.5.4 (`ce50d78021d64507f89e8c9fc2c2e51018117857`, Apache-2.0), libigl 2.6.0 (`40e7900ccbd767f1f360e0eb10f0f1a6432e0993`, MPL-2.0 used headers), Eigen 3.4.0 (`3147391d946bb4b6c68edd901f2add6ac1f31f8c`, MPL-2.0 core). Eigen's optional unsupported modules and libigl's GPL/CGAL modules are not used. Package their notices and corresponding source before release. Upstream licenses apply even if use is currently private. MSVC static runtime redistribution terms also apply to the built binary.
+Dependencies: Manifold 3.5.4 (`ce50d78021d64507f89e8c9fc2c2e51018117857`, Apache-2.0), libigl 2.6.0 (`40e7900ccbd767f1f360e0eb10f0f1a6432e0993`, MPL-2.0 used headers), Eigen 3.4.0 (`3147391d946bb4b6c68edd901f2add6ac1f31f8c`, MPL-2.0 core), oneTBB 2022.3.0 (`f1862f38f83568d96e814e469ab61f88336cc595`, Apache-2.0). Eigen's optional unsupported modules and libigl's GPL/CGAL modules are not used; EIGEN_MPL2_ONLY enforces that restriction. Package notices and corresponding source before release. Upstream licenses apply even if use is currently private. MSVC static runtime redistribution terms also apply to the built binary.
+
+oneTBB warns against static linkage in general. Here it is contained in a standalone single-purpose process with no other TBB consumers or C++ ABI interchange. Static linkage keeps packaged execution independent of developer runtimes; concurrency, cancellation and process cleanup are tested. Eight threads are bounded with global_control; libigl preprocessing is explicitly serial to avoid hidden hardware-concurrency oversubscription.
 
 ## Protocol v1
 
-Little-endian request: 48-byte header; u32 magic LLG1, version 1, coordinate count, triangle-index count; f64 wall, sampled-error target, optional initial pitch (0 automatic); u32 flags (0 adaptive, 1 dense diagnostic), reserved 0. Follow with f64 coordinates and u32 indices. All lengths/settings/indices/coordinates are validated. No caller filesystem paths cross the renderer boundary; the broker owns temporary request/result paths.
+Little-endian request: 48-byte header; u32 magic LLG1, version 1, coordinate count, triangle-index count; f64 wall, sampled-error target, optional initial pitch (0 automatic); u32 flags (0 adaptive, 1 dense diagnostic), thread count (0 automatic/eight, or 1–16). Follow with f64 coordinates and u32 indices. All lengths/settings/indices/coordinates are validated. No caller filesystem paths cross the renderer boundary; the broker owns temporary request/result paths. An optional trusted CLI owner PID enables parent-death termination.
 
 Result: 16-byte header (u32 LLR1 magic, version, coordinate count, index count), f64 coordinates, u32 indices. Bounded JSON statistics go to stdout, progress/errors to stderr. Source and result arrays cross process boundaries by copying. The caller owns received arrays; helper exit releases all native geometry/index state. Cancellation kills this one helper; no persistent native cache yet.
 

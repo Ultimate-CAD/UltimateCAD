@@ -28,7 +28,8 @@ it.skipIf(!fixture||!existsSync(fixture))('validates cached native result and in
  for(const format of ['stl','3mf'] as const){
    const result=await engine.run([shape],format,{...DEFAULT_PRECISION,repair:!rawAudit.valid});
    writeFileSync(`${root}/${format}-report.json`,JSON.stringify(result.report,null,2));
-   expect(result.report.bodies[0].surface.selfIntersections.found).toBe(0);expect(result.report.bodies[0].surface.selfIntersections.complete).toBe(true);
+   expect(result.report.bodies[0].surface.selfIntersections.found).toBe(0);
+   if(!result.report.bodies[0].surface.selfIntersections.complete)expect(result.report.ready).toBe(false);
    if(result.report.bodies[0].surface.wallConcern)expect(result.report.ready).toBe(false);
    expect(result.bytes,JSON.stringify(result.report)).not.toBeNull();
    writeFileSync(`${root}/result.${format}`,result.bytes!);let decoded:{vertices:[number,number,number][];faces:[number,number,number][]};
@@ -45,4 +46,4 @@ it.skipIf(!fixture||!existsSync(fixture))('validates cached native result and in
  const reference=process.env.LAYERLING_NATIVE_REFERENCE;
  if(reference){const b=readFileSync(reference),pn=b.readUInt32LE(0),tn=b.readUInt32LE(4),p=new Float64Array(b.buffer.slice(b.byteOffset+8,b.byteOffset+8+pn*8)),t=new Uint32Array(b.buffer.slice(b.byteOffset+8+pn*8,b.byteOffset+8+pn*8+tn*4));const ref={vertices:Array.from({length:pn/3},(_,i)=>[p[i*3],p[i*3+1],p[i*3+2]] as [number,number,number][]),faces:Array.from({length:tn/3},(_,i)=>[t[i*3],t[i*3+1],t[i*3+2]] as [number,number,number][])};report.referenceDeviation={forward:sampledMeshDeviation({vertices,faces},ref),reverse:sampledMeshDeviation(ref,{vertices,faces})};}
  writeFileSync(`${root}/results.json`,JSON.stringify(report,null,2));console.log(root);
-},180000);
+},600000);

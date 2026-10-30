@@ -24,3 +24,17 @@ it.skipIf(!existsSync(exe))('compares native closed cavities to WASM at matched 
  }
  writeFileSync(`${root}/results.json`,JSON.stringify(report,null,2));console.log(root);
 },120000);
+it.skipIf(!existsSync(exe))('handles concavities, thin additions, separate cavities and invalid sources',async()=>{
+ const rt=await manifoldModule();rt.setup();const root=`.codex-run/adaptive10/shape-cases-${Date.now()}`;mkdirSync(root,{recursive:true});
+ const stock=rt.Manifold.cube([20,20,20],true),tool=rt.Manifold.cube([10,22,10],true),notch=tool.translate([10,0,10]),concave=stock.subtract(notch);
+ const rod=rt.Manifold.cube([2,30,2],true),thin=stock.add(rod),shift=stock.translate([35,0,0]),separate=stock.add(shift);
+ try{
+  for(const [name,solid] of [['concave',concave],['thin',thin],['separate',separate]] as const){
+   const mesh=solid.getMesh(),input={positions:mesh.vertProperties,indices:mesh.triVerts,thickness:1,openings:'none' as const};
+   writeFileSync(`${root}/${name}.request`,encodeRequest(input));const r=spawnSync(exe,[`${root}/${name}.request`,`${root}/${name}.result`],{encoding:'utf8',windowsHide:true,timeout:120000});
+   expect(r.status,r.stderr).toBe(0);const stats=JSON.parse(r.stdout);expect(stats.measuredErrorMm).toBeLessThanOrEqual(.1);expect(stats.resultVolumeMm3).toBeLessThan(stats.sourceVolumeMm3);if(name==='separate')expect(stats.omittedCavities).toBe(1);
+  }
+  const mesh=stock.getMesh(),input={positions:mesh.vertProperties,indices:mesh.triVerts.slice(0,-3),thickness:1};writeFileSync(`${root}/open.request`,encodeRequest(input));
+  const invalid=spawnSync(exe,[`${root}/open.request`,`${root}/invalid.result`],{encoding:'utf8',windowsHide:true,timeout:120000});expect(invalid.status).not.toBe(0);expect(invalid.stderr).toMatch(/closed consistently oriented/);
+ }finally{for(const s of [stock,tool,notch,concave,rod,thin,shift,separate])s.delete();}
+},120000);

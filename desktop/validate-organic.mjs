@@ -9,6 +9,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
 const args = process.argv.slice(2);
+const nativeMode=process.env.LAYERLING_NATIVE_VALIDATION==='1';
 const executable = path.resolve(args.find(argument => argument.toLowerCase().endsWith('.exe')) || 'dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe');
 const sourceFile = path.resolve(process.env.LAYERLING_ORGANIC_SOURCE_FILE || '.codex-run/organic-repro/source.lyl');
 const output = path.resolve(process.env.LAYERLING_ORGANIC_VALIDATION_DIR || 'dist/ultimate/windows/organic-validation');
@@ -42,6 +43,7 @@ async function launch() {
     LAYERLING_DESKTOP_TEST: '1',
   } });
   mainProcess = await app.evaluate(() => ({ pid: process.pid, parentPid: process.ppid, executable: process.execPath }));
+  if(nativeMode)assert.equal(await app.evaluate(({app})=>app.getVersion()),'1.114.0-ultimate.10');
   assert.equal(mainProcess.executable.toLowerCase(), executable.toLowerCase());
   page = await app.firstWindow({ timeout: 90000 });
   page.setDefaultTimeout(30000);
@@ -57,6 +59,11 @@ async function bounded(promise, ms, message) {
   let timer;
   try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })]); }
   finally { clearTimeout(timer); }
+}
+async function nativeChildIds(){
+  const command=`@(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${Number(mainProcess.pid)}' | Where-Object Name -eq 'layerling-geometry.exe' | Select-Object -ExpandProperty ProcessId) | ConvertTo-Json -Compress`;
+  const {stdout}=await executeFile(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoProfile','-NonInteractive','-Command',command],{windowsHide:true});
+  const value=stdout.trim()?JSON.parse(stdout):[];return Array.isArray(value)?value:[value];
 }
 
 async function closeApplication() {
@@ -329,14 +336,17 @@ try {
   await startHeartbeat();
   const workerCountBeforeCancelRun = workerHandles.length;
   await cancelPanel.getByRole('button', { name: 'Hollow', exact: true }).click();
-  await page.waitForFunction(() => /building mesh cavity/i.test(document.querySelector('.shell-panel [role="status"]')?.textContent ?? ''), null, { timeout: 90000 });
+  await page.waitForFunction(() => /building (?:mesh|native) cavity/i.test(document.querySelector('.shell-panel [role="status"]')?.textContent ?? ''), null, { timeout: 90000 });
   progressSamples.push({ phase: 'cancel-run', text: await cancelPanel.locator('[role="status"]').innerText() });
   const startedWorkers = workerHandles.slice(workerCountBeforeCancelRun);
-  assert.ok(startedWorkers.length > 0, 'No worker started for the cancellable mesh hollow run');
+  if(!nativeMode)assert.ok(startedWorkers.length > 0, 'No worker started for the cancellable mesh hollow run');
+  const nativeChildren=nativeMode?await nativeChildIds():[];
+  if(nativeMode)assert.ok(nativeChildren.length>0,'No isolated native helper started');
   const activeWorker = startedWorkers.find(worker => /meshHollow/i.test(worker.url())) ?? startedWorkers.at(-1);
-  const workerClosed = new Promise(resolve => activeWorker.once('close', () => resolve(true)));
+  const workerClosed = nativeMode?null:new Promise(resolve => activeWorker.once('close', () => resolve(true)));
   await cancelPanel.locator('.edge-modifier-footer button.secondary').click();
-  assert.equal(await bounded(workerClosed, 5000, `Canceled worker remained active (${activeWorker.url()})`), true);
+  if(nativeMode){const deadline=Date.now()+5000;while((await nativeChildIds()).some(id=>nativeChildren.includes(id))&&Date.now()<deadline)await pause(100);assert.equal((await nativeChildIds()).some(id=>nativeChildren.includes(id)),false,'Cancelled native helper remained alive');}
+  else assert.equal(await bounded(workerClosed, 5000, `Canceled worker remained active (${activeWorker.url()})`), true);
   await cancelPanel.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
   await pause(1000);
   const afterCancel = await waitForObject(id, object => !latestShell(object), 15000, 'Canceled worker committed a hollow feature');
@@ -377,6 +387,7 @@ try {
   assert.ok(hollowed, 'The UI hollow did not finish within the worker timeout window');
   const hollowFeature = latestShell(hollowed);
   const stats = hollowFeature.meshHollow;
+  if(nativeMode)assert.equal(stats.backend,'native-cpu','Packaged UI did not use bundled native geometry');
   assert.ok(stats.measuredErrorMm <= stats.maxErrorMm, `Measured cavity error ${stats.measuredErrorMm} exceeds ${stats.maxErrorMm} mm`);
   assert.equal(stats.maxErrorMm, 0.1);
   assert.equal(hollowed.id, id, "Hollowing changed the object's identity");

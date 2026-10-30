@@ -21,7 +21,7 @@ const interactionEnabled = process.env.LAYERLING_GEOMETRY_INTERACTION === "1" ||
 const renderInstrumentationEnabled = interactionEnabled || repeatPreviewCount>0;
 const expectedAppVersion = process.env.LAYERLING_EXPECTED_APP_VERSION;
 assert.ok(Number.isFinite(cutPosition), "LAYERLING_FINISH_POSITION must be a finite number");
-assert.ok(expectedAppVersion && /\.(?:8|9)$/.test(expectedAppVersion), "Set LAYERLING_EXPECTED_APP_VERSION to the exact .8 or .9 package version");
+assert.ok(expectedAppVersion && /\.(?:8|9|10)$/.test(expectedAppVersion), "Set LAYERLING_EXPECTED_APP_VERSION to the exact .8, .9 or .10 package version");
 const profile = path.join(output, `isolated-profile-${Date.now()}`);
 mkdirSync(output, { recursive: true });
 const checks = [], errors = [], requests = [];

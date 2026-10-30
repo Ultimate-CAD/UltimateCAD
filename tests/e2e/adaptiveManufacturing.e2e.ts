@@ -17,6 +17,13 @@ it.skipIf(!fixture||!existsSync(fixture))('validates cached native result and in
  const vertices=Array.from({length:mesh.positions.length/3},(_,i)=>Array.from(mesh.positions.slice(i*3,i*3+3)) as [number,number,number]);
  const faces=Array.from({length:mesh.indices.length/3},(_,i)=>Array.from(mesh.indices.slice(i*3,i*3+3)) as [number,number,number]);
  const rawAudit=auditManufacturingMesh({vertices,faces});
+ if(process.env.LAYERLING_NATIVE_REQUIRE_RAW_VALID==='1')expect(rawAudit.valid,JSON.stringify(rawAudit)).toBe(true);
+ if(process.env.LAYERLING_NATIVE_EXTERIOR_SOURCE){
+   const bytes=readFileSync(process.env.LAYERLING_NATIVE_EXTERIOR_SOURCE),geometry=new STLLoader().parse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)),p=geometry.attributes.position.array;
+   const key=(points:number[][])=>points.map(point=>point.join(',')).sort().join(';'),delivered=new Set(faces.map(face=>key(face.map(index=>vertices[index]))));let missing=0;
+   for(let i=0;i<p.length;i+=9){const face:number[][]=[];for(let j=0;j<9;j+=3)face.push([p[i+j],p[i+j+2],-p[i+j+1]]);if(!delivered.has(key(face)))missing++;}
+   expect(missing,'Generated cavity conditioning changed original exterior facets').toBe(0);geometry.dispose();
+ }
  const low=[Infinity,Infinity,Infinity],high=[-Infinity,-Infinity,-Infinity];for(const p of vertices)for(let i=0;i<3;i++){low[i]=Math.min(low[i],p[i]);high[i]=Math.max(high[i],p[i]);}
  const width=high[0]-low[0],height=high[1]-low[1],depth=high[2]-low[2],positions:number[]=[];
  for(const face of faces)for(const index of face){const p=vertices[index];positions.push(p[0]-(low[0]+high[0])/2,p[1]-low[1],p[2]-(low[2]+high[2])/2);}

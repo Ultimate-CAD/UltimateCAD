@@ -182,16 +182,18 @@ async function validateStl(bytes) {
     validTriangleCount += 1;
   }
   assert.ok(validTriangleCount > 0, 'STL has no nonzero-area triangles');
+  if(nativeMode)assert.equal(zeroAreaTriangles,0,'Native STL contains degenerate faces');
 
-  // Keep the existing strict 1e-4 mm float-quantized edge audit. A failure is reported,
-  // then independently checked with Manifold; the edge tolerance is never relaxed.
+  // Native delivery is audited by exact float32 coordinates: quantization would
+  // incorrectly merge distinct close fans and can also hide collapsed defects.
+  // Legacy runs retain their historical quantized comparison.
   const quantize = vertex => vertex.map(value => Math.round(value * 10000)).join(',');
   const vertProperties = new Float32Array(validTriangleCount * 9);
   const triVerts = new Uint32Array(validTriangleCount * 3);
   const edgeKeys = new Float64Array(validTriangleCount * 3);
   const vertexIds = new Map();
   const vertexId = vertex => {
-    const key = quantize(vertex);
+    const key = nativeMode?vertex.join(','):quantize(vertex);
     let id = vertexIds.get(key);
     if (id === undefined) { id = vertexIds.size; vertexIds.set(key, id); }
     return id;

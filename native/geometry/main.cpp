@@ -26,6 +26,7 @@ static void boundMemory(){}
 #endif
 #include "distance.h"
 #include "adaptive_field.h"
+#include "cavity_delivery.h"
 #include <oneapi/tbb/global_control.h>
 using namespace manifold;
 using Clock=std::chrono::steady_clock;
@@ -65,7 +66,7 @@ int main(int argc,char** argv){
   mesh=source.GetMeshGL();auto bounds=source.BoundingBox();const double sourceVolume=source.Volume();
   std::cerr<<"Building native distance index\n";DistanceQuery distance(mesh);const double prepareMs=ms(start);
   double cell=requestedCell>0?requestedCell:std::min(wall*.6,std::sqrt(wall*error*4));
-  Manifold cavity;double measured=INFINITY;size_t omitted=0;uint64_t gridLocations=0,skipped=0,nodes=0;
+  Manifold cavity;double measured=INFINITY;size_t omitted=0,conditionedVertices=0;uint64_t gridLocations=0,skipped=0,nodes=0;
   const auto samplingStart=Clock::now();
   for(int pass=0;pass<4;++pass,cell/=2){
     std::cerr<<"Building native cavity, grid "<<cell<<" mm\n";
@@ -88,6 +89,12 @@ int main(int argc,char** argv){
     valid(made,"No internal cavity fits the requested wall thickness");auto components=made.Decompose();
     std::sort(components.begin(),components.end(),[](auto& a,auto& b){return std::abs(a.Volume())>std::abs(b.Volume());});
     omitted=components.size()-1;cavity=components.front().Simplify(error/4);valid(cavity,"Cavity simplification failed");
+    // Resolve numerical slivers in the cavity's actual float32 delivery frame,
+    // before measuring it and before cutting the untouched original exterior.
+    // This is construction of the approximated cavity, not a repair of source.
+    size_t separated=0;cavity=cavityDelivery(cavity,std::min(error/16,1e-4),separated);valid(cavity,"Cavity float32 conditioning failed");
+    conditionedVertices+=separated;
+    std::cerr<<"Generated cavity float32 conditioning: "<<separated<<" fan vertices; remeasuring offset\n";
     const auto sample=cavity.GetMeshGL();measured=0;
     auto point=[&](uint32_t i){return vec3(sample.vertProperties[i*sample.numProp],sample.vertProperties[i*sample.numProp+1],sample.vertProperties[i*sample.numProp+2]);};
     auto check=[&](vec3 p){measured=std::max(measured,std::abs(distance(p)-wall));};
@@ -105,7 +112,12 @@ int main(int argc,char** argv){
   for(auto index:output.triVerts)write(out,uint32_t(index));out.close();if(!out)throw std::runtime_error("Native result write failed");
   std::cout.precision(17);
   std::cerr<<"Adaptive nodes "<<nodes<<", skipped exact queries "<<skipped<<"\n";
-  std::cout<<"{\"method\":\"mesh-sdf\",\"backend\":\"native-cpu\",\"cellSizeMm\":"<<cell<<",\"maxErrorMm\":"<<error<<",\"measuredErrorMm\":"<<measured<<",\"sourceTriangles\":"<<source.NumTri()<<",\"resultTriangles\":"<<result.NumTri()<<",\"sourceVolumeMm3\":"<<sourceVolume<<",\"resultVolumeMm3\":"<<result.Volume()<<",\"cavityVolumeMm3\":"<<cavity.Volume()<<",\"evaluations\":"<<distance.queries<<",\"durationMs\":"<<ms(start)<<",\"prepareMs\":"<<prepareMs<<",\"samplingMs\":"<<samplingMs<<",\"cuttingMs\":"<<ms(cuttingStart)<<",\"logicalGridLocations\":"<<gridLocations<<",\"peakWorkingSetBytes\":"<<peakMemory()<<",\"omittedCavities\":"<<omitted<<"}\n";
+  std::cout<<"{\"method\":\"mesh-sdf\",\"backend\":\"native-cpu\",\"cellSizeMm\":"<<cell
+    <<",\"cavityConditioningMm\":"<<std::min(error/16,1e-4)<<",\"conditionedCavityVertices\":"<<conditionedVertices
+    <<",\"maxErrorMm\":"<<error<<",\"measuredErrorMm\":"<<measured<<",\"sourceTriangles\":"<<source.NumTri()<<",\"resultTriangles\":"<<result.NumTri()
+    <<",\"sourceVolumeMm3\":"<<sourceVolume<<",\"resultVolumeMm3\":"<<result.Volume()<<",\"cavityVolumeMm3\":"<<cavity.Volume()
+    <<",\"evaluations\":"<<distance.queries<<",\"durationMs\":"<<ms(start)<<",\"prepareMs\":"<<prepareMs<<",\"samplingMs\":"<<samplingMs
+    <<",\"cuttingMs\":"<<ms(cuttingStart)<<",\"logicalGridLocations\":"<<gridLocations<<",\"peakWorkingSetBytes\":"<<peakMemory()<<",\"omittedCavities\":"<<omitted<<"}\n";
   return 0;
  }catch(const std::exception& e){std::cerr<<"Native geometry error: "<<e.what()<<'\n';return 1;}
 }

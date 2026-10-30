@@ -224,7 +224,7 @@ async function runRepeatedCachedPreviewProbe(dialog,sourceMeshResourceSha256){
       const uploadsAfter=await webglUploadCounts();
       const uploadDeltaCalls=(uploadsAfter?.calls||0)-(uploadsBefore?.calls||0);
       const uploadDeltaCPUms=(uploadsAfter?.callCPUms||0)-(uploadsBefore?.callCPUms||0);
-      if(appVersion.endsWith(".9"))assert.equal(uploadDeltaCalls,0,`.9 repeat preview ${index} uploaded WebGL buffers`);
+      if(/\.(?:9|10)$/.test(appVersion))assert.equal(uploadDeltaCalls,0,`Repeat preview ${index} uploaded WebGL buffers`);
       repeatedPreviewProbe.previews.push({index,requestStartedAt,requestToUiEnabledMs:ui?ui.uiEnabledObservedAt-requestStartedAt:null,workerToUiEnabledMs:ui?.latencyMs??null,...received,uploadDeltaCalls,uploadDeltaCPUms});
       if(index%repeatedPreviewProbe.forcedGCInterval===0){
         await captureProbeMemory("before-forced-page-gc",index);
@@ -239,7 +239,7 @@ async function runRepeatedCachedPreviewProbe(dialog,sourceMeshResourceSha256){
     repeatedPreviewProbe.sourceGeometryUnchanged=sourceAfter.meshResourceSha256===sourceMeshResourceSha256;
     assert.equal(repeatedPreviewProbe.sourceGeometryUnchanged,true,"Repeated cached previews changed the saved source geometry asset");
     repeatedPreviewProbe.webglUploadDeltaCalls=repeatedPreviewProbe.previews.reduce((sum,x)=>sum+x.uploadDeltaCalls,0);
-    if(appVersion.endsWith(".9"))assert.equal(repeatedPreviewProbe.webglUploadDeltaCalls,0,".9 repeated cached previews uploaded WebGL buffers");
+    if(/\.(?:9|10)$/.test(appVersion))assert.equal(repeatedPreviewProbe.webglUploadDeltaCalls,0,"Repeated cached previews uploaded WebGL buffers");
     await captureProbeMemory("after-probe",repeatPreviewCount);
     interaction.repeatedPreviewProbe=repeatedPreviewProbe;
   }finally{
@@ -451,7 +451,7 @@ try {
   page=await app.firstWindow();
   appVersion=await app.evaluate(({app})=>app.getVersion());
   assert.equal(appVersion,expectedAppVersion,"Packaged app version did not match LAYERLING_EXPECTED_APP_VERSION exactly");
-  assert.ok(/\.(?:8|9)$/.test(appVersion),`Expected packaged .8 or .9 build, got ${appVersion}`);
+  assert.ok(/\.(?:8|9|10)$/.test(appVersion),`Expected packaged .8, .9 or .10 build, got ${appVersion}`);
   page.setDefaultTimeout(30000); page.on("pageerror",e=>errors.push(e.message)); page.on("request",r=>requests.push(r.url()));
   if(renderInstrumentationEnabled)await page.evaluate(()=>{window.__layerlingGeometryDiagnostics=true});
   await page.evaluate(()=>{
@@ -573,7 +573,7 @@ try {
     const first=interaction.snapshots["first-valid-preview"],cached=interaction.snapshots["identical-cached-preview"];
     const uploadDelta=(cached?.bufferUploadCalls||0)-(first?.bufferUploadCalls||0);
     interaction.cachedUploadDeltaCalls=uploadDelta;
-    if(appVersion.endsWith(".9"))assert.equal(uploadDelta,0,".9 identical cached preview issued additional WebGL buffer uploads");
+    if(/\.(?:9|10)$/.test(appVersion))assert.equal(uploadDelta,0,"Identical cached preview issued additional WebGL buffer uploads");
   }
   assert.match(await applyDialog.innerText(),/\(cached\)/,"Second identical preview did not report a cache hit");
   let finishingTrace=await page.evaluate(()=>window.__hollowFinishWorkerTrace);

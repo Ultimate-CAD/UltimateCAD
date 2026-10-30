@@ -495,7 +495,7 @@ try {
     let organic;
     for (let i = 0; i < 100; i++) {
       organic = (await command("list_objects")).objects.find(
-        (o) => o.importedTriangles > 100000 && o.edgeTreatments?.some(feature=>feature.meshHollow?.method==='mesh-sdf'),
+        (o) => o.edgeTreatments?.some(feature=>feature.meshHollow?.method==='mesh-sdf'),
       );
       if (organic) break;
       await pause(100);
@@ -516,8 +516,9 @@ try {
         })
         .isDisabled(),
     );
-    pass("Raw organic export remains blocked by manufacturing defects");
-    await page
+    pass("Organic export requires manufacturing review or defect repair");
+    const conditioned=organic.edgeTreatments?.some(feature=>feature.meshHollow?.cavityConditioningMm>0);
+    if(!conditioned)await page
       .getByLabel("Preview bounded mesh repair (export copy only)")
       .check();
     await preview();
@@ -538,7 +539,7 @@ try {
       "organic-repaired.stl",
     );
     pass(
-      "Explicit organic repair yields strict manifold STL with wall concern retained",
+      conditioned?"Native conditioned cavity exports strict manifold STL with wall concern retained":"Explicit organic repair yields strict manifold STL with wall concern retained",
       verifyStl(repairedFile),
     );
     await download(

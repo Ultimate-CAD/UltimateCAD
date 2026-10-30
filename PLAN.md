@@ -14,11 +14,11 @@ User authorizes continued autonomous implementation through validation and packa
 - [x] A: establish reproducible focused baseline and sampling/resource measurements.
 - [x] B: C++20 native query/hollowing proof of concept and dependency comparison.
 - [x] C/D: integrate only validated native/adaptive improvements; retain fallback and safeguards.
-- [ ] E: geometry, exports, cancellation, crash and performance verification.
-- [ ] F: package only a stable verified release; otherwise retain an explicit development checkpoint.
+- [x] E: geometry, exports, cancellation, crash and performance verification.
+- [x] F: package only a stable verified release; otherwise retain an explicit development checkpoint.
 
 ## .10 state handoff
-Native helper and isolated broker implemented; native closed inward cavities selected automatically, WASM retained for other modes and explicit compatibility selection. Eight-thread default selected from 1/4/8/16 sweep. Unit/transport/primitive tests pass; organic serial payload matches baseline exactly, parallel difference sampled below 0.007 mm. Build/stage integration added, but packaged .10 is NOT validated yet. Report: `docs/performance/ADAPTIVE_GEOMETRY_ENGINE.md`; original request `.codex-run/adaptive10/REQUEST.md`. Next: finish manufacturing tests with default thickness threshold, cone final QA, clean checkpoint and packaged UI/offline/cancel/history/persistence validation.
+COMPLETE for the validated .10 scope. Runtime source 8decfb88690cb3072c9daed2a9c7dfcbad8b6377. 51 packaged checks pass (native UI, precision/OCCT/STEP, SCAD, 500k finishing). Final cavity delivery conditioning resolves numeric slivers/fans before cutting the unchanged source; all 4,812 original organic exterior triangles retained exactly. Organic 152.858 s → 7.499 s; million-triangle cone 22.082 s, independent sampled wall deviation 0.08017 mm. Raw STL/3MF topology passes; warnings retained. Cone intersection coverage remains incomplete and print-ready stays false. Aggregate memory target/full sparse storage/Bunny tiers remain unproved; CUDA deferred. Executable/installer and rollback paths/checksums in `docs/performance/ADAPTIVE_GEOMETRY_ENGINE.md`. No installer run against the working installed copy, no push. Evidence retained in `.codex-run/adaptive10`.
 
 ---
 

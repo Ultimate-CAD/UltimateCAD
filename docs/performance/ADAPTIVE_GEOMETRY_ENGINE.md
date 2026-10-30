@@ -1,6 +1,6 @@
 # Ultimate .10 adaptive geometry engineering checkpoint
 
-Status: native integration development checkpoint; final packaged verification pending. Not yet a production release.
+Status: **Ultimate .10 is validated for normal use in its supported closed, inward mesh-hollowing workflow.** The original WASM engine remains available. The final constructor is ~20.4× faster on the retained organic benchmark; the 1,048,576-triangle cone completes in 22.1 s. This is sparse query acceleration, not a fully sparse voxel allocator. Aggregate memory savings and the unavailable Stanford Bunny tiers are not established. Historical development checkpoints below are retained for traceability; the final constructor and packaged results supersede preliminary raw-output findings.
 
 ## Baseline and preservation
 
@@ -90,3 +90,32 @@ The first packaged acceptance run correctly rejected legacy STL: generated cavit
 Final organic constructor benchmark `.codex-run/adaptive10/organic-delivery-clean`: **7,498.6 ms**, 12,719,271 exact queries, 92,482 result triangles; same 0.0928647 mm sampled offset error against the 0.1 mm target. This is **20.4×** the unprofiled baseline's speed for isolated hollowing. Paired manufacturing audit `.codex-run/adaptive10/manufacturing-1793349940472` finds the **raw mesh valid without repair**: no boundary/non-manifold edges or vertices, no degenerate/duplicate faces, and complete zero-hit surface-intersection search. STL/3MF reimport pass. Normal 0.8 mm thin-region warnings remain, so the result is not automatically marked print-ready. Final versus prior WASM cavity sampled deviations are 0.020256 / 0.021300 mm, within the requested hollowing target; this is not a certified global bound.
 
 Corrected million-triangle constructor `.codex-run/adaptive10/cone-delivery-final`: **22,082.1 ms**, 1,082,636 result triangles, 0.0801697 mm sampled error, helper peak 1,076,502,528 bytes. Source remains 1,048,576 triangles. The historical unconditioned cone QA above is retained, not overwritten; corrected-result final QA follows separately. Native cancellation/timeout/crash/restart and concave/thin/component tests pass again after this correction.
+
+## Final release acceptance and remaining limitations
+
+Runtime source commit: **`8decfb88690cb3072c9daed2a9c7dfcbad8b6377`**, branch `codex/adaptive-native-geometry`. The native correction reused the unchanged production web bundle with `node desktop/build-ultimate.mjs --stage-only`; the native helper, notices, dependency source archives, application and installer were rebuilt. Verification-only harness changes are committed separately. No remote was pushed and no installed application was overwritten.
+
+**51 packaged checks passed, zero reported errors:**
+
+- `.codex-run/adaptive10/packaged-final-native/results.json`: 10 checks. Actual bundled native backend, active cancellation and process termination, restart, unchanged source/object identity/dimensions, Undo/Redo, preserved feature metadata and original group, save, graceful restart, LYL reopen and matching STL bytes. Native STL audit requires zero degenerate faces and exact float32 coordinate edge matching rather than quantization that could merge close fans.
+- `.codex-run/adaptive10/packaged-precision/results.json`: 11 checks. Native analytic/OCCT/STEP regression, export UI, actual conditioned organic result, strict independent STL and 3MF reimports, manufacturing warnings/review retained, unchanged cached source, no re-hollowing. System32-only PATH and blocked external network.
+- `.codex-run/adaptive10/packaged-openscad/results.json`: 22 checks. Bundled native engine, libraries, errors/cancellation, source/preset/project coexistence and local MCP regression; zero renderer exceptions.
+- `.codex-run/adaptive10/packaged-finishing-final-500k/results.json`: 8 checks. Same 500k fixture/3.123 mm cut as .9, 447,000-triangle result, Undo/Redo, persistence, cancellation, complete export integrity and retained warnings. Measured identical-cache extra WebGL uploads remain **zero**, asserted independently from `interaction.json`. Whole-app peak working set 3,677,832 KiB is close to the prior .9 3,671,040 KiB under these respective runs; this is not a matched isolated SDF-memory comparison.
+
+Final strict exterior/manufacturing regression `.codex-run/adaptive10/final-exterior-manufacturing.log` passes: every original 4,812 organic source triangle is retained with unchanged coordinates, raw final topology valid, no repair needed, complete zero-hit intersection searches, independent STL/3MF reimports and normal 0.8 mm warning threshold. These sources are float32 STL geometry; do not generalize that exact-coordinate observation into an exact analytic or arbitrary float64-source certificate.
+
+Corrected cone final QA `.codex-run/adaptive10/manufacturing-1793350350780` also passes: **raw topology valid without repair** and both exports independently reimport with zero boundary/non-manifold/degenerate/duplicate defects. Its 1.08M-triangle self-intersection search reaches the existing bounded coverage limit; **coverage is incomplete and ready remains false**. The retained thin-wall warning also prevents an automatic print-ready label. Unlike the earlier repaired stress exports, this final raw test preserves all source facets rather than simplifying the exterior.
+
+Independent analytic cone verification `.codex-run/adaptive10/cone-analytic-verification.json`: all 34,060 inner faces sampled at vertices, edge midpoints and centroids (238,420 samples), maximum wall deviation **0.0801697 mm** against the ideal cone side/base distance. Cavity volume 22,195.7596 mm³ versus analytic 22,213.2467 mm³, **0.07872% relative difference**. The reference ideal cone differs slightly from the faceted 512-sided source. This is sampled wall verification, not a global Hausdorff/minimum-wall certificate.
+
+Limitations: full dense per-slab sample storage remains; the 40–60% aggregate-memory goal is unproved. Fine grids can still be rejected by bounded grid/job resources. Closed inward mesh cavities use native CPU; outward/open-side operations and explicit compatibility mode use the unchanged WASM path and its conservative source guard. As before, only the largest cavity component is retained; omitted disconnected cavities are counted in feature statistics. No persistent native BVH cache, full OpenVDB integration, GPU pilot, analytic reconstruction, or exact surface-error certificate is claimed. Stanford_Bunny.stl and the original cone were not supplied/found in permitted repository assets; the supplied Bunny observations are not treated as a Layerling baseline. For .11, measure truly sparse storage and remaining native query cost before selecting CUDA.
+
+Executable: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\win-unpacked\Layerling Ultimate.exe`
+
+Installer: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\Layerling-Ultimate-OpenSCAD-Setup-x64.exe` — **256,359,602 bytes**.
+
+Installer SHA-256: `244534824d92c4bd4496804800881b6496031bc7697cced22b42a0f0ba0750f3`.
+
+Executable SHA-256: `e4365b4a4f02947f0e8d7e244e9986b0f5256d537f828e56ba3d0875eb4014d1`.
+
+Bundled native helper SHA-256: `15b27ed9a92f41c04d502214024d913977ae79830a53ed3fa6356c0634287295` (dependency pins in `resources/geometry/manifest.json`). The installer was built; acceptance runs exercised the packaged executable without replacing the installed baseline. Rollback `.9` installer remains independently preserved with the checksum recorded above.

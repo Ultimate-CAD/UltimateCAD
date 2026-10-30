@@ -11,14 +11,14 @@ User authorizes continued autonomous implementation through validation and packa
 
 ## .10 milestones
 - [x] Inspect clean baseline, verify .9 installer checksum, preserve .9.1, create dedicated branch.
-- [ ] A: establish reproducible focused baseline and sampling/resource measurements.
-- [ ] B: C++20 native query/hollowing proof of concept and dependency comparison.
+- [x] A: establish reproducible focused baseline and sampling/resource measurements.
+- [x] B: C++20 native query/hollowing proof of concept and dependency comparison.
 - [ ] C/D: integrate only validated native/adaptive improvements; retain fallback and safeguards.
 - [ ] E: geometry, exports, cancellation, crash and performance verification.
 - [ ] F: package only a stable verified release; otherwise retain an explicit development checkpoint.
 
 ## .10 state handoff
-Native source inspection in `.codex-run/adaptive10`; baseline test log there. No engine changes yet. Report: `docs/performance/ADAPTIVE_GEOMETRY_ENGINE.md`. Original request copied to `.codex-run/adaptive10/REQUEST.md`. Next: measure baseline and prototype minimal native reuse before broader dependencies.
+Native helper and isolated broker implemented; native closed inward cavities selected automatically, WASM retained for other modes and explicit compatibility selection. Eight-thread default selected from 1/4/8/16 sweep. Unit/transport/primitive tests pass; organic serial payload matches baseline exactly, parallel difference sampled below 0.007 mm. Build/stage integration added, but packaged .10 is NOT validated yet. Report: `docs/performance/ADAPTIVE_GEOMETRY_ENGINE.md`; original request `.codex-run/adaptive10/REQUEST.md`. Next: finish manufacturing tests with default thickness threshold, cone final QA, clean checkpoint and packaged UI/offline/cancel/history/persistence validation.
 
 ---
 

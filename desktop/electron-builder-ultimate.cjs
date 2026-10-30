@@ -6,6 +6,7 @@ module.exports = {
     const fs = require('node:fs'), path = require('node:path');
     fs.cpSync(path.resolve('dist/ultimate-stage/runtime'), path.join(context.appOutDir, 'resources/runtime'), { recursive: true });
     fs.cpSync(path.resolve('dist/ultimate-engine'), path.join(context.appOutDir, 'resources/openscad'), { recursive: true });
+    fs.cpSync(path.resolve('dist/ultimate-native'), path.join(context.appOutDir, 'resources/geometry'), { recursive: true });
   },
   extraResources: [
     { from: 'apps/web/public/assets/layerling/layerling-icon-512.png', to: 'icon.png' },

@@ -647,7 +647,7 @@ export type ShellOpenings = "none" | "top" | "bottom" | "top-bottom" | ShellSide
  * they intersect.
  */
 export type ShellEdges = "round" | "sharp";
-export type ShellOptions = { direction?: "inward" | "outward"; tolerance?: number; meshAccuracyMm?: number };
+export type ShellOptions = { direction?: "inward" | "outward"; tolerance?: number; meshAccuracyMm?: number; meshBackend?: "auto" | "wasm" };
 
 export type EdgeTreatmentFeature = {
   /**

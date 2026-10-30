@@ -7041,7 +7041,7 @@ export function LayerlingEditor({
           indices,
           thickness,
           openings,
-          options: { direction: options?.direction ?? "inward", maxErrorMm: options?.meshAccuracyMm ?? 0.1 },
+          options: { direction: options?.direction ?? "inward", maxErrorMm: options?.meshAccuracyMm ?? 0.1, backend: options?.meshBackend ?? "auto" },
         }, controller.signal, (progress) => {
           setShellTool((current) => current?.busy ? { ...current, progress } : current);
         });
@@ -7070,7 +7070,7 @@ export function LayerlingEditor({
           groupedBaseHeight: undefined,
           groupOperation: undefined,
         });
-        const meshOptions = { direction: options?.direction ?? "inward", meshAccuracyMm: options?.meshAccuracyMm ?? 0.1 } satisfies import("@/types/layerling").ShellOptions;
+        const meshOptions = { direction: options?.direction ?? "inward", meshAccuracyMm: options?.meshAccuracyMm ?? 0.1, ...(options?.meshBackend === "wasm" ? {meshBackend:"wasm" as const} : {}) } satisfies import("@/types/layerling").ShellOptions;
         const feature = {
           kind: "shell" as const,
           amount: thickness,

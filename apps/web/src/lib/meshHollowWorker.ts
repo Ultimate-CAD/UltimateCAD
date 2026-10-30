@@ -1,5 +1,6 @@
 import { buildsDiffer, BUILD_ID, isBuildMessage, reportWorkerBuild } from "@/lib/buildStamp";
 import type { MeshHollowInput, MeshHollowResult } from "@/lib/meshHollow";
+import {nativeMeshHollow,canNativeMeshHollow} from '@/lib/nativeMeshHollow';
 
 const MESH_HOLLOW_TIMEOUT_MS = 300_000;
 
@@ -22,6 +23,10 @@ let requestCounter = 0;
 
 /** Hollow an imported triangle mesh in its own worker so cancelling it can stop the computation. */
 export function hollowMeshOffThread(input: MeshHollowInput, signal?: AbortSignal, onProgress?: (text: string) => void): Promise<MeshHollowResult> {
+  if(canNativeMeshHollow(input))return nativeMeshHollow(input,signal,onProgress).then(result=>result??hollowMeshWasmOffThread(input,signal,onProgress));
+  return hollowMeshWasmOffThread(input,signal,onProgress);
+}
+function hollowMeshWasmOffThread(input: MeshHollowInput, signal?: AbortSignal, onProgress?: (text: string) => void): Promise<MeshHollowResult> {
   if (signal?.aborted) return Promise.reject(abortError());
   if (typeof Worker === "undefined" || typeof window === "undefined") {
     return Promise.reject(new Error("Mesh hollowing requires a Web Worker"));

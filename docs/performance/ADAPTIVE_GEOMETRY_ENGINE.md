@@ -1,6 +1,6 @@
 # Ultimate .10 adaptive geometry engineering checkpoint
 
-Status: investigation and native prototype in progress; not a production release.
+Status: native integration development checkpoint; final packaged verification pending. Not yet a production release.
 
 ## Baseline and preservation
 
@@ -23,3 +23,15 @@ First prototype: native C++20 isolated helper, existing Apache-2.0 Manifold 3.5.
 OpenVDB's mesh-to-volume implementation supports signed narrow bands and interior flood filling, but introduces TBB and other build/runtime dependencies. Embree's official closest-point example still implements triangle-distance callbacks; it is not a complete signed-distance method. Compare smaller native reuse before adding either stack. See official [OpenVDB implementation](https://www.openvdb.org/documentation/doxygen/MeshToVolume_8h.html), [Embree example](https://github.com/RenderKit/embree/blob/master/tutorials/closest_point/closest_point_device.cpp), [libigl signed-distance implementation](https://github.com/libigl/libigl/blob/v2.6.0/include/igl/signed_distance.cpp).
 
 No CUDA dependency or analytic reconstruction is introduced at this checkpoint. Accuracy remains a sampled offset error, never a certified Hausdorff or half-pitch bound.
+
+## Measured CPU implementation checkpoint
+
+Fresh WASM organic baseline: `.codex-run/overnight-hollow/adaptive10-baseline-result.json`, 155,354.5 ms, 55,036,917 queries, process max RSS 1,678,696 KiB. Native serial adaptive: `.codex-run/adaptive10/organic-native-1/results.json`, 34,755.3 ms including broker transport, 13,402,595 exact queries, helper peak working set 1,191,673,856 bytes. Mesh payloads (excluding different transport headers) are byte-identical SHA-256 `70df62958e8a1383c352ea0e35f2101e363f84de1d50bed553f086fd998f2578`. The baseline used the inspector profiler; native timing did not, so profiling overhead is part of this preliminary comparison.
+
+Native oneTBB 2022.3.0 sweep (end-to-end ms): 1 thread 35,711.0; 4 threads 10,959.0; 8 threads 7,603.1; 16 threads 7,360.0. Eight selected rather than using all logical CPUs. Thread scheduling affects triangulation; final sampled deviation versus the WASM result was 0.006878 mm forward / 0.005971 mm reverse, not a global bound. All variants achieved 0.092865 mm sampled offset error against a 0.1 mm target. Both directions of deviation were measured with ~601,699 samples. The serial adaptive block guard uses 1-Lipschitz distance bounds plus two cell diagonals; every tetrahedron capable of crossing the offset surface uses exact queries. Native dense vs adaptive sphere/cylinder output was byte-identical at one thread.
+
+Native dense cone reproduction: 1,048,576 triangles, 25,227,360-byte request; 118,155 ms serial end-to-end; 1,130,358 result triangles; 0.080170 mm sampled offset error; helper peak 1,064,022,016 bytes. Original user cone remains unavailable. This test clears the previous hard input cutoff through the native backend, not a raised WASM limit.
+
+The sampler accelerates sparse queries but still uses Manifold's dense per-slab voxel storage. No 40–60% memory reduction claim is established. Helper-only native working set and whole Node/WASM RSS have different process scopes; parent transport memory must be included before asserting a whole-workflow saving. Native memory is constrained by an 8 GiB Windows Job Object and a conservative source/topology estimate, with bounded grid work and transport. Jobs run one at a time, timeout after ten minutes, and cancellation terminates the helper. A parent-liveness monitor prevents orphan computation after host failure. Immutable source index/normals are reused across refinement passes; no persistent native BVH cache yet.
+
+Preliminary export audit: `.codex-run/adaptive10/manufacturing-1793348097937`. Native raw organic output retains the existing numeric slivers; it is not declared print-ready. Precision Studio blocks invalid raw export and offers its existing explicit non-destructive repair preview. With that repair selected (0.0001 mm budget, sampled 0.000083606 mm), STL/3MF independently reimport as valid, with zero complete-search intersection hits. This first check used min-wall 0 solely for topology/export comparison; subsequent checks must retain the normal 0.8 mm warning threshold. Manufacturing algorithms and validation gates have not been weakened.

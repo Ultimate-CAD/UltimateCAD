@@ -31,9 +31,9 @@ const web = path.join(stage, 'runtime/apps/web');
 cpSync('apps/web/.next/static', path.join(web, '.next/static'), { recursive: true });
 cpSync('apps/web/public', path.join(web, 'public'), { recursive: true });
 // The runner lives beside the app but Next resolves from its traced web directory.
-for (const name of ['main.cjs', 'server.cjs', 'preload.cjs', 'mcp-client.mjs']) cpSync(`desktop/${name}`, path.join(stage, 'app', name));
+for (const name of ['main.cjs', 'server.cjs', 'preload.cjs', 'mcp-client.mjs', 'native-geometry.cjs', 'native-geometry-protocol.cjs']) cpSync(`desktop/${name}`, path.join(stage, 'app', name));
 for (const name of ['layerling-mcp-server.mjs', 'layerling-mcp-tools.mjs', 'layerling-mcp-open.mjs']) cpSync(`scripts/${name}`, path.join(stage, 'app/mcp', name));
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: ultimate ? 'layerling-ultimate' : 'layerling-desktop', productName: ultimate ? 'Layerling Ultimate' : 'Layerling Desktop', version: ultimate ? `${pkg.version}-ultimate.9.1` : pkg.version, main: 'main.cjs', description: pkg.description, author: pkg.author, license: pkg.license }, null, 2));
+writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: ultimate ? 'layerling-ultimate' : 'layerling-desktop', productName: ultimate ? 'Layerling Ultimate' : 'Layerling Desktop', version: ultimate ? `${pkg.version}-ultimate.10` : pkg.version, main: 'main.cjs', description: pkg.description, author: pkg.author, license: pkg.license }, null, 2));
 run('desktop/licenses.mjs', []);
 console.log('Desktop runtime staged:', stage);

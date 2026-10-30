@@ -5,10 +5,10 @@ import type { ShellOpenings } from "@/types/layerling";
 import { shellOpenSides } from "@/lib/shellLimits";
 import {createMeshDistanceQuery,type DistanceQueryStats} from "@/lib/meshSignedDistance";
 
-export type MeshHollowOptions = { direction?: "inward" | "outward"; maxErrorMm?: number };
+export type MeshHollowOptions = { direction?: "inward" | "outward"; maxErrorMm?: number; backend?: "auto" | "wasm" };
 export type MeshHollowInput = { positions: ArrayLike<number>; indices: ArrayLike<number>; thickness: number; openings: ShellOpenings; options?: MeshHollowOptions };
 export type MeshHollowResult = { positions: number[]; indices: number[]; stats: {
-  method: "mesh-sdf"; cellSizeMm: number; maxErrorMm: number; measuredErrorMm: number;
+  method: "mesh-sdf"; backend?: "native-cpu"; cellSizeMm: number; maxErrorMm: number; measuredErrorMm: number;
   sourceTriangles: number; resultTriangles: number; sourceVolumeMm3: number; resultVolumeMm3: number;
   cavityVolumeMm3: number; evaluations: number; durationMs: number; omittedCavities: number; distanceQueryStats?:DistanceQueryStats;
 } };

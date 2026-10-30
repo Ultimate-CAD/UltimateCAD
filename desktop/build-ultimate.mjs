@@ -13,6 +13,7 @@ const run = (file, args) => { const result = spawnSync(file, args, { stdio: 'inh
 mkdirSync(path.join(output, 'sources'), { recursive: true });
 if (existsSync('dist/windows/legal')) cpSync('dist/windows/legal', path.join(output, 'legal'), { recursive: true });
 run(process.execPath, ['desktop/stage-openscad.mjs']);
+run(process.execPath, ['desktop/stage-native-geometry.mjs']);
 run(process.execPath, ['desktop/build.mjs', ...(process.argv.includes('--stage-only') ? ['--stage-only'] : [])]);
 writeFileSync(path.join(output, 'legal/OpenSCAD-NOTICE.md'), '# OpenSCAD native engine\n\nPrivate workstation build. OpenSCAD 2021.01, GPL-2.0-or-later.\nSource: https://github.com/openscad/openscad/tree/openscad-2021.01\nCustomizer extractor: 3D-Print-Artist-Studio f63f0791344f3c51c7e4244829f1415a95319987 (upstream package declares MIT).\nNo distribution or hosted service is authorized.\n');
 const git = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });

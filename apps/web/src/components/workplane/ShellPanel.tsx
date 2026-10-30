@@ -133,6 +133,11 @@ export function ShellPanel({
             <option value={0.3}>0.3 mm - faster</option>
           </select></label>
           <span className="shell-openings-summary">Inward mode retains the original outside surface. The cavity is a sampled mesh approximation; the selected accuracy is a target surface error, not a certified bound.</span>
+          <label>Geometry engine <select aria-label="Mesh hollow engine" disabled={busy} value={options.meshBackend ?? "auto"}
+            onChange={event => onOptionsChange?.({ ...options, meshBackend: event.target.value as "auto" | "wasm" })}>
+            <option value="auto">Automatic — native CPU for closed cavities</option>
+            <option value="wasm">Compatibility — isolated WASM worker</option>
+          </select></label>
         </> : <>
           <label>Reconstruction tolerance <select aria-label="Shell reconstruction tolerance" disabled={busy} value={options.tolerance ?? 1e-6}
             onChange={event => onOptionsChange?.({ ...options, tolerance: Number(event.target.value) })}>

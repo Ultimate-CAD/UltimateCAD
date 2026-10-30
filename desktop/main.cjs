@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, utilityProcess, session } = require('electron');
+const { app, BrowserWindow, Menu, dialog, utilityProcess, session, ipcMain } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
@@ -21,6 +21,7 @@ const writeJson = (name, data) => {
   fs.renameSync(`${target}.tmp`, target);
 };
 let server, window, quitting = false, baseUrl;
+let geometryJobs;
 const connectionPath = path.join(profile, 'connection.json');
 
 function freePort(wanted) {
@@ -35,6 +36,7 @@ function freePort(wanted) {
 }
 function cleanup() {
   quitting = true;
+  geometryJobs?.close();
   if (server) {
     // Also terminate a native OpenSCAD render below the managed utility process.
     // Killing only the Node parent can leave a console launcher/CGAL child alive.
@@ -52,6 +54,13 @@ async function start() {
   baseUrl = `http://127.0.0.1:${port}`;
   const token = crypto.randomBytes(32).toString('hex');
   const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, '../dist/desktop-stage');
+  {
+    const {NativeGeometryJobs}=require('./native-geometry.cjs');
+    geometryJobs=new NativeGeometryJobs(path.join(resources,'geometry/layerling-geometry.exe'),path.join(profile,'native-geometry-jobs'));
+    const trusted=event=>{if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame)throw new Error('Untrusted native geometry request');};
+    ipcMain.handle('geometry:run',async(event,id,bytes)=>{trusted(event);try{return {ok:true,...await geometryJobs.run(id,bytes,text=>{if(!event.sender.isDestroyed())event.sender.send('geometry:progress',id,text);})};}catch(error){return {ok:false,message:error.message,code:error.code};}});
+    ipcMain.on('geometry:cancel',(event,id)=>{trusted(event);geometryJobs.cancel(id);});
+  }
   const runtime = path.join(resources, 'runtime/apps/web');
   fs.mkdirSync(path.join(profile, 'Projects'), { recursive: true });
   server = utilityProcess.fork(path.join(__dirname, 'server.cjs'), [], {

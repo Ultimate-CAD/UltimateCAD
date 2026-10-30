@@ -1,4 +1,28 @@
-# Windows desktop release
+# Ultimate .10 scientific adaptive geometry engine
+
+User authorizes continued autonomous implementation through validation and packaging; this overrides the skill template's one-milestone stopping rule. Current desktop release plan below remains as historical context.
+
+## .10 surgical context map
+- `apps/web/src/lib/meshHollow.ts:24-165`: source validation, distance callback, domain/slabs, extraction, sampled error, Boolean.
+- `apps/web/src/lib/meshSignedDistance.ts:12-130`: immutable face records and sign/distance BVH queries.
+- `apps/web/src/lib/meshHollowWorker.ts:24-109`: copied input transport, cancellation and timeout.
+- `tests/e2e/meshHollowBenchmark.e2e.ts:11-126`: profiling and retained organic fixture.
+- `.codex-run/adaptive10/manifold/src/sdf.cpp:480-529`: encoded dense sample allocation.
+
+## .10 milestones
+- [x] Inspect clean baseline, verify .9 installer checksum, preserve .9.1, create dedicated branch.
+- [ ] A: establish reproducible focused baseline and sampling/resource measurements.
+- [ ] B: C++20 native query/hollowing proof of concept and dependency comparison.
+- [ ] C/D: integrate only validated native/adaptive improvements; retain fallback and safeguards.
+- [ ] E: geometry, exports, cancellation, crash and performance verification.
+- [ ] F: package only a stable verified release; otherwise retain an explicit development checkpoint.
+
+## .10 state handoff
+Native source inspection in `.codex-run/adaptive10`; baseline test log there. No engine changes yet. Report: `docs/performance/ADAPTIVE_GEOMETRY_ENGINE.md`. Original request copied to `.codex-run/adaptive10/REQUEST.md`. Next: measure baseline and prototype minimal native reuse before broader dependencies.
+
+---
+
+# Historical Windows desktop release
 
 Upstream: b211101dd0650a7461318a3ef73253cf9f0a801b (1.114.0).
 User authorization: implement, test, package and locally commit; continue through milestones.

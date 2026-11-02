@@ -6,6 +6,7 @@ import { t, type MessageKey } from "@/lib/i18n";
 import { installHintKey, installHintSnoozed } from "@/lib/installHint";
 import { offlineAvailable } from "@/lib/offlineSupport";
 import { useLanguage } from "@/lib/useLanguage";
+import { PRIVATE_DESKTOP } from "@/lib/productBranding";
 
 const DISMISSED_KEY = "layerling.installHintDismissed";
 const SNOOZED_KEY = "layerling.installHintSnoozed";
@@ -88,7 +89,7 @@ export function InstallAppHint({ variant = "dashboard" }: { variant?: "dashboard
     };
   }, [variant]);
 
-  if (!visible) return null;
+  if (PRIVATE_DESKTOP || !visible) return null;
 
   const dismiss = () => {
     setVisible(false);

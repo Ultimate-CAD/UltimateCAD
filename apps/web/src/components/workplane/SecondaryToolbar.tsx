@@ -1,4 +1,5 @@
 "use client";
+import { PRODUCT_BRANDING } from "@/lib/productBranding";
 
 import { GuideHelpLink } from "@/components/GuideHelpLink";
 import { ShapeMenuPanel } from "@/components/workplane/ShapeMenuPanel";
@@ -1409,10 +1410,10 @@ export function SecondaryToolbar({
         {/* The brand, in the same corner as on the start page. Not a link:
             leaving the editor is not something to trigger by accident. */}
         <div className="toolbar-brand">
-          <img src="/assets/layerling/layerling-logo.svg" alt="Layerling" />
+          <img src={PRODUCT_BRANDING.logo} alt={PRODUCT_BRANDING.name} />
           <span className="toolbar-brand-text">
-            <span className="toolbar-brand-name">layerling</span>
-            <span className="toolbar-brand-tagline">{t("brand.tagline")}</span>
+            <span className="toolbar-brand-name">{PRODUCT_BRANDING.name}</span>
+            <span className="toolbar-brand-tagline">{PRODUCT_BRANDING.tagline}</span>
           </span>
         </div>
         <div className="toolbar-workspace-tabs" role="tablist" aria-label={t("editor.modeLabel")}>

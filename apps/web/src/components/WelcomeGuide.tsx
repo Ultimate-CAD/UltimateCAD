@@ -1,5 +1,6 @@
 import type { MessageKey } from "@/lib/i18n";
 import { LAYERLING_VIDEOS } from "@/lib/layerlingVideos";
+import { PRIVATE_DESKTOP, PRODUCT_BRANDING } from "@/lib/productBranding";
 
 type Translate = (key: MessageKey) => string;
 
@@ -69,21 +70,21 @@ export function WelcomeGuideBody({ tr, offline = true }: { tr: Translate; offlin
   const more = MORE.filter(([title]) => offline || title !== "welcome.moreOfflineTitle");
   return (
     <>
-      <p>{tr("welcome.lead")}</p>
-      <p className="dashboard-welcome-switch">
+      <p>{PRIVATE_DESKTOP ? `${PRODUCT_BRANDING.name}: ${PRODUCT_BRANDING.description} Projects and geometry engines run on this workstation.` : tr("welcome.lead")}</p>
+      {!PRIVATE_DESKTOP && <p className="dashboard-welcome-switch">
         <strong>{tr("welcome.switchTitle")}</strong> {tr("welcome.switchBody")} {tr("welcome.switchImport")}{" "}
         <a href={TINKERCAD_IMPORTER_URL} target="_blank" rel="noopener noreferrer">
           {tr("welcome.switchImportLink")}
         </a>
-      </p>
-      <div className="dashboard-welcome-more">
+      </p>}
+      {!PRIVATE_DESKTOP && <div className="dashboard-welcome-more">
         <h3>{tr("welcome.gapTitle")}</h3>
         <ul>
           {GAPS.map((key) => (
             <li key={key}>{tr(key)}</li>
           ))}
         </ul>
-      </div>
+      </div>}
       <ol>
         {STEPS.map(([title, body]) => (
           <li key={title}>
@@ -102,7 +103,7 @@ export function WelcomeGuideBody({ tr, offline = true }: { tr: Translate; offlin
           ))}
         </ul>
       </div>
-      <div className="dashboard-welcome-more dashboard-welcome-videos">
+      {!PRIVATE_DESKTOP && <div className="dashboard-welcome-more dashboard-welcome-videos">
         <h3>{tr("welcome.videosTitle")}</h3>
         <ul>
           {LAYERLING_VIDEOS.map((video) => (
@@ -117,11 +118,11 @@ export function WelcomeGuideBody({ tr, offline = true }: { tr: Translate; offlin
           ))}
         </ul>
         <p className="dashboard-welcome-help">{tr("welcome.videosHint")}</p>
-      </div>
-      <div className="dashboard-welcome-more">
+      </div>}
+      {!PRIVATE_DESKTOP && <div className="dashboard-welcome-more">
         <h3>{tr("welcome.localTitle")}</h3>
         <p>{tr("welcome.localBody")}</p>
-      </div>
+      </div>}
       <p className="dashboard-welcome-help">{tr("welcome.help")}</p>
       <a className="dashboard-welcome-guide-link" href={tr("welcome.guideUrl")}>
         {tr("welcome.guideLink")}

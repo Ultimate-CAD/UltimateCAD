@@ -1,4 +1,29 @@
-# High-precision export reliability (.11)
+# Private desktop identity and offline UI (.12)
+
+User authorizes implementation, local commits and packaged validation; continue through milestones.
+
+## Current surgical context
+- `apps/web/src/config/productBranding.json`: single display/build definition; storage/protocol identifiers excluded.
+- `apps/web/src/lib/productBranding.ts`, `i18n.ts:198-217`: brand display templates before user-value interpolation; preserve URLs/notices.
+- `AppFooter.tsx:124+`, dashboard and SecondaryToolbar mastheads: private footer, local help/About and product name.
+- `desktop/main.cjs:8-17,121-170`: display identity independent of existing profile/app ID; native local Help/About menu.
+- `desktop/branding.cjs`, `stage-branding.mjs`, `stage-local-docs.mjs`, build scripts/config: shared identity, generated assets and local legal/source views.
+- `desktop/validate-branding.mjs`: isolated packaged acceptance; existing OpenSCAD/native validators reused.
+
+## Current milestones
+- [x] Verify clean .11 checkpoint, preserve complete .11 package, create `codex/private-desktop-branding`.
+- [x] Trace branding, public navigation, update hooks, documentation and compatibility identities.
+- [x] Implement central definition, private UI/navigation and local legal/source access without geometry changes.
+- [x] Focused branding/storage/serialization/help tests and type checking.
+- [ ] Commit runtime; build Windows package and validate branding, shortcuts, persistence, native workers, OpenSCAD and MCP offline.
+- [ ] Record evidence, final local commit, clean working tree; no push or installation over baseline.
+
+## Current handoff
+Default display `Ultimate CAD`, release `1.114.0-ultimate.12`; internal executable `Layerling Ultimate.exe`, package name/app IDs/storage paths remain unchanged. Source checkpoint `aba102834cca79629ca8190495ab2d5ed78d7547`; rollback `.codex-run/preserved-ultimate11`, original installer SHA-256 `13b659acf685bb6aa5c2fcf98aaf00b445ef27ad15027dca2cc205b3e070c649`. Artifacts `.codex-run/branding12`. Root LICENSE and .11 export-validation work are untouched.
+
+---
+
+# Historical high-precision export reliability (.11)
 
 User authorizes autonomous investigation, implementation, tests and packaging. Continue through milestones; do not stop at a planning-only handoff.
 

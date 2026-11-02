@@ -2,6 +2,9 @@ import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promi
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import configuration from "../desktop/branding.cjs";
+const { brand } = configuration;
+const privateDesktopGuide = process.env.LAYERLING_DESKTOP_BUILD === "true" && brand.privateDesktop;
 
 // Builds the user guide: plain static pages from docs/guide/<language>/*.md,
 // written into apps/web/public so the export carries them next to the program.
@@ -74,6 +77,7 @@ const SOURCE_CODE = "https://github.com/henmedia/layerling";
  */
 export function renderFooter({ language, messages, environment, version }) {
   const link = (href, label, extra = "") => `<a href="${escapeHtml(href)}"${extra}>${escapeHtml(label)}</a>`;
+  if (privateDesktopGuide) return `<footer class="site-footer"><div>${escapeHtml(brand.name)} · ${escapeHtml(brand.version)}</div><div>${link('/desktop/about.html', 'About')} · ${link('/desktop/licenses/index.html', 'Open-Source Licenses')}</div></footer>`;
   const external = ' rel="noopener"';
   const fallback = LANGUAGE_INFO[language].legal;
   const left = [];
@@ -199,6 +203,7 @@ export function renderInline(text, context) {
       return `<a href="/${GUIDE_LANGUAGES[context.language].dir}/${chapter[1]}.html">${label}</a>`;
     }
     const external = /^https?:\/\//.test(target);
+    if (privateDesktopGuide && external) return `<span>${label}</span>`;
     return `<a href="${target}"${external ? ' rel="noopener"' : ""}>${label}</a>`;
   });
   work = work.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
@@ -664,7 +669,7 @@ function pageShell({ language, title, description, path, alternates, chapters, c
   const nav = chapters
     .map((chapter) => `<li><a href="/${strings.dir}/${chapter.slug}.html"${chapter.slug === current ? ' aria-current="page"' : ""}>${escapeHtml(chapter.title)}</a></li>`)
     .join("");
-  const alternateLinks = Object.entries(alternates)
+  const alternateLinks = (privateDesktopGuide ? [] : Object.entries(alternates))
     .map(([code, href]) => `<link rel="alternate" hreflang="${code}" href="${SITE}${href}">`)
     .join("\n    ");
   return `<!doctype html>
@@ -672,20 +677,20 @@ function pageShell({ language, title, description, path, alternates, chapters, c
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>${escapeHtml(title)}</title>
+    <title>${escapeHtml(privateDesktopGuide ? title.replace(/\blayerling\b/gi, () => brand.name) : title)}</title>
     <meta name="description" content="${escapeHtml(description)}">
-    <link rel="canonical" href="${SITE}${englishPath ?? path}">
+    ${privateDesktopGuide ? '<meta name="robots" content="noindex,nofollow">' : `<link rel="canonical" href="${SITE}${englishPath ?? path}">`}
     ${englishPath || noindex ? '<meta name="robots" content="noindex">\n    ' : ""}${alternateLinks}
     <meta property="og:title" content="${escapeHtml(title)}">
     <meta property="og:description" content="${escapeHtml(description)}">
-    <meta property="og:image" content="${SITE}/assets/layerling/layerling-social.png">
-    <link rel="icon" href="/assets/layerling/layerling-logo.svg">
+    <meta property="og:image" content="${privateDesktopGuide ? brand.icon : `${SITE}/assets/layerling/layerling-social.png`}">
+    <link rel="icon" href="${privateDesktopGuide ? brand.favicon : '/assets/layerling/layerling-logo.svg'}">
     <script>${THEME_SCRIPT}</script>
     <style>${STYLE}</style>
   </head>
   <body${bodyClass ? ` class="${bodyClass}"` : ""}>
     <header class="bar"><div class="bar-inner">
-      <a class="brand" href="/${strings.dir}/index.html"><img src="/assets/layerling/layerling-logo.svg" alt=""><span class="brand-text"><b>layerling</b><span class="brand-note">${escapeHtml(strings.home)}</span></span></a>
+      <a class="brand" href="/${strings.dir}/index.html"><img src="${privateDesktopGuide ? brand.logo : '/assets/layerling/layerling-logo.svg'}" alt=""><span class="brand-text"><b>${privateDesktopGuide ? escapeHtml(brand.name) : 'layerling'}</b><span class="brand-note">${escapeHtml(strings.home)}</span></span></a>
       ${searchForm(strings, language)}
       ${languageMenu(languageLinks, language, strings)}
       <a class="button" id="open-editor" href="/">${escapeHtml(strings.openEditor)}</a>
@@ -696,7 +701,7 @@ function pageShell({ language, title, description, path, alternates, chapters, c
 ${body}
       </main>
     </div>
-    <footer class="note">${escapeHtml(strings.sourceNote)} <a href="${strings.forumUrl}" rel="noopener">${escapeHtml(strings.forum)}</a>.</footer>
+    ${privateDesktopGuide ? '<footer class="note">Based on Layerling documentation. Original attribution and licenses are available in About.</footer>' : `<footer class="note">${escapeHtml(strings.sourceNote)} <a href="${strings.forumUrl}" rel="noopener">${escapeHtml(strings.forum)}</a>.</footer>`}
     ${footer}
     <script>${editorButtonScript(strings)}</script>
     <script>${guideSearchScript()}</script>

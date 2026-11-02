@@ -1,5 +1,6 @@
 import { MESSAGES_DE } from "@/lib/messages.de";
 import { MESSAGES_EN, type MessageKey } from "@/lib/messages.en";
+import { brandInterfaceTemplate } from "@/lib/productBranding";
 import {
   DEFAULT_LANGUAGE,
   LANGUAGE_INFO,
@@ -47,7 +48,9 @@ export function createCatalogueStore(
       if (!catalogue) return false;
       let sentences = sentenceSets.get(language);
       if (!sentences) {
-        sentences = new Set(Object.values(catalogue));
+        sentences = new Set(Object.entries(catalogue).flatMap(([key, value]) =>
+          value === undefined ? [] : [value, brandInterfaceTemplate(value, key)],
+        ));
         sentenceSets.set(language, sentences);
       }
       return sentences.has(text);
@@ -200,7 +203,7 @@ export function translate(
   key: MessageKey,
   values?: Record<string, string | number>,
 ): string {
-  const template = catalogues.text(language, key);
+  const template = brandInterfaceTemplate(catalogues.text(language, key), key);
   if (!values) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
     Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match,

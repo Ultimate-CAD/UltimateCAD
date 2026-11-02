@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { checkAppUpdate, dismissUpdate as storeDismissUpdate, isUpdateDismissed, type AppUpdateInfo } from "./appUpdate";
+import { PRIVATE_DESKTOP } from "./productBranding";
 
 // layerling.com and the home test server are updated whenever layerling is
 // published, and the service worker tells about a new version there. Asking
@@ -11,7 +12,7 @@ import { checkAppUpdate, dismissUpdate as storeDismissUpdate, isUpdateDismissed,
 const PUBLISHED_HOSTS = new Set(["layerling.com", "www.layerling.com", "layerling.server"]);
 
 function asksGitHubForUpdates() {
-  return typeof window === "undefined" || !PUBLISHED_HOSTS.has(window.location.hostname.toLowerCase());
+  return !PRIVATE_DESKTOP && (typeof window === "undefined" || !PUBLISHED_HOSTS.has(window.location.hostname.toLowerCase()));
 }
 
 export function useAppUpdate(currentVersion: string) {

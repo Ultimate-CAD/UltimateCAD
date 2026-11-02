@@ -13,6 +13,8 @@ import { TabletHint } from "@/components/TabletHint";
 import { PenHoverTips } from "@/components/PenHoverTips";
 import { SupportNudge } from "@/components/SupportNudge";
 import { supportCardEnabled, supportLink, type SupportSettings } from "@/lib/supportLink";
+import { PRIVATE_DESKTOP, PRODUCT_BRANDING } from "@/lib/productBranding";
+import { guideHref } from "@/lib/guideLinks";
 
 export { SOURCE_CODE_URL };
 
@@ -119,6 +121,18 @@ export function AppFooter({
   }, []);
 
   // The footer is all links out of the program: the project, the forum, the release notes, the support page (#695).
+  if (PRIVATE_DESKTOP) return (
+    <footer className={variant === "editor" ? "dashboard-legal editor-legal" : "dashboard-legal"}>
+      <div className="dashboard-legal-group">
+        <span>{PRODUCT_BRANDING.name} · {PRODUCT_BRANDING.version}</span>
+      </div>
+      <div className="dashboard-legal-group">
+        <a href={guideHref(language)} target="_blank" rel="noreferrer">Local help</a>
+        <span className="dashboard-legal-dot" aria-hidden="true">·</span>
+        <a href="/desktop/about.html" target="_blank" rel="noreferrer">About</a>
+      </div>
+    </footer>
+  );
   if (simpleMode) return null;
 
   return (

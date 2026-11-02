@@ -5,12 +5,15 @@ const net = require('node:net');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const ultimate = app.getName().toLowerCase().includes('ultimate') || process.env.LAYERLING_ULTIMATE_BUILD === '1';
-const productName = ultimate ? 'Layerling Ultimate' : 'Layerling Desktop';
+const branding = require('./branding.json');
+const ultimate = require('./package.json').name === 'layerling-ultimate' || process.env.LAYERLING_ULTIMATE_BUILD === '1';
+const productName = branding.name;
+// Compatibility identity is independent of the user's display brand.
+const storageName = ultimate ? 'Layerling Ultimate' : 'Layerling Desktop';
 app.setName(productName);
 app.setAppUserModelId(ultimate ? 'org.layerling.ultimate' : 'org.layerling.desktop');
 // Explicit profile override is used by isolated release verification, never by renderer input.
-app.setPath('userData', path.resolve(process.env.LAYERLING_DESKTOP_PROFILE || path.join(app.getPath('appData'), productName)));
+app.setPath('userData', path.resolve(process.env.LAYERLING_DESKTOP_PROFILE || path.join(app.getPath('appData'), storageName)));
 const profile = app.getPath('userData');
 fs.mkdirSync(profile, { recursive: true });
 const log = message => fs.appendFileSync(path.join(profile, 'desktop.log'), `${new Date().toISOString()} ${message}\n`);
@@ -23,6 +26,11 @@ const writeJson = (name, data) => {
 let server, window, quitting = false, baseUrl;
 let geometryJobs;
 const connectionPath = path.join(profile, 'connection.json');
+
+function openLocalPage(url) {
+  if (!url.startsWith('/') || url.startsWith('//') || url.includes('\\')) throw Error('Help must be a local page');
+  void window?.webContents.executeJavaScript(`window.open(${JSON.stringify(url)}, '_blank')`, true).catch(error => log(error.message));
+}
 
 function freePort(wanted) {
   return new Promise((resolve, reject) => {
@@ -64,7 +72,7 @@ async function start() {
   const runtime = path.join(resources, 'runtime/apps/web');
   fs.mkdirSync(path.join(profile, 'Projects'), { recursive: true });
   server = utilityProcess.fork(path.join(__dirname, 'server.cjs'), [], {
-    cwd: profile, stdio: 'pipe', serviceName: 'Layerling CAD server',
+    cwd: profile, stdio: 'pipe', serviceName: `${productName} CAD server`,
     env: { ...process.env, NODE_ENV: 'production', PORT: String(port), HOSTNAME: '127.0.0.1',
       LAYERLING_RUNTIME: runtime, LAYERLING_MCP_REMOTE: 'true', LAYERLING_MCP_TOKEN: token,
       LAYERLING_SHARED_PROJECTS_DIR: path.join(profile, 'Projects'), LAYERLING_DESKTOP_DATA: profile,
@@ -78,7 +86,7 @@ async function start() {
   server.once('exit', code => {
     exited = true;
     log(`Server exited: ${code}`);
-    if (!quitting) { dialog.showErrorBox('Layerling server stopped', `The application server exited (${code}). See ${path.join(profile, 'desktop.log')}`); app.quit(); }
+    if (!quitting) { dialog.showErrorBox(`${productName} server stopped`, `The application server exited (${code}). See ${path.join(profile, 'desktop.log')}`); app.quit(); }
   });
   const deadline = Date.now() + 60000;
   while (true) {
@@ -112,7 +120,7 @@ async function start() {
     callback({ requestHeaders: details.requestHeaders });
   });
   ses.on('will-download', (_event, item) => {
-    item.setSaveDialogOptions({ title: 'Save Layerling file', defaultPath: path.join(app.getPath('documents'), path.basename(item.getFilename())) });
+    item.setSaveDialogOptions({ title: `Save ${productName} file`, defaultPath: path.join(app.getPath('documents'), path.basename(item.getFilename())) });
     item.once('done', (_e, state) => log(`Download ${state}: ${item.getFilename()}`));
   });
   const bounds = readJson('window.json', { width: 1440, height: 960 });
@@ -133,6 +141,7 @@ async function start() {
     if (contents !== window.webContents) contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
   window.webContents.on('render-process-gone', (_event, details) => log(`Renderer gone: ${details.reason}`));
+  window.on('page-title-updated', (event) => { event.preventDefault(); window?.setTitle(productName); });
   window.on('close', () => { writeJson('window.json', window.getNormalBounds()); });
   window.on('closed', () => { window = null; });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -147,7 +156,10 @@ async function start() {
       } }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }] },
-    { label: 'Help', submenu: [{ label: 'About Layerling Desktop', click: () => dialog.showMessageBox(window, { message: `Layerling Desktop ${app.getVersion()}`, detail: 'AGPL-3.0-only. Layerling contributors.\nSource, license notices and build documentation accompany this release.\nLocal MCP connection: ' + connectionPath }) }] },
+    { label: 'Help', submenu: [
+      { label: 'Local help', click: () => openLocalPage(branding.helpPath) },
+      { label: `About ${productName}`, click: () => openLocalPage('/desktop/about.html') },
+    ] },
   ]));
   await window.loadURL(baseUrl);
   window.show();
@@ -165,6 +177,6 @@ else {
     // not a startup failure that should display a blocking error dialog.
     if (quitting) return;
     log(error.stack || error); cleanup();
-    dialog.showErrorBox('Layerling could not start', String(error.message || error)); app.quit();
+    dialog.showErrorBox(`${productName} could not start`, String(error.message || error)); app.quit();
   });
 }

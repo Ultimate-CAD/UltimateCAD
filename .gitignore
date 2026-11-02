@@ -100,3 +100,5 @@ apps/web/public/fonts/japanese/
 
 # Built European Portuguese user guide.
 apps/web/public/guia-pt-pt/
+# Generated from the single product branding definition at build time.
+/apps/web/public/assets/ultimate-cad/generated/

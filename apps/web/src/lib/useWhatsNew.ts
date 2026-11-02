@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { compareVersions, lastSeenVersion, latestWhatsNew, whatsNewSince, type WhatsNewEntry } from "@/lib/whatsNew";
+import { PRIVATE_DESKTOP } from "@/lib/productBranding";
 
 const LAST_SEEN_KEY = "layerling.lastSeenVersion";
 const PROJECTS_KEY = "layerling.projects";
@@ -50,6 +51,7 @@ export function useWhatsNew(current: string) {
   const [view, setView] = useState<WhatsNewView | null>(null);
 
   useEffect(() => {
+    if (PRIVATE_DESKTOP) return;
     const seen = lastSeenVersion(readLastSeen(), hasStoredDesigns());
     if (seen === null) {
       rememberVersion(current);
@@ -62,6 +64,7 @@ export function useWhatsNew(current: string) {
   }, [current]);
 
   useEffect(() => {
+    if (PRIVATE_DESKTOP) return;
     const showAgain = () => {
       const entries = latestWhatsNew(current);
       if (entries.length > 0) setView((previous) => previous ?? { entries, from: null });

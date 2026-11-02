@@ -1,6 +1,7 @@
 "use client";
 
 import { requestPersistentStorage } from "@/lib/persistentStorage";
+import { PRODUCT_BRANDING } from "@/lib/productBranding";
 import { keepShownSelection, localDesignKey, selectionHasStale, serverDesignKey, toggleDesignSelection } from "@/lib/designSelection";
 import { Archive, ArchiveRestore, ArrowLeft, Check, CheckSquare, Clock3, Copy, EllipsisVertical, Folder, FolderInput, FolderKanban, FolderPlus, FolderUp, Grid3X3, List, Pencil, Plus, RefreshCw, Search, Server, ShieldAlert, SlidersHorizontal, Sparkles, Trash2, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -3007,6 +3008,7 @@ function EditorLoadingSkeleton() {
 
   return (
     <div className="editor-loading-screen" role="status" aria-label={t("editor.loading")} aria-live="polite">
+      <img className="desktop-loading-brand" src={PRODUCT_BRANDING.splash} alt={`${PRODUCT_BRANDING.name} · ${PRODUCT_BRANDING.version}`} />
       <div className="editor-loading-toolbar">
         <div className="editor-loading-tabs">
           <span className="editor-skeleton-shimmer" />
@@ -3459,10 +3461,10 @@ function Dashboard({
     <main className="dashboard-shell">
       <header className="dashboard-topbar">
         <a className="dashboard-brand" href="./" aria-label={t("brand.home")}>
-          <img src="/assets/layerling/layerling-logo.svg" alt="" />
+          <img src={PRODUCT_BRANDING.logo} alt="" />
           <span className="dashboard-brand-text">
-            <span className="dashboard-brand-name">layerling</span>
-            <span className="dashboard-tagline">{t("brand.tagline")}</span>
+            <span className="dashboard-brand-name">{PRODUCT_BRANDING.name}</span>
+            <span className="dashboard-tagline">{PRODUCT_BRANDING.tagline}</span>
           </span>
         </a>
         <div className="dashboard-search">
@@ -4684,7 +4686,7 @@ function StaticIntro() {
     // half sits in <noscript>: crawlers and link previews without JavaScript read it as text, a
     // browser never draws it and Chrome's guess no longer sees it.
     <main className="visually-hidden notranslate" translate="no">
-      <h1>layerling - Free 3D CAD for 3D printing in your browser</h1>
+      <h1>{PRODUCT_BRANDING.name} · {PRODUCT_BRANDING.description}</h1>
       <section lang="en">
         <h2>{translate("en", "welcome.teaserTitle")}</h2>
         <WelcomeGuideBody tr={(key) => translate("en", key)} />

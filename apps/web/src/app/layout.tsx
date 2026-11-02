@@ -20,6 +20,7 @@ import { SHAPE_COLORS_BOOT_SCRIPT } from "@/lib/shapeColors";
 import { SIMPLE_MODE_BOOT_SCRIPT } from "@/lib/simpleMode";
 import { TOOLBAR_SIZE_BOOT_SCRIPT } from "@/lib/toolbarSize";
 import { VIEW_CUBE_POSITION_BOOT_SCRIPT } from "@/lib/viewCubePosition";
+import { PRIVATE_DESKTOP, PRODUCT_BRANDING } from "@/lib/productBranding";
 
 const NAME = "layerling";
 const TITLE = "layerling - Free 3D CAD for 3D printing in your browser";
@@ -48,7 +49,14 @@ const SOCIAL_CARD = "/assets/layerling/layerling-social.png";
 // (InstallAppHint); preventDefault only stops the small bar on phones.
 const INSTALL_PROMPT_SCRIPT = `window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__layerlingInstallPrompt=e;window.dispatchEvent(new Event("layerling-install-prompt"))});window.addEventListener("appinstalled",function(){window.__layerlingInstallPrompt=null;window.dispatchEvent(new Event("layerling-install-prompt"))});`;
 
-export const metadata: Metadata = {
+export const metadata: Metadata = PRIVATE_DESKTOP ? {
+  title: PRODUCT_BRANDING.name,
+  applicationName: PRODUCT_BRANDING.name,
+  description: PRODUCT_BRANDING.description,
+  manifest: "/desktop/manifest.webmanifest",
+  icons: { icon: PRODUCT_BRANDING.favicon, apple: PRODUCT_BRANDING.icon },
+  robots: { index: false, follow: false },
+} : {
   // Damit die Bilder fuer Linkvorschauen als volle Adresse im Kopf stehen -
   // relative Angaben liest kein Forum und kein Messenger aus.
   metadataBase: new URL("https://layerling.com"),
@@ -115,7 +123,7 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: INSTALL_PROMPT_SCRIPT }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }} />
+        {!PRIVATE_DESKTOP && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }} />}
         {children}
         <ServiceWorkerRegistration />
         <DiagnoseStrip />

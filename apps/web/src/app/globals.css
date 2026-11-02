@@ -15739,3 +15739,12 @@ html[data-theme="dark"] .guide-videos a:hover,
 html[data-theme="dark"] .interactive-help-more a:hover {
   color: #ffc784;
 }
+.desktop-loading-brand {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: min(400px, 60vw);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Ultimate CAD",
+  "version": "1.114.0-ultimate.12",
+  "tagline": "Precision CAD · Private desktop",
+  "description": "Local CAD modeling, parametric design and manufacturing export.",
+  "privateDesktop": true,
+  "logo": "/assets/ultimate-cad/icon.svg",
+  "favicon": "/assets/ultimate-cad/icon.svg",
+  "icon": "/assets/ultimate-cad/generated/icon-512.png",
+  "splash": "/assets/ultimate-cad/generated/splash.svg",
+  "artifactStem": "Ultimate-CAD",
+  "accentColor": "#0169cc",
+  "backgroundColor": "#111111",
+  "foregroundColor": "#fcfcfc",
+  "helpPath": "/guide/index.html"
+}

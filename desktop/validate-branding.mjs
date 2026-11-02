@@ -176,26 +176,28 @@ try {
 
   const shortcut = path.join(output, `${branding.name}.lnk`);
   const shortcutResult = await app.evaluate(
-    ({ shell }, shortcutPath, target, icon) => {
+    ({ shell }, { shortcutPath, target, label }) => {
       const ok = shell.writeShortcutLink(shortcutPath, "create", {
         target,
-        description: branding.name,
+        description: label,
         appUserModelId: "org.layerling.ultimate",
-        icon,
+        icon: target,
         iconIndex: 0,
       });
       return { ok, details: shell.readShortcutLink(shortcutPath) };
     },
-    shortcut,
-    executable,
-    packagedIcon,
+    { shortcutPath: shortcut, target: executable, label: branding.name },
   );
   assert.ok(shortcutResult.ok);
   assert.equal(path.resolve(shortcutResult.details.target), executable);
   assert.equal(shortcutResult.details.description, branding.name);
   assert.equal(shortcutResult.details.appUserModelId, "org.layerling.ultimate");
-  assert.equal(path.resolve(shortcutResult.details.icon), packagedIcon);
-  pass("Windows shortcut API writes and reads branded shortcut in run output only", shortcutResult.details);
+  assert.equal(path.resolve(shortcutResult.details.icon), executable);
+  pass("Windows shortcut API writes and reads branded shortcut in run output only", {
+    ...shortcutResult.details,
+    installerShortcutIconSource: executable,
+    nsisUsesExecutableIconDefault: true,
+  });
 
   const visibleExternal = await page.locator('a[href^="http"]').evaluateAll((anchors) =>
     anchors.filter((anchor) => anchor.getClientRects().length).map((anchor) => anchor.href),
@@ -481,7 +483,7 @@ try {
     anchors.map((anchor) => anchor.getAttribute("href")),
   );
   assert.ok(guideLinks.every((href) => href?.startsWith("/")));
-  await page.getByRole("button", { name: "Close the quick guide", exact: true }).click();
+  await guideDialog.locator(".workspace-modal-card").getByRole("button", { name: "Close the quick guide", exact: true }).click();
   pass("Editor Quick Guide hides public video links and retains local full guide link", guideLinks);
 
   const expectedShapes = shapeSignature(projectJson(fixtureSavedFile));

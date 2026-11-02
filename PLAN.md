@@ -15,11 +15,11 @@ User authorizes implementation, local commits and packaged validation; continue 
 - [x] Trace branding, public navigation, update hooks, documentation and compatibility identities.
 - [x] Implement central definition, private UI/navigation and local legal/source access without geometry changes.
 - [x] Focused branding/storage/serialization/help tests and type checking.
-- [ ] Commit runtime; build Windows package and validate branding, shortcuts, persistence, native workers, OpenSCAD and MCP offline.
-- [ ] Record evidence, final local commit, clean working tree; no push or installation over baseline.
+- [x] Commit runtime; build Windows package and validate branding, shortcuts, persistence, native workers, OpenSCAD and MCP offline.
+- [x] Record evidence, final local commit, clean working tree; no push or installation over baseline.
 
 ## Current handoff
-Default display `Ultimate CAD`, release `1.114.0-ultimate.12`; internal executable `Layerling Ultimate.exe`, package name/app IDs/storage paths remain unchanged. Source checkpoint `aba102834cca79629ca8190495ab2d5ed78d7547`; rollback `.codex-run/preserved-ultimate11`, original installer SHA-256 `13b659acf685bb6aa5c2fcf98aaf00b445ef27ad15027dca2cc205b3e070c649`. Artifacts `.codex-run/branding12`. Root LICENSE and .11 export-validation work are untouched.
+Complete: `Ultimate CAD`, release `1.114.0-ultimate.12`, runtime `b3ad46924c662be462fe471b9b231dace2f3a58c`. Single definition `apps/web/src/config/productBranding.json`. Internal executable, package/app IDs/storage/MCP/LYL unchanged. TypeScript and full Windows build pass; 123 focused tests pass with one inherited static-label scan excluded/documented; 16 branding + 22 OpenSCAD packaged checks pass, zero errors. Installer wizard title and temporary Windows shortcut tested. Acceptance `.codex-run/branding12/packaged-1793625240483`, OpenSCAD `packaged-openscad`; report `docs/desktop/PRIVATE_BRANDING.md`. Rollback `.codex-run/preserved-ultimate11` checksum unchanged. Existing installed app/profile and .11 geometry/export work are untouched. No push.
 
 ---
 

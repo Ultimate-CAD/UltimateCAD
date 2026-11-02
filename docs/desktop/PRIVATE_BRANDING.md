@@ -1,6 +1,6 @@
 # Private desktop branding (.12)
 
-Status: implementation and focused tests complete; packaged acceptance pending.
+Status: complete. Packaged Ultimate CAD `1.114.0-ultimate.12` passes acceptance.
 
 ## Single definition
 
@@ -35,3 +35,23 @@ Branch: `codex/private-desktop-branding`, started clean at `aba102834cca79629ca8
 Focused checks: 107 tests passed in nine files (branding/offline footer, error localization, update utility, storage, project persistence, SCAD records, MCP tools and guide behavior), plus 16 i18n tests passed. One inherited static English-sentence scan is excluded from the focused i18n rerun: its nine reported lines in HollowFinishingPanel/PrecisionMeshStudio are byte-identical to the .11 checkpoint. No test was weakened and those unrelated geometry UI files were not edited. Evidence: `.codex-run/branding12/inherited-i18n-scan.md`; logs `focused-final.log`, `i18n-focused.log`. TypeScript check passes (`typecheck-final.log`).
 
 `desktop/validate-branding.mjs` covers isolated packaged identity, local UI/navigation, About/licenses/source archive, original AGPL checksum, temporary Windows shortcut creation/readback, old .11 project round trip and app restart, and blocked external requests. Existing packaged OpenSCAD/native worker checks are reused separately. Acceptance runs with no development tools on PATH and external app access blocked. System network adapters and the installed user application are not changed. Expensive organic hollowing/export benchmarks are outside this branding change.
+
+## Packaged acceptance and deliverables
+
+Runtime source commit: `b3ad46924c662be462fe471b9b231dace2f3a58c`. A subsequent verification commit contains the final harness corrections and this evidence; runtime geometry/source is unchanged. Full build, type checking, legal/source staging and NSIS packaging passed (`.codex-run/branding12/windows-build.log`).
+
+- **16 branding checks, zero errors:** `.codex-run/branding12/packaged-1793625240483/results.json`; log `packaged-branding-verified.log`. Verified native app name/title/version, configured packaged icon, temporary `.lnk` creation/readback with the compatible executable's embedded icon and unchanged AppUserModelID, local dashboard/editor links, local Help and native/renderer About, AGPL license viewer and original LICENSE hash, modified source archive containing the branding definition, no upstream update requests, external popup denial, the old .11 seven-hole project and its scene/group/source records after save/reopen/restart, and a small actual native job.
+- Native helper through the unchanged packaged preload/IPC: centered 12 mm cube, 1 mm wall, requested error 0.2 mm. Backend `native-cpu`; 12 source triangles → 24 output triangles; measured error 0 mm; resulting signed volume 728 mm³; zero boundary/non-manifold edge or vertex defects. Helper computation 11.8672 ms (observed, not a performance guarantee). Artifact `native-worker-cube-stats.json` in the accepted run. This check does not modify the project or recompute the organic benchmark.
+- **22 OpenSCAD/MCP checks, zero errors:** `.codex-run/branding12/packaged-openscad/results.json`; log `packaged-openscad.log`. Includes bundled engine and libraries, stdio MCP, parameter/source edits, live regeneration, canceled renders, malformed/missing-library diagnostics, source preservation, caching, STL checks and native/SCAD coexistence. PATH contains only System32 and the development OpenSCAD installation is excluded.
+- Installer PE product name is `Ultimate CAD`; version `1.114.0-ultimate.12`; copyright remains `Copyright © 2026 Layerling contributors`. A hidden, launch-only wizard probe captured **Ultimate CAD Setup**; no install action was invoked. Evidence `.codex-run/branding12/installer-branding.json` and `check-installer.ps1`. Existing install/appdata/shortcuts were not changed. Actual installer installation/upgrade is not exercised over the user's working release.
+- Visual acceptance screenshots: `dashboard.png`, `editor.png`, `reopened-project.png` in the branding run. The floor caption is the preserved project name, not a product wordmark; no viewport label or model data was renamed. Root LICENSE and all .11 export/geometry implementation files remain unchanged. Rollback installer checksum verified again after acceptance.
+
+Earlier harness attempts exposed verification-only defects: Playwright Electron evaluate accepts one structured argument, a quick-guide close locator matched both header and backdrop, and a hidden installer needs native enumeration rather than MainWindowTitle. Those harness/probe issues are corrected; artifacts are preserved. No product workaround or validation weakening was introduced. Ambient AdGuard HTTP attempts are recorded and must fail with matching native denial logs, rather than being ignored. External app access remains blocked throughout the accepted run.
+
+Delivery paths:
+
+- Executable: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\win-unpacked\Layerling Ultimate.exe` (compatibility filename), 249,797,632 bytes; SHA-256 `d823a9cf2077735d4ce163e51294ebb60cd9a5aaecff13e864db13bac922a251`.
+- Installer: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\Ultimate-CAD-Setup-x64.exe`, 279,890,416 bytes; SHA-256 `f41cb0da2e10d4f6f5f15111b189865dc44194ece1abfff49dc398131db78f2e`.
+- Rollback: `C:\Users\Justin\layerling-desktop\.codex-run\preserved-ultimate11`.
+
+Remaining limits: branding is local build-time configuration; bundled reference documentation retains inherited technical terminology and original source. One pre-existing English-label scan remains outstanding as documented above. No global Windows networking change, live-user-profile migration or installed-app upgrade was performed. All checks concern this private packaged build; future deployment still needs its own source/license review.

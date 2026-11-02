@@ -16,10 +16,10 @@ User authorizes autonomous investigation, implementation, tests and packaging. C
 - [x] Trace B-rep validity/face relationships and retain geometry fingerprints.
 - [x] Replace confirmed unreliable narrow phase with robust orientation-based contact tests; keep defect gates.
 - [x] Focused adjacent/coplanar/real-defect regression and High/Ultra/Custom/cache/export reimport tests.
-- [ ] Packaged Windows acceptance, documentation, local commit and clean tree.
+- [x] Packaged Windows acceptance, documentation, local commit and clean tree.
 
 ## Current handoff
-Known repro: High + 1 mm maximum edge length, 353,884 triangles. Triangle 4361/4369 falsely intersect due rounded normalized plane distances (~7.1e-15). Exact BigInt projection proves disjointness; both map to the same cylindrical B-rep face. Standard High/Ultra fixture already passed. Adaptive exact-sign contact now passes the refined fixture with unchanged geometry hashes. Focused integration: 17 passing, 3 skipped. Packaged .11 acceptance remains. See `docs/performance/EXPORT_RELIABILITY.md`; artifacts `.codex-run/export11`.
+Complete: High + 1 mm maximum edge length, 353,884 triangles now passes without geometry changes. Triangle 4361/4369 was a confirmed coplanar false hit; exact BigInt projection proves disjointness. Focused integration: 17 passing, 3 optional tests skipped; unit: 13 passing; TypeScript and full Windows build pass. Packaged .11: 13 checks, zero errors, eight valid plate exports and both real-defect formats blocked. Runtime `cbbdeb2f16b735f63f1d777109174c9cf3e9c2b8`; acceptance `.codex-run/export11/packaged-1793617770339`. See `docs/performance/EXPORT_RELIABILITY.md` for measured fidelity, rollback and limits.
 
 ---
 

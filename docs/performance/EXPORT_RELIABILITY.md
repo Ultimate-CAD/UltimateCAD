@@ -1,6 +1,6 @@
 # High-precision manufacturing export reliability
 
-Status: root cause corrected and focused tests pass; packaged acceptance pending.
+Status: complete. Release 1.114.0-ultimate.11 passes focused and packaged acceptance.
 
 ## Preserved baseline
 
@@ -42,6 +42,24 @@ Focused results: 13 unit tests passed (five files); 17 integration tests passed,
 ## Limits
 
 The captured defect is proven to originate in the mesh contact predicate; this is not a claim that every possible analytic B-rep or every high-density tessellation is valid. OCCT BRepCheck validity is not a full self-interference proof. Actual file-coordinate manufacturing checks remain mandatory. Very large/dense cases can still reach the bounded validation limits and remain unverified. Existing sampled fidelity and wall-thickness estimates retain their previous limitations. No exact geometry, Boolean kernel, organic hollowing, or project serialization code was modified.
+
+## Packaged acceptance and delivery
+
+Runtime source commit: `cbbdeb2f16b735f63f1d777109174c9cf3e9c2b8`. Reproduction checkpoint: `b3514a8788fe1039e9a7473f9ac18805978ec30d`. A final verification commit contains only harness acceptance refinements and this documentation. Branch: `codex/precision-export-reliability`; no push or installation over the working release.
+
+`node desktop/build-ultimate.mjs` completed a full optimized build, production type checking, source/legal staging and NSIS packaging. Log: `.codex-run/export11/windows-build.log`. The dedicated `desktop/validate-export-reliability.mjs` launches the packaged executable using an isolated profile, System32-only PATH and the application's native network restriction. Final results: **13 named checks passed, zero errors**, artifacts `.codex-run/export11/packaged-1793617770339`, log `packaged-after-final.log`. High → Ultra → Custom (High + 1 mm edge limit) → High exports in both formats independently reimport with strict closed topology, consistent winding, no degenerate/duplicate faces, connected vertex fans and positive volume. The whole saved project JSON remains identical through settings changes. Two closed intersecting tetrahedra remain blocked, with the actual export buttons disabled, in both formats.
+
+Packaged Custom STL: 353,884 triangles, 5,677,947 candidate pairs, complete coverage, zero intersections, **7.395 s**. 3MF: same triangle count, 5,676,472 candidate pairs, complete coverage, zero intersections, **7.497 s**. Reimported volumes: 28,451.679020894262 mm³ (STL), 28,451.67912837968 mm³ (3MF). These are tessellated volumes, not the exact B-rep volume. High/Ultra/repeated-High binary STL bytes and decoded 3MF model XML are identical between the captured .10 and .11 packages (`packaged-fidelity-comparison.json`). The previously blocked Custom geometry hash is unchanged in the engine regression. No manufacturing repair was enabled.
+
+The .10 packaged baseline reproduces the precise false pair in both formats (`packaged-1793617490830/custom-edge.*.mesh-report.json`). Earlier harness attempts exposed two verification-only issues: imports close the export dialog, and local AdGuard injects HTTP request attempts. The final harness reopens the dialog and requires both native denial-log evidence and failed request events for every incidental external request. Two AdGuard attempts report `net::ERR_BLOCKED_BY_CLIENT`; none succeeded. The explicit external fetch probe also fails. No app network policy was changed.
+
+The three optional skipped integration cases require a saved smoothing project, a stress-benchmark opt-in, or the older defective organic fixture. They are outside this analytic-export fix. No organic cavity was recomputed. The installer was built but not installed; acceptance ran from the packaged executable, preserving the installed baseline.
+
+Deliverables (absolute paths):
+
+- Executable: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\win-unpacked\Layerling Ultimate.exe` — 249,797,632 bytes; SHA-256 `8fceb508864549131b2f8ce509cc2fadbdcee3f798e534413708676a3affd886`.
+- Installer: `C:\Users\Justin\layerling-desktop\dist\ultimate\windows\Layerling-Ultimate-OpenSCAD-Setup-x64.exe` — 256,383,702 bytes; SHA-256 `13b659acf685bb6aa5c2fcf98aaf00b445ef27ad15027dca2cc205b3e070c649`.
+- Rollback package: `C:\Users\Justin\layerling-desktop\.codex-run\preserved-ultimate10` (original installer checksum verified again after implementation).
 
 ## Upstream research
 

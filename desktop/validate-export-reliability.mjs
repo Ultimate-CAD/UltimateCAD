@@ -22,6 +22,8 @@ mkdirSync(output, { recursive: true });
 const checks = [];
 const errors = [];
 const requests = [];
+const failedRequests = [];
+let networkProof = null;
 let app, page, connection, editorId, child;
 
 const pass = (name, detail) => {
@@ -209,6 +211,10 @@ try {
   page.setDefaultTimeout(30000);
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => requests.push(request.url()));
+  page.on("requestfailed", (request) => failedRequests.push({
+    url: request.url(),
+    error: request.failure()?.errorText,
+  }));
   await page
     .getByRole("button", { name: "Create new 3D design", exact: true })
     .waitFor({ timeout: 90000 });
@@ -462,7 +468,16 @@ try {
   }
 
   const externalRequests = externalHttpRequests();
-  assert.equal(externalRequests.length, 0, "Unexpected external HTTP requests");
+  // Workstation software can inject requests (e.g. AdGuard). Count attempts,
+  // then require native denial and a failed request rather than hiding them.
+  const nativeLog = readFileSync(path.join(profile, "desktop.log"), "utf8");
+  const unblocked = externalRequests.filter((url) =>
+    !nativeLog.includes(`Blocked external request: ${new URL(url).origin}`) ||
+    !failedRequests.some((request) => request.url === url),
+  );
+  networkProof = { attempted: externalRequests, failedRequests, unblocked };
+  assert.deepEqual(unblocked, [], "External request was not proven blocked");
+  pass("All incidental external HTTP attempts were denied by native policy", networkProof);
   assert.deepEqual(errors, []);
   writeFileSync(
     path.join(output, "summary.json"),
@@ -500,6 +515,7 @@ try {
         errors,
         externalRequestCount: externalHttpRequests().length,
         externalRequests: externalHttpRequests(),
+        networkProof,
       },
       null,
       2,

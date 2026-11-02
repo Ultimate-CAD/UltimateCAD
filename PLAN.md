@@ -1,4 +1,29 @@
-# Private desktop identity and offline UI (.12)
+# Master campaign — .13 dense manufacturing certification
+
+User authorizes ordered engineering releases through implementation, tests, independent verification and packaging, then later milestones while resources permit. Do not stop at a proposal. Master record: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
+
+## Current surgical context
+- `apps/web/src/lib/meshManufacturingQa.ts:133-291,292-371`: paired BVH traversal, exact bounds, robust contacts, budgets, shell/thickness checks and result.
+- `apps/web/src/lib/triangleSharedContact.ts:31-120`, `robustTriangleIntersection.ts`: .11 robust predicates and shared-simplex handling; retain correctness.
+- `apps/web/src/lib/geometryTiming.ts`: opt-in per-stage profiling; no per-triangle logging.
+- `apps/web/src/lib/precisionExport.ts:300-450`, `precisionExportWorker.ts`: encoded-coordinate checks, readiness, isolation/deadline/cancel.
+- Saved cone/native source/build/test paths: audit in progress; record exact repeatable validation-only command in master roadmap.
+
+## Current milestones
+- [x] Verify clean .12 source/config/artifact hashes and recorded packaged evidence; preserve complete .12 rollback; create branch.
+- [x] Read campaign and create master roadmap with A–H status/dependencies/recovery actions.
+- [x] Profile saved cone and small correctness fixtures; research established acceleration/contact implementations.
+- [x] Implement bounded scalable checks and explicit verified/inconclusive/cancel/error outcomes without changing geometry or weakening checks.
+- [x] Obtain defensible independent dense-cone verdict; plate, intentional intersections, STL/3MF, worker cancellation/resource regressions; practical inherited i18n fix.
+- [ ] Runtime commit, .13 Windows package, offline packaged validation, report/verification commit and preserved rollback.
+- [ ] Continue B in dependency order with isolated prototype and measured acceptance; maintain later statuses honestly.
+
+## Current handoff
+Known-good .12 `2257c653dcce67c129b2362be5db161f2bc96ed2`; rollback `.codex-run/preserved-ultimate12`, installer SHA `f41cb0da2e10d4f6f5f15111b189865dc44194ece1abfff49dc398131db78f2e`. Active .13 implementation passes 30 unit tests (full i18n restored), 22 integration tests, and independent complete CGAL checks of saved native/STL/3MF cone (all 0 intersections). Surface verdict valid; 0.028632 mm sampled wall concern keeps ready=false. Public BVH range traversal reduces cached STL surface check 3.953→3.244 s with same counts/hashes, no tolerance changes. Next: runtime commit, full build, `desktop/validate-certification.mjs` and .13 plate/branding/OpenSCAD packaged checks. Main report `docs/performance/DENSE_MANUFACTURING_CERTIFICATION.md`; campaign master roadmap records all A–H states. Installed app untouched; no push.
+
+---
+
+# Historical private desktop identity and offline UI (.12)
 
 User authorizes implementation, local commits and packaged validation; continue through milestones.
 

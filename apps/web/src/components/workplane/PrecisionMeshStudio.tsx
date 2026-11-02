@@ -9,6 +9,9 @@ import { PrecisionExportSession } from "@/lib/precisionExportWorker";
 import type { PrecisionResult, PrecisionFormat } from "@/lib/precisionExport";
 import { projectExportFileName } from "@/lib/exportNames";
 import { precisionWorkingBytes } from "@/lib/precisionResource";
+import { verificationFailure, type VerificationStatus } from "@/lib/manufacturingVerdict";
+import { t, type MessageKey } from "@/lib/i18n";
+import { useLanguage } from "@/lib/useLanguage";
 import "./PrecisionMeshStudio.css";
 
 type Props = {
@@ -23,6 +26,8 @@ export function PrecisionMeshStudio({
   name,
   onDeliver,
 }: Props) {
+  useLanguage();
+  const [outcome, setOutcome] = useState<VerificationStatus | null>(null);
   const [settings, setSettings] = useState<PrecisionSettings>({
     ...DEFAULT_PRECISION,
   });
@@ -44,6 +49,7 @@ export function PrecisionMeshStudio({
     setAcknowledged(false);
     setError("");
     setProgress("");
+    setOutcome(null);
   }, [settings, shapes, format]);
   useEffect(
     () => () => {
@@ -62,6 +68,7 @@ export function PrecisionMeshStudio({
     setBusy(true);
     setError("");
     setResult(null);
+    setOutcome(null);
     setProgress("Starting isolated export worker");
     try {
       const next = await session.current.run(
@@ -75,6 +82,7 @@ export function PrecisionMeshStudio({
       );
       if (current === generation.current) {
         setResult(next);
+        setOutcome(next.report.verification.status);
         setProgress(
           next.report.ready
             ? "Manufacturing checks passed"
@@ -83,8 +91,10 @@ export function PrecisionMeshStudio({
       }
     } catch (e) {
       if (current === generation.current) {
-        setError(e instanceof Error ? e.message : String(e));
-        setProgress("");
+        const status = session.current?.lastOutcome?.status ?? verificationFailure(e).status;
+        setOutcome(status);
+        setError(status === "cancelled" ? "" : e instanceof Error ? e.message : String(e));
+        setProgress(t(`verification.${status}` as MessageKey));
       }
     } finally {
       if (current === generation.current) setBusy(false);
@@ -168,48 +178,48 @@ export function PrecisionMeshStudio({
       <div className="precision-grid">
         {field(
           "deviationMm",
-          "Maximum surface deviation (mm)",
+          t("precision.deviation"),
           0.00001,
           10,
           0.001,
         )}
-        {field("angleDeg", "Maximum normal deviation (degrees)", 0.1, 90, 0.5)}
+        {field("angleDeg", t("precision.angle"), 0.1, 90, 0.5)}
         {field(
           "maxEdgeMm",
-          "Maximum edge length (mm; 0 = unrestricted)",
+          t("precision.edge"),
           0,
           10000,
           0.1,
         )}
         {field(
           "aspectTarget",
-          "Aspect ratio target (planar optimization)",
+          t("precision.aspect"),
           1,
           1000,
           1,
         )}
         {field(
           "smoothing",
-          "Mesh smoothing strength (0 = preserve)",
+          t("precision.smoothing"),
           0,
           0.5,
           0.05,
         )}
         {field(
           "sharpAngleDeg",
-          "Preserve features sharper than (degrees)",
+          t("precision.sharp"),
           1,
           179,
           1,
         )}
         {field(
           "triangleBudget",
-          "Triangle resource budget",
+          t("precision.triangles"),
           1000,
           12000000,
           100000,
         )}
-        {field("minWallMm", "Minimum wall concern threshold (mm)", 0, 100, 0.1)}
+        {field("minWallMm", t("precision.wall"), 0, 100, 0.1)}
       </div>
       <p>
         Exact bodies use adaptive OCCT tessellation. Mesh subdivision retains
@@ -228,7 +238,7 @@ export function PrecisionMeshStudio({
       {settings.repair
         ? field(
             "repairDeviationMm",
-            "Repair deviation budget (mm)",
+            t("precision.repairDeviation"),
             0.000001,
             0.1,
             0.00001,
@@ -266,7 +276,7 @@ export function PrecisionMeshStudio({
           </button>
         ) : null}
       </div>
-      <p role="status" aria-live="polite">
+      <p role="status" aria-live="polite" data-verdict={outcome ?? undefined}>
         {progress}
       </p>
       {error ? <p role="alert">{error}</p> : null}
@@ -274,6 +284,7 @@ export function PrecisionMeshStudio({
         <div
           className="precision-results"
           data-ready={String(result.report.ready)}
+          data-verdict={result.report.verification.status}
         >
           <strong>
             {result.report.ready
@@ -282,6 +293,7 @@ export function PrecisionMeshStudio({
                 ? "Topological checks passed; manufacturing review required"
                 : "Manufacturing concerns — export blocked"}
           </strong>
+          <p>{t("verification.surface")}: {t(`verification.${result.report.verification.status}` as MessageKey)}. {t("verification.scope")}</p>
           <p>
             {result.report.triangles.toLocaleString()} triangles ·{" "}
             {(result.report.fileBytes / 1024 ** 2).toFixed(2)} MiB{" "}

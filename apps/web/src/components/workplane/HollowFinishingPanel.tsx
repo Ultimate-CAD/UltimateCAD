@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { t } from "@/lib/i18n";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { WorkplaneShape } from "@/types/layerling";
@@ -111,7 +112,7 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
     timer.current = setTimeout(
       () =>
         fail(
-          "Finishing worker timed out after 180 seconds. Source retained; retry or Cancel.",
+          t("finishing.workerTimeout"),
         ),
       180000,
     );
@@ -471,7 +472,7 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
       if (request !== revision.current) return;
       stop();
       setError(
-        "Preview timed out after 180 seconds. Source retained; retry or Cancel.",
+        t("finishing.previewTimeout"),
       );
       setStatus("Source retained");
     }, 180000);

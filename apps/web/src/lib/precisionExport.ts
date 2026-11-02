@@ -4,6 +4,11 @@ import type { StlExportMesh } from "@/lib/stlExport";
 import { exportMeshesToStl } from "@/lib/stlExport";
 import { exportMeshesTo3mf } from "@/lib/threemfExport";
 import {
+  combineSurfaceVerdicts,
+  contactVerdict,
+  type VerificationVerdict,
+} from "@/lib/manufacturingVerdict";
+import {
   auditManufacturingMesh,
   type ManufacturingAudit,
 } from "@/lib/manufacturingMesh";
@@ -66,6 +71,8 @@ export type PrecisionReport = {
   durationMs: number;
   cacheHits: number;
   ready: boolean;
+  /** Does not certify sampled thickness or global surface approximation. */
+  verification: VerificationVerdict;
   bodies: PrecisionBodyReport[];
   warnings: string[];
   limitations: string[];
@@ -393,26 +400,36 @@ export class PrecisionExportEngine {
       });
     }
     onProgress("Checking separate bodies");
+    let crossBodyVerification: VerificationVerdict | null = null;
     // Cross-body overlap/contact is checked together; STL does not carry object identity.
     if (meshes.length > 1) {
-      const combined = combineMeshes(meshes),
-        surface = manufacturingSurfaceChecks(
-          combined,
-          settings.selfIntersections,
-          0,
-        );
+      const combined = combineMeshes(meshes);
+      const surface = manufacturingSurfaceChecks(
+        combined,
+        settings.selfIntersections,
+        0,
+      );
+      crossBodyVerification = surface.selfIntersections.verification;
       if (
         surface.selfIntersections.found ||
         !surface.selfIntersections.complete
-      )
+      ) {
         bodies[0].warnings.push(
           "Separate bodies overlap or cross-body intersection checking was incomplete; combine or separate them explicitly before export",
         );
-      if (surface.selfIntersections.found)
+      }
+      if (surface.selfIntersections.found) {
         bodies[0].surface.selfIntersections.found +=
           surface.selfIntersections.found;
-      if (!surface.selfIntersections.complete)
+      }
+      if (!surface.selfIntersections.complete) {
         bodies[0].surface.selfIntersections.complete = false;
+      }
+      bodies[0].surface.selfIntersections.verification = contactVerdict(
+        bodies[0].surface.selfIntersections.found,
+        bodies[0].surface.selfIntersections.complete,
+        "Cross-body contact search incomplete",
+      );
     }
     const fileTopologyValid =
       format !== "stl" || auditManufacturingMesh(combineMeshes(meshes)).valid;
@@ -478,13 +495,20 @@ export class PrecisionExportEngine {
         durationMs: performance.now() - started,
         cacheHits,
         ready,
+        verification: combineSurfaceVerdicts(
+          fileTopologyValid && bodies.every((b) => b.audit.valid),
+          [
+            ...bodies.map((b) => b.surface.selfIntersections.verification),
+            ...(crossBodyVerification ? [crossBodyVerification] : []),
+          ],
+        ),
         bodies,
         warnings: bodies.flatMap((b) => b.warnings),
         limitations: [
           "Deviation is sampled at vertices, edge midpoints and centroids; it is not a global Hausdorff certificate.",
           "Analytic normal angles are sampled from closest-surface centroid displacement where it exceeds 0.00001 mm numerical noise; these do not certify a global maximum. Requested angular deflection is also supplied to OCCT.",
           "Mesh subdivision preserves the existing faceted surface and cannot recover an unavailable original surface.",
-          "Self-intersections use bounded double-precision BVH tests; shared pairs are checked beyond their expected edge or vertex. Tangencies and nested shells still require inspection.",
+          "The surface verdict covers topology and bounded adaptive exact-sign contact tests on encoded coordinates. Incomplete checks remain inconclusive; wall thickness, containment and fidelity requirements are reported separately.",
           "Thickness is sampled using inward normal rays, not a global minimum-wall certificate. Acute edges can produce conservative warnings.",
           "Repair is an explicit preview that changes export geometry only; the project and exact B-reps remain unchanged.",
         ],

@@ -107,6 +107,7 @@ describe("precision worker ownership", () => {
     const work = session.run([], "stl", DEFAULT_PRECISION, controller.signal);
     controller.abort();
     await expect(work).rejects.toMatchObject({ name: "AbortError" });
+    expect(session.lastOutcome?.status).toBe("cancelled");
     expect(FakeWorker.instances[0].terminated).toBe(true);
     const next = session.run([], "stl", DEFAULT_PRECISION);
     expect(FakeWorker.instances.length).toBe(2);
@@ -122,10 +123,15 @@ describe("precision worker ownership", () => {
       rejection = expect(work).rejects.toThrow(/15 minute/);
     await vi.advanceTimersByTimeAsync(900000);
     await rejection;
+    expect(session.lastOutcome?.status).toBe("inconclusive");
     expect(FakeWorker.instances[0].terminated).toBe(true);
     const next = session.run([], "stl", DEFAULT_PRECISION);
     FakeWorker.instances[1].onerror?.({ message: "WASM allocation failed" });
     await expect(next).rejects.toThrow(/allocation/);
     expect(FakeWorker.instances[1].terminated).toBe(true);
+    const crash = session.run([], "stl", DEFAULT_PRECISION);
+    FakeWorker.instances[2].onerror?.({ message: "Internal decoder error" });
+    await expect(crash).rejects.toThrow(/decoder/);
+    expect(session.lastOutcome?.status).toBe("failed");
   });
 });

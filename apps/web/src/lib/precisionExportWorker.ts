@@ -4,6 +4,11 @@ import { validatePrecisionSettings } from "@/lib/precisionMesh";
 import { assertKnownPrecisionSourceBudget } from "@/lib/precisionResource";
 import type { PrecisionFormat, PrecisionResult } from "@/lib/precisionExport";
 import {
+  verificationFailure,
+  verificationVerdict,
+  type VerificationVerdict,
+} from "@/lib/manufacturingVerdict";
+import {
   BUILD_ID,
   buildsDiffer,
   isBuildMessage,
@@ -15,6 +20,14 @@ export class PrecisionExportSession {
   private worker: Worker | null = null;
   private cancel: (() => void) | null = null;
   private sequence = 0;
+  private outcome: VerificationVerdict | null = null;
+  get lastOutcome() {
+    return this.outcome;
+  }
+  private reject(error: unknown): Promise<never> {
+    this.outcome = verificationFailure(error);
+    return Promise.reject(error);
+  }
   dispose() {
     this.cancel?.();
     this.worker?.terminate();
@@ -28,17 +41,18 @@ export class PrecisionExportSession {
     onProgress?: (s: string) => void,
   ): Promise<PrecisionResult> {
     if (signal?.aborted)
-      return Promise.reject(new DOMException("Export canceled", "AbortError"));
+      return this.reject(new DOMException("Export canceled", "AbortError"));
     if (this.cancel)
       return Promise.reject(new Error("An export preview is already running"));
+    this.outcome = null;
     try {
       validatePrecisionSettings(settings);
       assertKnownPrecisionSourceBudget(shapes, settings.triangleBudget);
     } catch (error) {
-      return Promise.reject(error);
+      return this.reject(error);
     }
     if (typeof Worker === "undefined" || typeof window === "undefined")
-      return Promise.reject(
+      return this.reject(
         new Error("Precision export requires a Web Worker"),
       );
     if (!this.worker) {
@@ -48,7 +62,7 @@ export class PrecisionExportSession {
           { type: "module", name: "layerling-precision-export" },
         );
       } catch (error) {
-        return Promise.reject(error);
+        return this.reject(error);
       }
     }
     const worker = this.worker,
@@ -63,6 +77,7 @@ export class PrecisionExportSession {
         worker.onmessageerror = null;
       };
       const fail = (error: Error) => {
+        this.outcome = verificationFailure(error);
         finish();
         worker.terminate();
         this.worker = null;
@@ -113,6 +128,12 @@ export class PrecisionExportSession {
           return;
         }
         if (message.type === "result") {
+          this.outcome =
+            message.result?.report?.verification ??
+            verificationVerdict(
+              "inconclusive",
+              "Worker result has no surface verdict",
+            );
           finish();
           resolve(message.result);
         }

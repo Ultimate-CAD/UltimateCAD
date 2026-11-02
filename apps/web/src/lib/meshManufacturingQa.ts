@@ -6,11 +6,20 @@ import {
   DoubleSide,
   Matrix4,
 } from "three";
-import { MeshBVH } from "three-mesh-bvh";
+import { ExtendedTriangle, MeshBVH } from "three-mesh-bvh";
 import type { StlExportMesh } from "@/lib/stlExport";
 import { indexManufacturingMesh } from "@/lib/manufacturingMesh";
-import { intersectsOverlappingTrianglesBeyondSharedContact } from "@/lib/triangleSharedContact";
+import { intersectsCanonicalTrianglesBeyondSharedContact } from "@/lib/triangleSharedContact";
 import { startGeometryTiming, withGeometryTiming } from "@/lib/geometryTiming";
+import { contactVerdict } from "@/lib/manufacturingVerdict";
+
+export type SurfaceCheckControls = {
+  /** Resource controls do not change geometry or contact tolerances. */
+  timeBudgetMs?: number;
+  candidatePairBudget?: number;
+  /** Opt-in per-contact timing adds clock overhead; normal runs avoid it. */
+  profile?: boolean;
+};
 
 function acceleration(mesh: StlExportMesh) {
   const geometry = new BufferGeometry();
@@ -136,6 +145,7 @@ export function manufacturingSurfaceChecks(
   checkIntersections: boolean,
   minWallMm: number,
   shellSeeds: { position: number[]; normal: number[] }[] = [],
+  controls: SurfaceCheckControls = {},
 ) {
   return indexedSurfaceChecks(
     indexManufacturingMesh(mesh),
@@ -143,6 +153,7 @@ export function manufacturingSurfaceChecks(
     minWallMm,
     shellSeeds,
     mesh,
+    controls,
   );
 }
 
@@ -152,6 +163,7 @@ export function manufacturingIndexedSurfaceChecks(
   checkIntersections: boolean,
   minWallMm: number,
   shellSeeds: { position: number[]; normal: number[] }[] = [],
+  controls: SurfaceCheckControls = {},
 ) {
   return indexedSurfaceChecks(
     mesh,
@@ -159,6 +171,7 @@ export function manufacturingIndexedSurfaceChecks(
     minWallMm,
     shellSeeds,
     mesh,
+    controls,
   );
 }
 
@@ -168,11 +181,22 @@ function indexedSurfaceChecks(
   minWallMm: number,
   shellSeeds: { position: number[]; normal: number[] }[],
   mesh: StlExportMesh,
+  controls: SurfaceCheckControls,
 ) {
+  const timeBudgetMs = controls.timeBudgetMs ?? 30000;
+  if (!Number.isFinite(timeBudgetMs) || timeBudgetMs < 0)
+    throw new Error("Invalid surface validation time budget");
+  const candidatePairBudget =
+    controls.candidatePairBudget ??
+    Math.max(5_000_000, Math.min(50_000_000, indexed.faces.length * 32));
+  if (!Number.isSafeInteger(candidatePairBudget) || candidatePairBudget < 0)
+    throw new Error("Invalid surface validation candidate budget");
+  const buildStarted = performance.now();
   const { geometry, bvh } = withGeometryTiming("surface.bvh", () =>
-      acceleration(indexed),
-    ),
-    started = performance.now();
+    acceleration(indexed),
+  );
+  const started = performance.now();
+  const bvhBuildMs = started - buildStarted;
   // Leaf BVH boxes overlap for many triangle pairs whose exact boxes are disjoint.
   // Reject those pairs before shared-contact allocation and the candidate budget.
   // This is the same strict separation already checked by the narrow phase.
@@ -189,20 +213,28 @@ function indexedSurfaceChecks(
       }
     });
   endBounds();
+  const boundsBuildMs = performance.now() - started;
   let pairs = 0,
     boundsRejectedPairs = 0,
     intersections = 0,
     complete = checkIntersections,
     minSampledThicknessMm = Infinity,
     thicknessSamples = 0;
+  let broadPhasePairs = 0,
+    narrowPhaseTests = 0,
+    sharedVertexPairs = 0,
+    sharedEdgePairs = 0,
+    duplicateFacePairs = 0,
+    unsharedPairs = 0,
+    narrowPhaseMs = 0;
+  let leafRangePairs = 0,
+    symmetricLeafRangesSkipped = 0;
+  let stopReason: "disabled" | "deadline" | "candidate-budget" | null =
+    checkIntersections ? null : "disabled";
   const intersectionFaces: number[][] = [];
   // Refinement increases legitimate local contacts even on a simple analytic
   // surface. Scale coverage with mesh size; retain hard work/time bounds and
   // keep readiness false whenever the search cannot complete.
-  const candidatePairBudget = Math.max(
-    5_000_000,
-    Math.min(50_000_000, indexed.faces.length * 32),
-  );
   const notes: string[] = [];
   let shellOrientationConcerns = 0;
   // Borrow canonical coordinate tuples; these scratch lists are consumed synchronously.
@@ -210,80 +242,130 @@ function indexedSurfaceChecks(
   const triangleA = new Array<readonly [number, number, number]>(3);
   const triangleB = new Array<readonly [number, number, number]>(3);
   const shared: (readonly [number, number, number])[] = [];
+  const fallbackA = new ExtendedTriangle();
+  const fallbackB = new ExtendedTriangle();
+  const degenerateFallback = () => {
+    fallbackA.a.set(...triangleA[0]);
+    fallbackA.b.set(...triangleA[1]);
+    fallbackA.c.set(...triangleA[2]);
+    fallbackB.a.set(...triangleB[0]);
+    fallbackB.b.set(...triangleB[1]);
+    fallbackB.c.set(...triangleB[2]);
+    fallbackA.needsUpdate = fallbackB.needsUpdate = true;
+    return fallbackA.intersectsTriangle(fallbackB);
+  };
   try {
     const endIntersections = startGeometryTiming("surface.intersections");
-    if (checkIntersections)
-      bvh.bvhcast(bvh, new Matrix4(), {
-        intersectsTriangles: (a, b, i, j) => {
-          if (i >= j) return false;
-          const ti = bvh.resolveTriangleIndex(i),
-            tj = bvh.resolveTriangleIndex(j);
-          for (let axis = 0; axis < 3; axis++) {
-            if (
-              triangleBounds[ti * 6 + axis + 3] <
-                triangleBounds[tj * 6 + axis] ||
-              triangleBounds[tj * 6 + axis + 3] < triangleBounds[ti * 6 + axis]
-            ) {
-              boundsRejectedPairs++;
-              // Enforce the time budget even when a dense broad phase is disjoint.
-              if (
-                (boundsRejectedPairs & 4095) === 0 &&
-                performance.now() - started > 30000
-              ) {
-                complete = false;
-                return true;
-              }
-              return false;
-            }
-          }
-          if (++pairs > candidatePairBudget || performance.now() - started > 30000) {
-            complete = false;
-            return true;
-          }
-          const fa = indexed.faces[ti],
-            fb = indexed.faces[tj];
-          for (let k = 0; k < 3; k++) {
-            triangleA[k] = indexed.vertices[fa[k]];
-            triangleB[k] = indexed.vertices[fb[k]];
-          }
-          shared.length = 0;
-          if (fa[0] === fb[0] || fa[0] === fb[1] || fa[0] === fb[2])
-            shared.push(triangleA[0]);
+    const intersectionStarted = performance.now();
+    if (checkIntersections) {
+      const checkPair = (i: number, j: number) => {
+        if (i >= j) return false;
+        broadPhasePairs++;
+        const ti = bvh.resolveTriangleIndex(i);
+        const tj = bvh.resolveTriangleIndex(j);
+        for (let axis = 0; axis < 3; axis++) {
           if (
-            fa[1] !== fa[0] &&
-            (fa[1] === fb[0] || fa[1] === fb[1] || fa[1] === fb[2])
-          )
-            shared.push(triangleA[1]);
-          if (
-            fa[2] !== fa[0] &&
-            fa[2] !== fa[1] &&
-            (fa[2] === fb[0] || fa[2] === fb[1] || fa[2] === fb[2])
-          )
-            shared.push(triangleA[2]);
-          if (
-            intersectsOverlappingTrianglesBeyondSharedContact(
-              a,
-              b,
-              shared,
-              triangleA,
-              triangleB,
-            )
+            triangleBounds[ti * 6 + axis + 3] < triangleBounds[tj * 6 + axis] ||
+            triangleBounds[tj * 6 + axis + 3] < triangleBounds[ti * 6 + axis]
           ) {
-            intersections++;
-            intersectionFaces.push([ti, tj]);
+            boundsRejectedPairs++;
+            // Enforce the time budget even when a dense broad phase is disjoint.
+            if (
+              (boundsRejectedPairs & 4095) === 0 &&
+              performance.now() - started >= timeBudgetMs
+            ) {
+              complete = false;
+              stopReason = "deadline";
+              return true;
+            }
+            return false;
+          }
+        }
+        if (
+          ++pairs > candidatePairBudget ||
+          performance.now() - started >= timeBudgetMs
+        ) {
+          complete = false;
+          stopReason = pairs > candidatePairBudget ? "candidate-budget" : "deadline";
+          return true;
+        }
+        const fa = indexed.faces[ti];
+        const fb = indexed.faces[tj];
+        for (let k = 0; k < 3; k++) {
+          triangleA[k] = indexed.vertices[fa[k]];
+          triangleB[k] = indexed.vertices[fb[k]];
+        }
+        shared.length = 0;
+        if (fa[0] === fb[0] || fa[0] === fb[1] || fa[0] === fb[2])
+          shared.push(triangleA[0]);
+        if (
+          fa[1] !== fa[0] &&
+          (fa[1] === fb[0] || fa[1] === fb[1] || fa[1] === fb[2])
+        )
+          shared.push(triangleA[1]);
+        if (
+          fa[2] !== fa[0] &&
+          fa[2] !== fa[1] &&
+          (fa[2] === fb[0] || fa[2] === fb[1] || fa[2] === fb[2])
+        )
+          shared.push(triangleA[2]);
+        if (shared.length === 0) unsharedPairs++;
+        else if (shared.length === 1) sharedVertexPairs++;
+        else if (shared.length === 2) sharedEdgePairs++;
+        else duplicateFacePairs++;
+        const narrowStarted = controls.profile ? performance.now() : 0;
+        const intersects = intersectsCanonicalTrianglesBeyondSharedContact(
+          triangleA,
+          triangleB,
+          shared,
+          degenerateFallback,
+        );
+        narrowPhaseTests++;
+        if (controls.profile)
+          narrowPhaseMs += performance.now() - narrowStarted;
+        if (intersects) {
+          intersections++;
+          intersectionFaces.push([ti, tj]);
+          return true;
+        }
+        return false;
+      };
+      // Public range callbacks avoid the library's per-pair Vector3 copies and
+      // identity matrix transforms. A single BVH partitions its face order into
+      // disjoint leaf ranges; skip the symmetric range before iterating pairs.
+      bvh.bvhcast(bvh, new Matrix4(), {
+        intersectsRanges: (offsetA, countA, offsetB, countB) => {
+          leafRangePairs++;
+          if (
+            (leafRangePairs & 4095) === 0 &&
+            performance.now() - started >= timeBudgetMs
+          ) {
+            complete = false;
+            stopReason = "deadline";
             return true;
+          }
+          if (offsetA > offsetB) {
+            symmetricLeafRangesSkipped++;
+            return false;
+          }
+          for (let j = offsetB; j < offsetB + countB; j++) {
+            for (let i = offsetA; i < offsetA + countA; i++) {
+              if (i < j && checkPair(i, j)) return true;
+            }
           }
           return false;
         },
       });
+    }
     endIntersections();
+    const intersectionMs = performance.now() - intersectionStarted;
     if (!checkIntersections)
       notes.push(
         "Self-intersection checking was disabled; manufacturing readiness is unverified.",
       );
     if (!complete && checkIntersections)
       notes.push(
-        `Self-intersection search reached its 30 s / ${(candidatePairBudget / 1_000_000).toFixed(2)} million candidate budget; result is incomplete.`,
+        `Self-intersection search reached its ${timeBudgetMs / 1000} s / ${(candidatePairBudget / 1_000_000).toFixed(2)} million candidate budget (${stopReason}); result is incomplete.`,
       );
     const endContainment = startGeometryTiming("surface.containment");
     const direction = new Vector3(0.389, 0.739, 0.547).normalize();
@@ -357,9 +439,35 @@ function indexedSurfaceChecks(
       selfIntersections: {
         found: intersections,
         complete,
+        exhaustive: complete && intersections === 0,
+        verification: contactVerdict(
+          intersections,
+          complete,
+          stopReason === "disabled"
+            ? "Contact checking disabled"
+            : `Resource limit: ${stopReason}`,
+        ),
+        stopReason,
+        broadPhasePairs,
+        leafRangePairs,
+        symmetricLeafRangesSkipped,
+        narrowPhaseTests,
+        contactTypes: {
+          unshared: unsharedPairs,
+          sharedVertex: sharedVertexPairs,
+          sharedEdge: sharedEdgePairs,
+          duplicateFace: duplicateFacePairs,
+        },
+        timings: {
+          bvhBuildMs,
+          boundsBuildMs,
+          intersectionMs,
+          narrowPhaseMs: controls.profile ? narrowPhaseMs : null,
+          perContactTimingEnabled: Boolean(controls.profile),
+        },
         candidatePairs: pairs,
         candidatePairBudget,
-        timeBudgetMs: 30000,
+        timeBudgetMs,
         boundsRejectedPairs,
         exampleFaces: intersectionFaces,
         method:

@@ -3,6 +3,7 @@ import { Vector3 } from "three";
 import { ExtendedTriangle } from "three-mesh-bvh";
 import { intersectsBeyondSharedContact as baseline } from "../fixtures/geometry8/triangleSharedContact";
 import { intersectsBeyondSharedContact as optimized } from "@/lib/triangleSharedContact";
+import { intersectsCanonicalTrianglesBeyondSharedContact } from "@/lib/triangleSharedContact";
 import { exactTriangleSat } from "../helpers/exactTriangleSat";
 
 it("preserves shared-topology semantics and checks unshared triangles against independent exact SAT", () => {
@@ -57,6 +58,12 @@ it("preserves shared-topology semantics and checks unshared triangles against in
             : baseline(a, b, shared);
           expect(optimized(a, b, shared, p, q)).toBe(expected);
           expect(optimized(a, b, shared)).toBe(expected);
+          const separated = [0, 1, 2].some(axis =>
+            Math.max(...p.map(v => v[axis])) < Math.min(...q.map(v => v[axis])) ||
+            Math.max(...q.map(v => v[axis])) < Math.min(...p.map(v => v[axis])),
+          );
+          if (separated) expect(expected).toBe(false);
+          else expect(intersectsCanonicalTrianglesBeyondSharedContact(p, q, shared, () => a.intersectsTriangle(b))).toBe(expected);
           if (expected) intersections++;
           checked++;
         }

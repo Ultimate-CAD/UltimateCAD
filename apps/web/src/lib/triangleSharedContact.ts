@@ -54,8 +54,20 @@ export function intersectsOverlappingTrianglesBeyondSharedContact(
   p: Point[],
   q: Point[],
 ) {
+  return intersectsCanonicalTrianglesBeyondSharedContact(p, q, shared, () => a.intersectsTriangle(b));
+}
+
+/** Caller must reject strictly separated exact AABBs first, as in the wrapper.
+ * Coordinate-only entry for BVH range traversal. Degenerate inputs retain the
+ * established fallback; ordinary contacts need no Vector3 copies or transforms. */
+export function intersectsCanonicalTrianglesBeyondSharedContact(
+  p: Point[],
+  q: Point[],
+  shared: readonly Point[],
+  degenerateFallback: () => boolean,
+) {
   if (!shared.length)
-    return robustTriangleIntersection(p, q) ?? a.intersectsTriangle(b);
+    return robustTriangleIntersection(p, q) ?? degenerateFallback();
   if (shared.length === 3) return true;
   if (
     same(p[0], p[1]) ||
@@ -65,7 +77,7 @@ export function intersectsOverlappingTrianglesBeyondSharedContact(
     same(q[1], q[2]) ||
     same(q[2], q[0])
   )
-    return a.intersectsTriangle(b);
+    return degenerateFallback();
   if (shared.length === 2) {
     const s = shared[0],
       t = shared[1];

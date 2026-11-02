@@ -1,4 +1,29 @@
-# Ultimate .10 scientific adaptive geometry engine
+# High-precision export reliability (.11)
+
+User authorizes autonomous investigation, implementation, tests and packaging. Continue through milestones; do not stop at a planning-only handoff.
+
+## Current surgical context
+- `apps/web/src/lib/triangleSharedContact.ts:49-100`: no-shared narrow phase delegates to rounded-plane library predicate; shared-edge cases use orientation tests.
+- `apps/web/src/lib/meshManufacturingQa.ts:205-269`: BVH candidate pairs, exact AABB rejection and shared topology; stops at first detected intersection.
+- `apps/web/src/lib/stepExport.ts:540-601`: OCCT analytic tessellation, fidelity samples and numerical stitching.
+- `apps/web/src/lib/precisionExport.ts:184-317`: exact source, optional repair, aspect/refinement, actual file-coordinate QA.
+- `apps/web/src/lib/precisionMesh.ts:128-205`: conforming maximum-edge subdivision.
+- `tests/e2e/analyticPlateExport.e2e.ts`: real Group seven-hole plate reproduction and stage captures.
+
+## Current milestones
+- [x] Preserve .10 and create dedicated local branch.
+- [x] Reproduce failure and capture independent exact separation certificate.
+- [ ] Trace B-rep validity/face relationships and retain geometry fingerprints.
+- [ ] Replace confirmed unreliable narrow phase with robust orientation-based contact tests; keep defect gates.
+- [ ] Focused adjacent/coplanar/real-defect regression and High/Ultra/Custom/cache/export reimport tests.
+- [ ] Packaged Windows acceptance, documentation, local commit and clean tree.
+
+## Current handoff
+Known repro: High + 1 mm maximum edge length, 353,884 triangles. Triangle 4361/4369 falsely intersect due rounded normalized plane distances (~7.1e-15). Exact BigInt projection proves disjointness. Standard High/Ultra fixture passes; do not claim otherwise. No production changes yet. See `docs/performance/EXPORT_RELIABILITY.md`; artifacts `.codex-run/export11`. Next: source face provenance and robust narrow phase.
+
+---
+
+# Historical Ultimate .10 scientific adaptive geometry engine
 
 User authorizes continued autonomous implementation through validation and packaging; this overrides the skill template's one-milestone stopping rule. Current desktop release plan below remains as historical context.
 

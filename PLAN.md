@@ -15,11 +15,11 @@ User authorizes ordered engineering releases through implementation, tests, inde
 - [x] Profile saved cone and small correctness fixtures; research established acceleration/contact implementations.
 - [x] Implement bounded scalable checks and explicit verified/inconclusive/cancel/error outcomes without changing geometry or weakening checks.
 - [x] Obtain defensible independent dense-cone verdict; plate, intentional intersections, STL/3MF, worker cancellation/resource regressions; practical inherited i18n fix.
-- [ ] Runtime commit, .13 Windows package, offline packaged validation, report/verification commit and preserved rollback.
+- [x] Runtime commit, .13 Windows package, offline packaged validation, report/verification commit and preserved rollback.
 - [ ] Continue B in dependency order with isolated prototype and measured acceptance; maintain later statuses honestly.
 
 ## Current handoff
-Known-good .12 `2257c653dcce67c129b2362be5db161f2bc96ed2`; rollback `.codex-run/preserved-ultimate12`, installer SHA `f41cb0da2e10d4f6f5f15111b189865dc44194ece1abfff49dc398131db78f2e`. Active .13 implementation passes 30 unit tests (full i18n restored), 22 integration tests, and independent complete CGAL checks of saved native/STL/3MF cone (all 0 intersections). Surface verdict valid; 0.028632 mm sampled wall concern keeps ready=false. Public BVH range traversal reduces cached STL surface check 3.953→3.244 s with same counts/hashes, no tolerance changes. Next: runtime commit, full build, `desktop/validate-certification.mjs` and .13 plate/branding/OpenSCAD packaged checks. Main report `docs/performance/DENSE_MANUFACTURING_CERTIFICATION.md`; campaign master roadmap records all A–H states. Installed app untouched; no push.
+Validated .13 runtime `811ddc16936593e08a3c551565a374acf69bd800`; 30 unit tests, 23 integration tests (three old optional skips), TypeScript, Windows build and 59 packaged checks pass. Independent CGAL confirms cached native/STL/3MF and actual downloaded 3MF complete with zero contacts. Surface verdict is scoped; 0.028632 mm wall concern keeps ready=false. Imported placement Float32 loss is diagnosed and STL blocked; 3MF retains geometry. Public BVH range traversal reduces cached STL surface check 3.953→3.244 s with identical counts/hashes. Full rollback `.codex-run/preserved-ultimate13`; .12 preserved separately. Current manifest `dist/ultimate/windows/release-verification.json`. Next B: isolated OpenVDB native prototype, identical-input accuracy/memory/time comparison before integration. Main report `docs/performance/DENSE_MANUFACTURING_CERTIFICATION.md`; campaign master roadmap records A–H states. Installed app untouched; no push.
 
 ---
 

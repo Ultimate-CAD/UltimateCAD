@@ -1,6 +1,6 @@
 # Ultimate .13 — dense surface certification
 
-Status: implementation and independent fixture verification complete; Windows release acceptance pending. Campaign state: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
+Status: validated Windows release `1.114.0-ultimate.13`. Runtime `811ddc16936593e08a3c551565a374acf69bd800`; campaign state: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
 
 ## Imported placement and encoding diagnosis
 
@@ -42,7 +42,7 @@ Isolated cached STL, same coordinates and 9,876,182 narrow candidates; observati
 | New BVH / exact bounds / traversal | — | 348.0 / 92.9 / 2,748.3 ms |
 | Entire test peak process RSS | 1,685,995,520 bytes | 1,675,132,928 bytes |
 
-Observed surface elapsed-time reduction ~18%; no aggregate memory-reduction claim. Process RSS includes decoding, hashing, indexing and audit. Opt-in pre-range profiling: 37,767,514 unique broad pairs; 27,891,332 AABB rejects; 3,077,856 unshared, 5,174,372 shared-vertex, 1,623,954 shared-edge, 0 duplicate-face contacts. Narrow clock accumulation 1,319.5 ms; instrumented traversal 4,151.1 ms includes profiling overhead. Parallel scheduling was not introduced because one isolated worker finishes well inside bounds; no parallel/GPU speed claim. Packaged transport/cancel/failure observations are pending. Evidence `.codex-run/certification13/{stl,3mf,profile-stl,range-stl}`.
+Observed surface elapsed-time reduction ~18%; no aggregate memory-reduction claim. Process RSS includes decoding, hashing, indexing and audit. Opt-in pre-range profiling: 37,767,514 unique broad pairs; 27,891,332 AABB rejects; 3,077,856 unshared, 5,174,372 shared-vertex, 1,623,954 shared-edge, 0 duplicate-face contacts. Narrow clock accumulation 1,319.5 ms; instrumented traversal 4,151.1 ms includes profiling overhead. Parallel scheduling was not introduced because one isolated worker finishes well inside bounds; no parallel/GPU speed claim. Evidence `.codex-run/certification13/{stl,3mf,profile-stl,range-stl}`.
 
 ## Independent reference and research
 
@@ -63,4 +63,16 @@ node node_modules/vitest/vitest.mjs run --config tests/vitest.e2e.config.ts test
 & '.codex-run/certification13/cgal-reference-build/Release/dense-si-cgal-reference.exe' '.codex-run/adaptive10/cone-delivery-final/result.mesh.bin'
 ```
 
-Prepare the checker dependencies per README first. Require-complete mode fails on incomplete coverage; diagnostic mode records an inconclusive result without certifying it. Geometry/worker tests: 13 passed, including 12,000 seeded comparisons and exact BigInt oracle checks. Full i18n 17 passed, no exclusions. Integration 22 passed / three old optional cases skipped (saved smoothing fixture, stress opt-in, older defective organic fixture). TypeScript passed. Logs `.codex-run/certification13`; packaged acceptance/commits to be appended after validation.
+Prepare the checker dependencies per README first. Require-complete mode fails on incomplete coverage; diagnostic mode records an inconclusive result without certifying it. Geometry/worker tests: 13 passed, including 12,000 seeded comparisons and exact BigInt oracle checks. Full i18n 17 passed, no exclusions. Integration 23 passed / three old optional cases skipped (saved smoothing fixture, stress opt-in, older defective organic fixture), including the always-run Float32 encoding regression. TypeScript and final Windows build passed. Logs `.codex-run/certification13`.
+
+## Packaged release acceptance
+
+Final runtime `811ddc16936593e08a3c551565a374acf69bd800`: 59 named checks passed with zero recorded errors: dense certification 8, plate export 13, branding/offline/native workers 16, OpenSCAD/MCP 22. Evidence directories respectively `.codex-run/certification13/packaged-1793641244528`, `.codex-run/export11/packaged-1793641254743`, `.codex-run/branding12/packaged-1793641254742`, `.codex-run/certification13/packaged-openscad-final`. Isolated profiles and blocked external network requests preserve the existing installation. Actual worker failure and cancellation leave no result or late commit and permit retry. Existing seven-hole plate exports and genuine defect blocking pass again.
+
+Packaged dense STL job: worker report 35.259 s, frontend 38.113 s (2.854 s difference includes transport/UI/harness overhead); correctly blocked after Float32 topology loss. Full vertex displacement bound 0.00000272724 mm, but seven vertex merges create real defects despite this small displacement. Packaged 3MF: worker 27.220 s, frontend 29.259 s (2.039 s difference), complete surface check with zero hits, 1,082,636 triangles, no encoding coordinate displacement. Separate thin-wall concern keeps ready=false. Acknowledged reviewed copy is not labeled print-ready.
+
+Downloaded `dense-cone-reviewed.3mf` is 17,770,127 bytes. Independent strict reimport succeeds; subsequent full application contact check passes and CGAL confirms complete zero intersections in 1.551 s, 541,322 vertices / 1,082,636 triangles. Evidence `packaged-3mf-reimport/dense-manufacturing-qa.json`, `cgal-packaged-3mf.json`. No SDF reconstruction or geometry repair was repeated.
+
+Executable `dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe`, SHA-256 `b046832ef17f873a0f6a4e0c183fc37f41705a5d6422f2b9a27fdf2a3ff8fa55`. Installer `dist/ultimate/windows/Ultimate-CAD-Setup-x64.exe`, SHA-256 `f9438e5435b8ea6e3c040ccb7cb6ad079e8bd1eb1e1599b34aedb8770b54cae8`. Hidden installer launch confirms title `Ultimate CAD Setup` and .13 product version; no installation action. Full rollback `.codex-run/preserved-ultimate13`; current release manifest `dist/ultimate/windows/release-verification.json` records the documentation verification commit. Older verification JSON files retained in that directory are historical, not current acceptance.
+
+Remaining limits: this verifies the saved dense-cone fixture, not an unavailable original user STL; sampled thin walls require design review. Arbitrary translated tiny edges can be unrepresentable in STL Float32; 3MF preserves the supplied double coordinates. No automatic repair/rebase, global Hausdorff proof, all-points thickness guarantee, aggregate memory reduction, GPU speedup or physical print certification is claimed.

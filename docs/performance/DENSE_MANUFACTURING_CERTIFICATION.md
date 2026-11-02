@@ -2,6 +2,16 @@
 
 Status: implementation and independent fixture verification complete; Windows release acceptance pending. Campaign state: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
 
+## Imported placement and encoding diagnosis
+
+Full packaged testing found a second, distinct case: the original cached STL is valid, and direct import exactly matches the captured LYL source-position hash. Its local mesh and exact translated world mesh remain valid. At ordinary imported placement (x=10, z=-10), float32 STL encoding merges seven unique vertices: 541,322 → 541,315, introducing 14 degenerate faces, 14 non-manifold edges and seven winding mismatches. This is real encoding loss, not a false-positive intersection detector, an importer/LYL loss, or an invalid original artifact. The STL copy remains blocked.
+
+The report now measures maximum encoding displacement over **all** vertices, compares pre-encoding topology when float32 output is invalid, and explains this loss with an actionable 3MF/placement warning. The full vertex displacement bound also conservatively participates in the reported deviation budget. It does not rebase, move, simplify or repair the model automatically. A small translated-tetrahedron regression proves that a valid precise source can require 3MF instead of STL at its chosen placement.
+
+The exact imported-world mesh and actual full-precision 3MF both independently pass complete CGAL checks with zero intersections (1,569.3 / 1,538.0 ms, ~191 MB checker peak). An independent raw duplicated-index witness confirms all 14 collapsed STL triangles; the first is source face 1,058,154 with two identical corners at (2.6693215370178223,16.741928100585938,-10.334883689880371). Evidence `.codex-run/certification13/import-encoding`, `cgal-import-world.json`, `cgal-import-3mf.json`, `float32-collapse-witness.json`. Source STL and captured LYL hashes remain unchanged. The actual 3MF independently reimports closed/valid with all 1,082,636 triangles; its wall concern still keeps readiness false.
+
+The large captured-project trace passed in 62.2 s. It is an explicit opt-in regression (`LAYERLING_DENSE_IMPORT_ENCODING=1`, with `LAYERLING_IMPORT_ENCODING_STL`/`LAYERLING_IMPORT_ENCODING_LYL` paths and optional output directory); a missing fixture fails an opted-in run. The fast translated-tetrahedron test runs unconditionally. Routine integration after the encoding diagnostic: 23 passed, three unchanged optional cases skipped; TypeScript passed. This does not disable or weaken any existing test.
+
 ## Baseline, provenance and verdict
 
 Started clean at .12 verification `2257c653dcce67c129b2362be5db161f2bc96ed2`, runtime `b3ad46924c662be462fe471b9b231dace2f3a58c`; branch `codex/manufacturing-certification-13`. Full .12 rollback `.codex-run/preserved-ultimate12`, installer SHA-256 `f41cb0da2e10d4f6f5f15111b189865dc44194ece1abfff49dc398131db78f2e`. Installed application/profile untouched.

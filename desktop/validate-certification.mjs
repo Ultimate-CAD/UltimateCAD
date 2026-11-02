@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright-core";
+import { verify3mf } from "./manufacturing-file-audit.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 process.chdir(root);
@@ -64,14 +65,14 @@ async function command(action, params = {}) {
   return result.data;
 }
 
-async function ready() {
+async function ready(projectName) {
   for (let attempt = 0; attempt < 150; attempt++) {
     const response = await fetch(`${connection.url}/api/layerling-mcp`, {
       headers: { Authorization: `Bearer ${connection.token}` },
     });
     const json = await response.json();
     const editor = json.editors
-      ?.filter((item) => Date.now() - item.lastSeen < 10000)
+      ?.filter((item) => Date.now() - item.lastSeen < 10000 && (!projectName || item.projectName === projectName))
       .sort((a, b) => b.lastSeen - a.lastSeen)[0];
     if (editor) {
       editorId = editor.editorId;
@@ -217,6 +218,8 @@ try {
   await page.getByRole("button", { name: "Create new 3D design", exact: true }).click();
   await ready();
   await page.locator('input[type="file"][accept*=".stl"]').first().setInputFiles(sourceStl);
+  // The dashboard importer creates a new project/editor; don't keep the old tab ID.
+  await ready(path.basename(sourceStl, path.extname(sourceStl)));
   let cone;
   for (let attempt = 0; attempt < 150; attempt++) {
     const list = await command("list_objects");
@@ -235,6 +238,7 @@ try {
   assert.equal(coneBefore.importedTriangles, 1_082_636);
 
   await openStudio();
+  const studio = page.getByRole("region", { name: "Precision Mesh Studio" });
   await page.getByRole("radio", { name: /^STL:/ }).click();
   const progress = [];
   const status = page.locator('[role="status"][data-verdict]');
@@ -247,7 +251,7 @@ try {
     setTimeout(() => { throw new Error("Injected certification test failure"); }, 0);
   });
   await waitVerdict("failed", 30000);
-  const failureAlert = await page.getByRole("alert").innerText();
+  const failureAlert = await studio.getByRole("alert").innerText();
   assert.match(failureAlert, /Injected certification test failure/);
   assert.equal(await page.locator(".precision-results").count(), 0);
   assert.equal(await page.getByRole("button", { name: "Generate export preview", exact: true }).isDisabled(), false);
@@ -262,7 +266,7 @@ try {
   await page.getByRole("button", { name: "Cancel export", exact: true }).click();
   await waitVerdict("cancelled", 30000);
   assert.equal(await page.locator(".precision-results").count(), 0);
-  assert.equal(await page.getByRole("alert").count(), 0);
+  assert.equal(await studio.getByRole("alert").count(), 0);
   assert.equal(await page.getByRole("button", { name: "Generate export preview", exact: true }).isDisabled(), false);
   await pause(750);
   assert.equal(await page.locator(".precision-results").count(), 0, "Cancelled worker produced a late result");
@@ -273,40 +277,136 @@ try {
   const denseStarted = performance.now();
   await runPreview(180000);
   const denseEndToEndMs = performance.now() - denseStarted;
-  assert.equal(await page.locator(".precision-results").getAttribute("data-verdict"), "verified-valid");
-  assert.equal(await page.locator(".precision-results").getAttribute("data-ready"), "false");
-  const reportPath = await download(
+  const stlReportPath = await download(
     page.getByRole("button", { name: "Save manufacturing report", exact: true }),
-    "dense-cone.mesh-report.json",
+    "dense-cone-stl.mesh-report.json",
   );
-  const report = JSON.parse(readFileSync(reportPath, "utf8"));
-  const body = report.bodies[0];
-  const surface = body.surface;
-  assert.equal(report.verification.status, "verified-valid", JSON.stringify(report.verification));
-  assert.equal(surface.selfIntersections.verification.status, "verified-valid");
-  assert.equal(surface.selfIntersections.complete, true);
-  assert.equal(surface.selfIntersections.found, 0);
-  assert.equal(report.triangles, 1_082_636);
-  assert.equal(body.audit.triangles, 1_082_636);
-  assert.equal(surface.wallConcern, true);
-  assert.equal(report.ready, false);
-  progress.push({ stage: "dense-preview", status: await status.innerText(), progressText: await page.locator('[role="status"]').innerText() });
-  await page.screenshot({ path: path.join(output, "dense-cone-verified-preview.png"), fullPage: true });
-  pass("Dense cone preview verifies topology/contact checks while retaining the wall concern", {
+  const stlReport = JSON.parse(readFileSync(stlReportPath, "utf8"));
+  const stlBody = stlReport.bodies[0];
+  const stlEncoding = stlBody.encoding;
+  const stlSurface = stlBody.surface;
+  const stlUiVerdict = await page.locator(".precision-results").getAttribute("data-verdict");
+  const stlUiReady = await page.locator(".precision-results").getAttribute("data-ready");
+  progress.push({
+    stage: "dense-stl-float32",
+    uiVerdict: stlUiVerdict,
+    uiReady: stlUiReady,
+    reportVerdict: stlReport.verification.status,
+    reportReady: stlReport.ready,
+    reportDurationMs: stlReport.durationMs,
+    frontendDurationMs: denseEndToEndMs,
+    triangles: stlReport.triangles,
+    encoding: stlEncoding,
+    intersectionSearch: stlSurface.selfIntersections,
+  });
+  summaryDetails = { ...summaryDetails, stlReportPath };
+  await page.screenshot({ path: path.join(output, "dense-cone-stl-float32-blocked.png"), fullPage: true });
+  assert.equal(await page.locator(".precision-results").getAttribute("data-verdict"), "verified-invalid");
+  assert.equal(await page.locator(".precision-results").getAttribute("data-ready"), "false");
+  assert.equal(stlReport.triangles, 1_082_636);
+  assert.equal(stlReport.verification.status, "verified-invalid", JSON.stringify(stlReport.verification));
+  assert.equal(stlEncoding.coordinates, "float32");
+  assert.equal(stlEncoding.topologyBeforeEncoding.valid, true);
+  assert.equal(stlEncoding.topologyBeforeEncoding.vertices, 541_322);
+  assert.equal(stlEncoding.introducedTopologyDefects, true);
+  assert.equal(stlBody.audit.vertices, 541_315);
+  assert.equal(stlBody.audit.degenerateFaces, 14);
+  assert.equal(stlBody.audit.nonManifoldEdges, 14);
+  assert.equal(stlBody.audit.windingMismatches, 7);
+  assert.ok(stlEncoding.maxVertexDisplacementMm > 0);
+  assert.ok(stlEncoding.maxVertexDisplacementMm < 0.025);
+  assert.equal(stlSurface.selfIntersections.verification.status, "verified-invalid");
+  assert.equal(stlSurface.selfIntersections.complete, true);
+  assert.ok(stlSurface.selfIntersections.found > 0);
+  assert.equal(stlReport.ready, false);
+  assert.equal(await page.getByRole("button", { name: "Export reviewed Binary STL", exact: true }).isDisabled(), true);
+  progress.push({ stage: "dense-stl-done", status: await status.innerText(), progressText: await studio.locator('[role="status"]').innerText() });
+  pass("Dense cone STL Float32 encoding defects are detected and the export is blocked", {
     frontendJobMs: denseEndToEndMs,
-    workerReportedMs: report.durationMs,
-    transportAndUiDeltaMs: denseEndToEndMs - report.durationMs,
-    triangles: report.triangles,
-    candidatePairs: surface.selfIntersections.candidatePairs,
-    wallMm: surface.minSampledThicknessMm,
-    ready: report.ready,
-    reportPath,
+    workerReportedMs: stlReport.durationMs,
+    transportAndUiDeltaMs: denseEndToEndMs - stlReport.durationMs,
+    triangles: stlReport.triangles,
+    found: stlSurface.selfIntersections.found,
+    encoding: stlEncoding,
+    reportPath: stlReportPath,
   });
 
   const coneAfter = await selectedSnapshot(cone.id);
   assert.deepEqual(coneAfter, coneBefore, "Preview altered the imported source object");
   const sourceHashAfterCone = await hashFile(sourceStl);
   assert.equal(sourceHashAfterCone, sourceHashBefore, "Original cached STL changed on disk");
+
+  await page.getByRole("radio", { name: /^3MF:/ }).click();
+  const threeMfStarted = performance.now();
+  await runPreview(180000);
+  const threeMfEndToEndMs = performance.now() - threeMfStarted;
+  const threeMfReportPath = await download(
+    page.getByRole("button", { name: "Save manufacturing report", exact: true }),
+    "dense-cone-3mf.mesh-report.json",
+  );
+  const threeMfReport = JSON.parse(readFileSync(threeMfReportPath, "utf8"));
+  const threeMfBody = threeMfReport.bodies[0];
+  const threeMfSurface = threeMfBody.surface;
+  const threeMfEncoding = threeMfBody.encoding;
+  const threeMfUiVerdict = await page.locator(".precision-results").getAttribute("data-verdict");
+  const threeMfUiReady = await page.locator(".precision-results").getAttribute("data-ready");
+  progress.push({
+    stage: "dense-3mf-float64",
+    uiVerdict: threeMfUiVerdict,
+    uiReady: threeMfUiReady,
+    reportVerdict: threeMfReport.verification.status,
+    reportReady: threeMfReport.ready,
+    reportDurationMs: threeMfReport.durationMs,
+    frontendDurationMs: threeMfEndToEndMs,
+    triangles: threeMfReport.triangles,
+    encoding: threeMfEncoding,
+    surface: threeMfSurface.selfIntersections,
+    wallConcern: threeMfSurface.wallConcern,
+  });
+  summaryDetails = { ...summaryDetails, threeMfReportPath };
+  await page.screenshot({ path: path.join(output, "dense-cone-3mf-surface-valid-wall-concern.png"), fullPage: true });
+  assert.equal(await page.locator(".precision-results").getAttribute("data-verdict"), "verified-valid");
+  assert.equal(await page.locator(".precision-results").getAttribute("data-ready"), "false");
+  assert.equal(threeMfReport.verification.status, "verified-valid");
+  assert.equal(threeMfReport.triangles, 1_082_636);
+  assert.equal(threeMfBody.audit.triangles, 1_082_636);
+  assert.equal(threeMfBody.audit.valid, true);
+  assert.equal(threeMfEncoding.coordinates, "float64");
+  assert.equal(threeMfEncoding.maxVertexDisplacementMm, 0);
+  assert.equal(threeMfEncoding.introducedTopologyDefects, false);
+  assert.equal(threeMfSurface.selfIntersections.verification.status, "verified-valid");
+  assert.equal(threeMfSurface.selfIntersections.complete, true);
+  assert.equal(threeMfSurface.selfIntersections.found, 0);
+  assert.equal(threeMfSurface.wallConcern, true);
+  assert.equal(threeMfReport.ready, false);
+  pass("Dense cone 3MF retains valid topology while keeping its separate wall concern", {
+    frontendJobMs: threeMfEndToEndMs,
+    workerReportedMs: threeMfReport.durationMs,
+    transportAndUiDeltaMs: threeMfEndToEndMs - threeMfReport.durationMs,
+    triangles: threeMfReport.triangles,
+    complete: threeMfSurface.selfIntersections.complete,
+    found: threeMfSurface.selfIntersections.found,
+    wallMm: threeMfSurface.minSampledThicknessMm,
+    ready: threeMfReport.ready,
+    reportPath: threeMfReportPath,
+  });
+  await studio.getByLabel(/I reviewed the manufacturing concerns/).check();
+  const threeMfExportPath = await download(
+    studio.getByRole("button", { name: "Export reviewed 3MF", exact: true }),
+    "dense-cone-reviewed.3mf",
+  );
+  summaryDetails = { ...summaryDetails, threeMfExportPath };
+  const independentThreeMfAudit = verify3mf(threeMfExportPath);
+  assert.equal(independentThreeMfAudit.triangles, 1_082_636);
+  assert.equal(independentThreeMfAudit.boundaryEdges, 0);
+  assert.equal(independentThreeMfAudit.nonManifoldEdges, 0);
+  assert.equal(independentThreeMfAudit.nonManifoldVertices, 0);
+  assert.equal(await page.locator(".precision-results").getAttribute("data-ready"), "false");
+  writeFileSync(path.join(output, "dense-cone-reviewed-3mf-audit.json"), JSON.stringify(independentThreeMfAudit, null, 2));
+  pass("Reviewed 3MF downloads and independently reimports with closed strict topology", independentThreeMfAudit);
+  const coneAfter3mf = await selectedSnapshot(cone.id);
+  assert.deepEqual(coneAfter3mf, coneBefore, "3MF preview/export altered the imported source object");
+  assert.equal(await hashFile(sourceStl), sourceHashBefore, "3MF preview/export altered the original cached STL");
 
   const fixture = await command("import_file", {
     fileName: "intersecting-closed-tetrahedra.stl",
@@ -323,13 +423,23 @@ try {
     "intersecting-tetrahedra.mesh-report.json",
   );
   const defectReport = JSON.parse(readFileSync(defectReportPath, "utf8"));
+  const defectUiVerdict = await page.locator(".precision-results").getAttribute("data-verdict");
+  const defectUiReady = await page.locator(".precision-results").getAttribute("data-ready");
+  progress.push({
+    stage: "intersecting-tetrahedra",
+    uiVerdict: defectUiVerdict,
+    uiReady: defectUiReady,
+    reportVerdict: defectReport.verification.status,
+    reportReady: defectReport.ready,
+    found: defectReport.bodies[0].surface.selfIntersections.found,
+  });
+  summaryDetails = { ...summaryDetails, defectReportPath };
+  await page.screenshot({ path: path.join(output, "intersecting-defect-blocked.png"), fullPage: true });
   assert.equal(defectReport.verification.status, "verified-invalid");
   assert.ok(defectReport.bodies[0].surface.selfIntersections.found > 0);
   assert.equal(defectReport.ready, false);
   assert.equal(await page.locator(".precision-results").getAttribute("data-ready"), "false");
   assert.equal(await page.getByRole("button", { name: "Export reviewed Binary STL", exact: true }).isDisabled(), true);
-  progress.push({ stage: "intersecting-defect", status: await status.innerText() });
-  await page.screenshot({ path: path.join(output, "intersecting-defect-blocked.png"), fullPage: true });
   pass("Genuine intersecting closed tetrahedra are verified invalid and blocked from export", {
     found: defectReport.bodies[0].surface.selfIntersections.found,
   });
@@ -349,8 +459,11 @@ try {
     sourceSha256: sourceHashBefore,
     sourceObjectBefore: coneBefore,
     sourceObjectAfter: coneAfter,
-    reportPath,
+    stlReportPath,
+    threeMfReportPath,
+    threeMfExportPath,
     defectReportPath,
+    independentThreeMfAudit,
     progress,
     checks,
     pageErrors: unexpectedPageErrors,

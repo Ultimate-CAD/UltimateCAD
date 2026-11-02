@@ -44,6 +44,12 @@ export type PrecisionBodyReport = {
   sourceTriangles: number;
   triangles: number;
   audit: ManufacturingAudit;
+  encoding: {
+    coordinates: "float32" | "float64";
+    maxVertexDisplacementMm: number;
+    topologyBeforeEncoding: ManufacturingAudit | null;
+    introducedTopologyDefects: boolean;
+  };
   metrics: ReturnType<typeof meshTriangleMetrics>;
   analyticDeviationMm: number | null;
   analyticNormalDeviationDeg: number | null;
@@ -289,20 +295,37 @@ export class PrecisionExportEngine {
           settings.triangleBudget,
         );
       }
-      // Validate the actual encoding coordinates. 3MF uses full round-trip decimals, STL float32.
+      // Validate actual encoding coordinates: 3MF uses full-precision decimals;
+      // binary STL uses float32.
+      let encodingMaxSquared = 0;
       const encodedMesh = {
-        vertices: mesh.vertices.map(
-          (p) =>
-            p.map((v) => (format === "stl" ? Math.fround(v) : v)) as [
-              number,
-              number,
-              number,
-            ],
-        ),
+        vertices: mesh.vertices.map((p) => {
+          const x = format === "stl" ? Math.fround(p[0]) : p[0];
+          const y = format === "stl" ? Math.fround(p[1]) : p[1];
+          const z = format === "stl" ? Math.fround(p[2]) : p[2];
+          encodingMaxSquared = Math.max(
+            encodingMaxSquared,
+            (x - p[0]) ** 2 + (y - p[1]) ** 2 + (z - p[2]) ** 2,
+          );
+          return [x, y, z] as [number, number, number];
+        }),
         faces: mesh.faces,
       };
-      const audit = auditManufacturingMesh(encodedMesh),
-        metrics = meshTriangleMetrics(encodedMesh);
+      const audit = auditManufacturingMesh(encodedMesh);
+      const metrics = meshTriangleMetrics(encodedMesh);
+      // Diagnose a lossy encoding without moving/rebasing or silently repairing.
+      // The extra raw audit is only needed for an invalid float32 result.
+      const topologyBeforeEncoding =
+        format === "stl" && !audit.valid ? auditManufacturingMesh(mesh) : null;
+      const introducedTopologyDefects = Boolean(
+        topologyBeforeEncoding?.valid && !audit.valid,
+      );
+      const encodingMaxDisplacementMm = Math.sqrt(encodingMaxSquared);
+      if (introducedTopologyDefects) {
+        warnings.push(
+          `Binary STL float32 encoding changed topology at this placement: ${topologyBeforeEncoding!.vertices - audit.vertices} unique vertices merged; ${audit.degenerateFaces} degenerate faces. The STL copy is blocked. Try full-precision 3MF or change placement and validate again.`,
+        );
+      }
       if (
         meshes.reduce((n, m) => n + m.faces.length, 0) + mesh.faces.length >
         settings.triangleBudget
@@ -333,7 +356,11 @@ export class PrecisionExportEngine {
         reverse = needsMeasurement
           ? sampledMeshDeviation(encodedMesh, reference)
           : { mm: 0, samples: 0, normalDeg: 0 };
-      const sourceDeviationMm = Math.max(forward.mm, reverse.mm);
+      const sourceDeviationMm = Math.max(
+        forward.mm,
+        reverse.mm,
+        encodingMaxDisplacementMm,
+      );
       const sourceNormalDeviationDeg = settings.smoothing
         ? Math.max(forward.normalDeg, reverse.normalDeg)
         : 0;
@@ -379,6 +406,12 @@ export class PrecisionExportEngine {
         sourceTriangles: source.mesh.faces.length,
         triangles: mesh.faces.length,
         audit,
+        encoding: {
+          coordinates: format === "stl" ? "float32" : "float64",
+          maxVertexDisplacementMm: encodingMaxDisplacementMm,
+          topologyBeforeEncoding,
+          introducedTopologyDefects,
+        },
         metrics,
         analyticDeviationMm: analyticDeviation,
         analyticNormalDeviationDeg: analyticAngle,

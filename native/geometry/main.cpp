@@ -27,6 +27,9 @@ static void boundMemory(){}
 #include "distance.h"
 #include "adaptive_field.h"
 #include "cavity_delivery.h"
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+#include "../experiments/openvdb14/sparse_cavity.h"
+#endif
 #include <oneapi/tbb/global_control.h>
 using namespace manifold;
 using Clock=std::chrono::steady_clock;
@@ -72,9 +75,19 @@ int main(int argc,char** argv){
     std::cerr<<"Building native cavity, grid "<<cell<<" mm\n";
     auto low=bounds.min-vec3(cell*2),high=bounds.max+vec3(cell*2);
     const auto span=high-low;const double logical=std::ceil(span.x/cell)*std::ceil(span.y/cell)*std::ceil(span.z/cell)*3;
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+    // No dense allocation occurs in this prototype. The same 8 GiB process job
+    // and runner deadline remain hard limits; report logical work for comparison.
+    if(!std::isfinite(logical)||logical>double(UINT64_MAX-gridLocations))throw std::runtime_error("Invalid sparse grid extent");
+#else
     if(!std::isfinite(logical)||logical>128'000'000)throw std::runtime_error("Requested native accuracy exceeds bounded grid work; choose a larger accuracy value");
+#endif
     gridLocations+=static_cast<uint64_t>(logical);
     std::unique_ptr<AdaptiveField> adaptive;
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+    // Isolated research target only. Production continues using its existing field.
+    Manifold made=makeSparseCavity(mesh,cell,wall);
+#else
     if(flags==0){adaptive=std::make_unique<AdaptiveField>(distance,Box(low,high),cell,wall);nodes+=adaptive->size();}
     auto build=[&](vec3 a,vec3 b){return Manifold::LevelSet([&](vec3 p){return adaptive?(*adaptive)(p):distance(p);},Box(a,b),cell,wall,std::min(error/8,.01),true);};
     Manifold made;
@@ -86,9 +99,21 @@ int main(int argc,char** argv){
       made=Manifold::BatchBoolean(parts,OpType::Add);made.NumTri();
     }
     if(adaptive)skipped+=adaptive->skipped;
+#endif
     valid(made,"No internal cavity fits the requested wall thickness");auto components=made.Decompose();
     std::sort(components.begin(),components.end(),[](auto& a,auto& b){return std::abs(a.Volume())>std::abs(b.Volume());});
-    omitted=components.size()-1;cavity=components.front().Simplify(error/4);valid(cavity,"Cavity simplification failed");
+    omitted=components.size()-1;
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+    // A smaller mesh is not useful if simplification introduces crossings.
+#ifdef LAYERLING_OPENVDB_SIMPLIFY_DIVISOR
+    cavity=components.front().Simplify(error/double(LAYERLING_OPENVDB_SIMPLIFY_DIVISOR));
+#else
+    cavity=components.front();
+#endif
+#else
+    cavity=components.front().Simplify(error/4);
+#endif
+    valid(cavity,"Cavity simplification failed");
     // Resolve numerical slivers in the cavity's actual float32 delivery frame,
     // before measuring it and before cutting the untouched original exterior.
     // This is construction of the approximated cavity, not a repair of source.
@@ -99,6 +124,9 @@ int main(int argc,char** argv){
     auto point=[&](uint32_t i){return vec3(sample.vertProperties[i*sample.numProp],sample.vertProperties[i*sample.numProp+1],sample.vertProperties[i*sample.numProp+2]);};
     auto check=[&](vec3 p){measured=std::max(measured,std::abs(distance(p)-wall));};
     for(size_t i=0;i<sample.triVerts.size();i+=3){auto a=point(sample.triVerts[i]),b=point(sample.triVerts[i+1]),c=point(sample.triVerts[i+2]);check(a);check((a+b+c)/3.0);check((a+b)/2.0);check((b+c)/2.0);check((c+a)/2.0);}
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+    std::cerr<<"OpenVDB pass sampled offset error "<<measured<<" mm, requested "<<error<<" mm\n";
+#endif
     if(measured<=error)break;
   }
   if(measured>error)throw std::runtime_error("Sampled native offset error exceeds the requested accuracy; original preserved");
@@ -112,12 +140,22 @@ int main(int argc,char** argv){
   for(auto index:output.triVerts)write(out,uint32_t(index));out.close();if(!out)throw std::runtime_error("Native result write failed");
   std::cout.precision(17);
   std::cerr<<"Adaptive nodes "<<nodes<<", skipped exact queries "<<skipped<<"\n";
-  std::cout<<"{\"method\":\"mesh-sdf\",\"backend\":\"native-cpu\",\"cellSizeMm\":"<<cell
+  std::cout<<"{\"method\":\"mesh-sdf\",\"backend\":\""
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+    <<"openvdb14-prototype"
+#else
+    <<"native-cpu"
+#endif
+    <<"\",\"cellSizeMm\":"<<cell
     <<",\"cavityConditioningMm\":"<<std::min(error/16,1e-4)<<",\"conditionedCavityVertices\":"<<conditionedVertices
     <<",\"maxErrorMm\":"<<error<<",\"measuredErrorMm\":"<<measured<<",\"sourceTriangles\":"<<source.NumTri()<<",\"resultTriangles\":"<<result.NumTri()
     <<",\"sourceVolumeMm3\":"<<sourceVolume<<",\"resultVolumeMm3\":"<<result.Volume()<<",\"cavityVolumeMm3\":"<<cavity.Volume()
     <<",\"evaluations\":"<<distance.queries<<",\"durationMs\":"<<ms(start)<<",\"prepareMs\":"<<prepareMs<<",\"samplingMs\":"<<samplingMs
-    <<",\"cuttingMs\":"<<ms(cuttingStart)<<",\"logicalGridLocations\":"<<gridLocations<<",\"peakWorkingSetBytes\":"<<peakMemory()<<",\"omittedCavities\":"<<omitted<<"}\n";
+    <<",\"cuttingMs\":"<<ms(cuttingStart)<<",\"logicalGridLocations\":"<<gridLocations<<",\"peakWorkingSetBytes\":"<<peakMemory()<<",\"omittedCavities\":"<<omitted;
+#ifdef LAYERLING_OPENVDB_EXPERIMENT
+  printSparseStats(std::cout);
+#endif
+  std::cout<<"}\n";
   return 0;
  }catch(const std::exception& e){std::cerr<<"Native geometry error: "<<e.what()<<'\n';return 1;}
 }

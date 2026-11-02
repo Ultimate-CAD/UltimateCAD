@@ -1,4 +1,4 @@
-# Master campaign — .13 dense manufacturing certification
+# Master campaign — .13 validated; OpenVDB experiment checkpoint
 
 User authorizes ordered engineering releases through implementation, tests, independent verification and packaging, then later milestones while resources permit. Do not stop at a proposal. Master record: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
 
@@ -16,10 +16,13 @@ User authorizes ordered engineering releases through implementation, tests, inde
 - [x] Implement bounded scalable checks and explicit verified/inconclusive/cancel/error outcomes without changing geometry or weakening checks.
 - [x] Obtain defensible independent dense-cone verdict; plate, intentional intersections, STL/3MF, worker cancellation/resource regressions; practical inherited i18n fix.
 - [x] Runtime commit, .13 Windows package, offline packaged validation, report/verification commit and preserved rollback.
-- [ ] Continue B in dependency order with isolated prototype and measured acceptance; maintain later statuses honestly.
+- [x] Build and assess isolated B prototype; retain native/WASM after unsafe or slower variants; record incomplete allocator metrics honestly.
+- [ ] C: isolated GPU distance/sign pilot and transfer-inclusive comparison against validated native CPU; then D–H in dependency order.
 
 ## Current handoff
-Validated .13 runtime `811ddc16936593e08a3c551565a374acf69bd800`; 30 unit tests, 23 integration tests (three old optional skips), TypeScript, Windows build and 59 packaged checks pass. Independent CGAL confirms cached native/STL/3MF and actual downloaded 3MF complete with zero contacts. Surface verdict is scoped; 0.028632 mm wall concern keeps ready=false. Imported placement Float32 loss is diagnosed and STL blocked; 3MF retains geometry. Public BVH range traversal reduces cached STL surface check 3.953→3.244 s with identical counts/hashes. Full rollback `.codex-run/preserved-ultimate13`; .12 preserved separately. Current manifest `dist/ultimate/windows/release-verification.json`. Next B: isolated OpenVDB native prototype, identical-input accuracy/memory/time comparison before integration. Main report `docs/performance/DENSE_MANUFACTURING_CERTIFICATION.md`; campaign master roadmap records A–H states. Installed app untouched; no push.
+Validated .13 runtime `811ddc16936593e08a3c551565a374acf69bd800`; 30 unit tests, 23 integration tests (three old optional skips), TypeScript, Windows build and 59 packaged checks pass. Independent CGAL confirms cached native/STL/3MF and actual downloaded 3MF complete with zero contacts. Surface verdict is scoped; 0.028632 mm wall concern keeps ready=false. Imported placement Float32 loss is diagnosed and STL blocked; 3MF retains geometry. Public BVH range traversal reduces cached STL surface check 3.953→3.244 s with identical counts/hashes. Full rollback `.codex-run/preserved-ultimate13`; .12 preserved separately. Current manifest `dist/ultimate/windows/release-verification.json`. B is assessed below; next is the isolated C pilot before any GPU integration. Main report `docs/performance/DENSE_MANUFACTURING_CERTIFICATION.md`; campaign master roadmap records A–H states. Installed app untouched; no push.
+
+B checkpoint on `codex/sparse-volume-14`: working OpenVDB 14 static prototype and reproducible hash-checked benchmark runner. Fast simplified dense cone has 3 real CGAL crossings; unsimplified cone is valid but 111.36 s / 1.479 GB versus native 23.80 s / 1.076 GB. Exact normalized exterior preserved; organic fails unchanged 0.1 mm accuracy limit, concave/thin and actual cancellation pass. No .14 desktop integration/package. Source, notices and builds isolated; source control defaults reproduce native meshes byte-for-byte. Report `docs/performance/OPENVDB14_EVALUATION.md`. Next: C inventory/research/pilot against .13 native. `nvcc` not on PATH; verify actual local toolchain before deciding approach. No allocator-event peak, GPU or Bunny result claimed.
 
 ---
 

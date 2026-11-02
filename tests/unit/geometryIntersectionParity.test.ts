@@ -3,8 +3,9 @@ import { Vector3 } from "three";
 import { ExtendedTriangle } from "three-mesh-bvh";
 import { intersectsBeyondSharedContact as baseline } from "../fixtures/geometry8/triangleSharedContact";
 import { intersectsBeyondSharedContact as optimized } from "@/lib/triangleSharedContact";
+import { exactTriangleSat } from "../helpers/exactTriangleSat";
 
-it("matches .8 intersection semantics across shared simplices, degeneracy, coplanarity and scales", () => {
+it("preserves shared-topology semantics and checks unshared triangles against independent exact SAT", () => {
   let seed = 918273;
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) | 0;
@@ -51,7 +52,9 @@ it("matches .8 intersection semantics across shared simplices, degeneracy, copla
                 Vector3,
               ]),
             );
-          const expected = baseline(a, b, shared);
+          const expected = !shared.length
+            ? exactTriangleSat(p, q) ?? baseline(a, b, shared)
+            : baseline(a, b, shared);
           expect(optimized(a, b, shared, p, q)).toBe(expected);
           expect(optimized(a, b, shared)).toBe(expected);
           if (expected) intersections++;

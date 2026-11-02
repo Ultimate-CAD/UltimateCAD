@@ -13,13 +13,13 @@ User authorizes autonomous investigation, implementation, tests and packaging. C
 ## Current milestones
 - [x] Preserve .10 and create dedicated local branch.
 - [x] Reproduce failure and capture independent exact separation certificate.
-- [ ] Trace B-rep validity/face relationships and retain geometry fingerprints.
-- [ ] Replace confirmed unreliable narrow phase with robust orientation-based contact tests; keep defect gates.
-- [ ] Focused adjacent/coplanar/real-defect regression and High/Ultra/Custom/cache/export reimport tests.
+- [x] Trace B-rep validity/face relationships and retain geometry fingerprints.
+- [x] Replace confirmed unreliable narrow phase with robust orientation-based contact tests; keep defect gates.
+- [x] Focused adjacent/coplanar/real-defect regression and High/Ultra/Custom/cache/export reimport tests.
 - [ ] Packaged Windows acceptance, documentation, local commit and clean tree.
 
 ## Current handoff
-Known repro: High + 1 mm maximum edge length, 353,884 triangles. Triangle 4361/4369 falsely intersect due rounded normalized plane distances (~7.1e-15). Exact BigInt projection proves disjointness. Standard High/Ultra fixture passes; do not claim otherwise. No production changes yet. See `docs/performance/EXPORT_RELIABILITY.md`; artifacts `.codex-run/export11`. Next: source face provenance and robust narrow phase.
+Known repro: High + 1 mm maximum edge length, 353,884 triangles. Triangle 4361/4369 falsely intersect due rounded normalized plane distances (~7.1e-15). Exact BigInt projection proves disjointness; both map to the same cylindrical B-rep face. Standard High/Ultra fixture already passed. Adaptive exact-sign contact now passes the refined fixture with unchanged geometry hashes. Focused integration: 17 passing, 3 skipped. Packaged .11 acceptance remains. See `docs/performance/EXPORT_RELIABILITY.md`; artifacts `.codex-run/export11`.
 
 ---
 

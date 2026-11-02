@@ -196,6 +196,13 @@ function indexedSurfaceChecks(
     minSampledThicknessMm = Infinity,
     thicknessSamples = 0;
   const intersectionFaces: number[][] = [];
+  // Refinement increases legitimate local contacts even on a simple analytic
+  // surface. Scale coverage with mesh size; retain hard work/time bounds and
+  // keep readiness false whenever the search cannot complete.
+  const candidatePairBudget = Math.max(
+    5_000_000,
+    Math.min(50_000_000, indexed.faces.length * 32),
+  );
   const notes: string[] = [];
   let shellOrientationConcerns = 0;
   // Borrow canonical coordinate tuples; these scratch lists are consumed synchronously.
@@ -229,7 +236,7 @@ function indexedSurfaceChecks(
               return false;
             }
           }
-          if (++pairs > 5_000_000 || performance.now() - started > 30000) {
+          if (++pairs > candidatePairBudget || performance.now() - started > 30000) {
             complete = false;
             return true;
           }
@@ -276,7 +283,7 @@ function indexedSurfaceChecks(
       );
     if (!complete && checkIntersections)
       notes.push(
-        "Self-intersection search reached its 30 s / 5 million candidate budget; result is incomplete.",
+        `Self-intersection search reached its 30 s / ${(candidatePairBudget / 1_000_000).toFixed(2)} million candidate budget; result is incomplete.`,
       );
     const endContainment = startGeometryTiming("surface.containment");
     const direction = new Vector3(0.389, 0.739, 0.547).normalize();
@@ -351,10 +358,12 @@ function indexedSurfaceChecks(
         found: intersections,
         complete,
         candidatePairs: pairs,
+        candidatePairBudget,
+        timeBudgetMs: 30000,
         boundsRejectedPairs,
         exampleFaces: intersectionFaces,
         method:
-          "Double-precision BVH triangle intersections; shared pairs checked beyond their expected simplex with robust orientation predicates",
+          "BVH candidates with adaptive exact-sign triangle contact on supplied coordinates; shared topology checked beyond its expected simplex; degenerate faces rejected separately",
       },
       shellOrientationConcerns,
       minSampledThicknessMm: Number.isFinite(minSampledThicknessMm)

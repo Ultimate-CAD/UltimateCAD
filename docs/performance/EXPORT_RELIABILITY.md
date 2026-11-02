@@ -1,6 +1,6 @@
 # High-precision manufacturing export reliability
 
-Status: root-cause reproduction captured; implementation and packaged acceptance pending.
+Status: root cause corrected and focused tests pass; packaged acceptance pending.
 
 ## Preserved baseline
 
@@ -15,6 +15,33 @@ Ordinary High (3,076 triangles), Ultra (3,912), and Custom 0.001 mm/1 degree (23
 Captured float32 triangle IDs 4361 / 4369 have no shared vertices. Both triangles are exactly coplanar and their XY projections are strictly disjoint. `.codex-run/export11/intersection-proof.json` records all coordinates, robust 3D orientations (all zero), and an independent exact BigInt separating-axis witness after lossless scaling by 2^24. A triangle edge has own-side determinant -34824668577792; all opposite triangle vertices have determinants 69649337155584, 139298674311168, 104474005733376. Their intersection has no positive extent; it is empty.
 
 The installed three-mesh-bvh `ExtendedTriangle.intersectsTriangle` reports true. Its normalized floating plane calculations produce distances [0, 0, 7.105427357601002e-15] on mathematically coplanar points. Its 1e-15 near-zero threshold fails to recognize coplanarity, sending the pair through the noncoplanar intersection-line calculation. The manufacturing predicate delegates all pairs without shared vertices to this method. The BVH broad phase and export-blocking gate are behaving correctly; the narrow-phase result is wrong for this captured pair. No geometry movement, repair, increased epsilon, or disabling of checks is justified.
+
+OCCT reports a valid 10-face body with volume π × 1510 × 6 mm³. Saved BREP, face hashes, adjacency, and nearest parent-triangle provenance map both false-hit triangles to the same cylindrical face. The same-face observation is diagnostic only: the fix never exempts same-face pairs. The separately captured F64 subdivision false hit rules out STL float32 conversion as the initiating cause. Captures with face provenance: `.codex-run/export11/repro-1793615872878`.
+
+## Correction and coverage
+
+Only the unreliable unshared-triangle narrow phase changes. `robustTriangleIntersection.ts` uses the existing `robust-predicates` adaptive exact-sign orientations, projected separation and inclusive edge/triangle contacts. It does not construct rounded plane intersections or introduce a distance epsilon. Legitimate shared-simplex handling remains in `triangleSharedContact.ts`; crossing or overlap beyond a shared edge/vertex is still a defect. Degenerate inputs retain the legacy fallback and remain separately blocked by the mandatory topology gate.
+
+After removing the first false hit, the 353,884-triangle fixture needs 5,677,947 candidate pairs to finish. The old fixed five-million budget could not complete. Coverage now scales as max(5 million, min(50 million, triangle count × 32)), with the existing 30-second bound retained. Reports expose both bounds. Exhausting either still leaves the result incomplete and blocks print-ready status; candidate pairs are streamed rather than accumulated.
+
+## Fidelity and focused validation
+
+All four baseline float32 preview geometry SHA-256 hashes are unchanged (`tests/fixtures/seven-hole-plate-baseline.json`). No mesh coordinates, dimensions, topology, source project records, tessellation tolerances or repair settings were changed by the fix. These are the existing sampled fidelity measurements, not certified global Hausdorff bounds:
+
+| Settings | Triangles | Sampled analytic deviation mm | Sampled normal deviation degrees | Total reported deviation budget mm |
+| --- | ---: | ---: | ---: | ---: |
+| High | 3,076 | 0.0124339624998 | 0.660050940482 | 0.0124339625035 |
+| Ultra | 3,912 | 0.00250163805070 | 0.619253484648 | 0.00250163805549 |
+| Custom 0.001 mm / 1 degree | 23,096 | 0.000381469726563 | 0.0872684680556 | 0.000381470178573 |
+| High + 1 mm edge maximum | 353,884 | 0.0124339624998 | 0.660050940482 | 0.0124359277066 |
+
+High/Ultra/Custom and returning to High export STL and 3MF successfully. Changing the group width invalidates cached geometry; restoring it recovers the original hash. Independent STL/3MF decoding checks exact-coordinate closed edge and vertex topology. Flush cutters, translations, scaling, and rotated native groups pass. Intersecting closed tetrahedra remain blocked in both formats, before and after subdivision. Shared-edge, shared-vertex, coplanar overlap/disjointness and nonadjacent contact tests pass; 12,000 seeded comparisons use an independent test-only BigInt SAT oracle for unshared nondegenerate triangles.
+
+Focused results: 13 unit tests passed (five files); 17 integration tests passed, three existing optional tests skipped (two files); application TypeScript check passed. Worker cancellation/timeouts and resource-budget regressions are included. Logs: `.codex-run/export11/focused.log`, `integration.log`, `typecheck-final.log`. Captures: `.codex-run/export11/verified-1793616906027`; refined STL generation/validation took 8.27 s in that run, with unchanged geometry and complete contact coverage. Timings are observations, not performance guarantees. No expensive organic hollowing benchmark was rerun.
+
+## Limits
+
+The captured defect is proven to originate in the mesh contact predicate; this is not a claim that every possible analytic B-rep or every high-density tessellation is valid. OCCT BRepCheck validity is not a full self-interference proof. Actual file-coordinate manufacturing checks remain mandatory. Very large/dense cases can still reach the bounded validation limits and remain unverified. Existing sampled fidelity and wall-thickness estimates retain their previous limitations. No exact geometry, Boolean kernel, organic hollowing, or project serialization code was modified.
 
 ## Upstream research
 

@@ -1,0 +1,38 @@
+{
+  "source": "Ultimate .10 captured before narrow-phase fix",
+  "occtWasmVersion": "5.8.0",
+  "cases": {
+    "high": {
+      "triangles": 3076,
+      "previewSha256": "91180f2ba5dc2bf9d204e145b2d967a1c00245fde384fa2aa0f9eaa5636d3fd1",
+      "analyticDeviationMm": 0.012433962499801986,
+      "analyticNormalDeviationDeg": 0.66005094048237,
+      "totalDeviationBudgetMm": 0.012433962503548586,
+      "reportedIntersections": 0
+    },
+    "ultra": {
+      "triangles": 3912,
+      "previewSha256": "717eb74742e37bc5bb4bf0b676e2ec6b735b1b3ef37d1e21ca70ad98767990e5",
+      "analyticDeviationMm": 0.0025016380506993428,
+      "analyticNormalDeviationDeg": 0.6192534846477192,
+      "totalDeviationBudgetMm": 0.0025016380554858967,
+      "reportedIntersections": 0
+    },
+    "fine": {
+      "triangles": 23096,
+      "previewSha256": "ddb07326a2f3a49a230e2edc0d48e646517fac959c95a625ad8cc12e9bf2a67a",
+      "analyticDeviationMm": 0.0003814697265625,
+      "analyticNormalDeviationDeg": 0.08726846805555208,
+      "totalDeviationBudgetMm": 0.00038147017857332634,
+      "reportedIntersections": 0
+    },
+    "edge": {
+      "triangles": 353884,
+      "previewSha256": "dd3d76a85c6da43274b83474647ff45009750672476e742f5ba444edfc178132",
+      "analyticDeviationMm": 0.012433962499801986,
+      "analyticNormalDeviationDeg": 0.66005094048237,
+      "totalDeviationBudgetMm": 0.012435927706620413,
+      "reportedIntersections": 1
+    }
+  }
+}

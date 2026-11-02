@@ -1,6 +1,7 @@
 import { orient2d, orient3d } from "robust-predicates";
 import type { ExtendedTriangle } from "three-mesh-bvh";
 import type { Vector3 } from "three";
+import { robustTriangleIntersection } from "@/lib/robustTriangleIntersection";
 
 type Point = readonly [number, number, number];
 const point = (p: Vector3): Point => [p.x, p.y, p.z];
@@ -53,7 +54,8 @@ export function intersectsOverlappingTrianglesBeyondSharedContact(
   p: Point[],
   q: Point[],
 ) {
-  if (!shared.length) return a.intersectsTriangle(b);
+  if (!shared.length)
+    return robustTriangleIntersection(p, q) ?? a.intersectsTriangle(b);
   if (shared.length === 3) return true;
   if (
     same(p[0], p[1]) ||

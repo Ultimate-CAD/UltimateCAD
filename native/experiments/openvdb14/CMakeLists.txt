@@ -38,3 +38,11 @@ target_link_libraries(ultimate-native-control PRIVATE TBB::tbb
 target_compile_definitions(ultimate-native-control PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN
   IGL_PARALLEL_FOR_FORCE_SERIAL EIGEN_MPL2_ONLY)
 target_compile_options(ultimate-native-control PRIVATE /O2 /EHsc /bigobj)
+add_executable(ultimate-openvdb-offset offset_experiment.cpp)
+target_include_directories(ultimate-openvdb-offset PRIVATE
+  "${NATIVE_CACHE}/manifold/include" "${NATIVE_CACHE}/libigl/include" "${NATIVE_CACHE}/eigen")
+target_link_libraries(ultimate-openvdb-offset PRIVATE OpenVDB::openvdb TBB::tbb
+  "${NATIVE_CACHE}/build/_deps/manifold-build/lib/Release/manifold.lib")
+target_compile_definitions(ultimate-openvdb-offset PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN
+  IGL_PARALLEL_FOR_FORCE_SERIAL EIGEN_MPL2_ONLY)
+target_compile_options(ultimate-openvdb-offset PRIVATE /O2 /EHsc /bigobj)

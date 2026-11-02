@@ -1,5 +1,17 @@
 # Master campaign — .13 validated; OpenVDB experiment checkpoint
 
+## Current isolated request: offset versus interior dilation
+
+Scope override: perform this experiment only; do not resume C–H or change production engines.
+- [x] Inspect actual pinned implementation and upstream API; existing p/pitch conversion is correct for its zero-origin uniform transform.
+- [x] Build a separate fixed-pitch experiment with explicit worldToIndex, zero adaptivity, controlled quad triangulation, no smoothing/simplification, stage memory/timing and exact failure witnesses.
+- [x] Diagnose face-only dilation mask failure at diagonal normals; use documented negative-domain sweep with 26-neighbor dilation.
+- [x] Finish paired 0.10/0.075/0.05/0.02 mm benchmarks under 8 GiB process / 180 s trial budgets; record exhaustion separately from invalid geometry.
+- [x] Independently check cavity accuracy, final manufacturing integrity, exact normalized exterior preservation and coordinate-origin regression; compare full costs to native 23.80 s.
+- [x] Record best validated configuration/limits and commit locally; no production integration without demonstrated complete improvement.
+
+Experiment complete on `codex/openvdb-offset-dilation-experiment`, tag `checkpoint-openvdb-offset-comparison`. Report `docs/performance/OPENVDB_OFFSET_DILATION_EXPERIMENT.md`; code `native/experiments/openvdb14/offset_experiment.cpp`, runner `scripts/run-openvdb-offset-experiment.mjs`, artifacts `.codex-run/sparse14-offset`. Six completed geometries pass full app/CGAL checks, analytic offset bounds and exact exterior/cavity-face preservation. Best native generation .100 dilation 18.170 s / 1.555 GB / 0.093405 mm sampled error; faster than 23.799 s but worse error/memory, so no production integration. Fastest lower-error alternative .100 offset 27.363 s. .020 dilation confirmed bad_alloc at 8 GiB limit, offset timed out 180 s. Fastest actual STL/3MF reimport/CGAL checks pass, four world/index-origin checks pass. Thin-wall concerns remain; no print-ready claim. .13 app/installer/worker hashes unchanged. This isolated request is finished; do not automatically resume the broader campaign.
+
 User authorizes ordered engineering releases through implementation, tests, independent verification and packaging, then later milestones while resources permit. Do not stop at a proposal. Master record: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
 
 ## Current surgical context

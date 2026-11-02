@@ -4,6 +4,8 @@ This standalone experimental executable compares OpenVDB level-set sampling and 
 
 Measured results and integration rejection: `docs/performance/OPENVDB14_EVALUATION.md`. Validated application remains .13. Default experiment retains the generated cavity without tolerance simplification (delivery conditioning still applies). To reproduce the rejected faster variant in a separate build directory, configure `-DSPARSE_CAVITY_SIMPLIFY_DIVISOR=4`; never treat its output as approved because raw topology alone passes.
 
+The separate fixed-pitch **offset versus interior dilation** experiment is `ultimate-openvdb-offset`, built by `cmake --build .codex-run/sparse14/prototype-build --config Release --target ultimate-openvdb-offset --parallel 2`. Its source is `offset_experiment.cpp`; it does not use the old automatic-refinement main. Results, coordinate audit, stencil failure, stage/RSS profiles, independent whole-cavity accuracy checks and complete manufacturing validation: `docs/performance/OPENVDB_OFFSET_DILATION_EXPERIMENT.md`. Run with `scripts/run-openvdb-offset-experiment.mjs`; all artifacts are separate under `.codex-run/sparse14-offset`.
+
 ## Rebuild
 
 Run from the repository root in PowerShell:

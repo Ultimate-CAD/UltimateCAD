@@ -2,6 +2,8 @@
 
 Status: prototype implemented; **production integration rejected for the measured variants**. This is not a validated .14 desktop release. Keep the packaged .13 native/WASM engines and rollback. Campaign record: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
 
+Follow-up isolated offset/dilation comparison: `OPENVDB_OFFSET_DILATION_EXPERIMENT.md`. The original coordinate adapter is correct for its zero-origin uniform grid. New fixed-pitch negative-domain sweeping reaches a faster, fully checked .100 mm result, but increases measured error and memory; production integration remains rejected. Do not replace this historical experiment's figures with those from the distinct follow-up.
+
 ## Source and implementation
 
 Official latest [OpenVDB 14.0.0](https://github.com/AcademySoftwareFoundation/openvdb/releases/tag/v14.0.0), released 2026-10-29, independently checked through GitHub release API. Codeload ZIP SHA-256 `d53508b64e50eabd8c01fb62310f2d55a2ef00475972a6b14e69ec0a6d6d05d1`. Apache-2.0 main license, relicensing note and vendored compression notices retained under `docs/research/openvdb14/licenses`.

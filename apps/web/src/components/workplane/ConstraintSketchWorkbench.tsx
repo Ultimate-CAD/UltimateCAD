@@ -74,6 +74,46 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose}:{shape:Workpla
         params.push({name:"length"+n,expression:"1 mm",unit:"mm"});
       })}>Add parameter</button>
       <label>Pad depth parameter <input value={current.featureHistory.pad.depthParameter} onChange={e=>change(d=>{d.featureHistory!.pad.depthParameter=e.target.value;})}/></label>
+      <button onClick={()=>change(d=>{
+        const history=d.featureHistory!;
+        const holes=history.holes ??= [];
+        const newId=crypto.randomUUID();
+        if(history.rimFinish) history.rimFinish.inputId=newId;
+        holes.push({id:newId,kind:"throughHole",inputId:holes.at(-1)?.id ?? history.pad.id,suppressed:false,xMm:0,zMm:0,diameterMm:4});
+      })}>Add through-hole</button>
+      {current.featureHistory.holes?.map((hole,index)=><fieldset key={hole.id}>
+        <legend>Through-hole {index+1}</legend>
+        {num("Center X (mm)",hole.xMm,v=>change(d=>{d.featureHistory!.holes![index].xMm=v;}))}
+        {num("Center Z (mm)",hole.zMm,v=>change(d=>{d.featureHistory!.holes![index].zMm=v;}))}
+        {num("Hole diameter (mm)",hole.diameterMm,v=>change(d=>{d.featureHistory!.holes![index].diameterMm=v;}))}
+        {hole.pattern ? <>
+          <label>Pattern <select aria-label="Pattern type" value={hole.pattern.kind} onChange={e=>change(d=>{d.featureHistory!.holes![index].pattern!.kind=e.target.value as "linear"|"circular";})}><option value="linear">Linear</option><option value="circular">Circular</option></select></label>
+          {num("Instances",hole.pattern.count,v=>change(d=>{d.featureHistory!.holes![index].pattern!.count=v;}))}
+          {hole.pattern.kind==="linear" ? <>
+            {num("Step X (mm)",hole.pattern.stepX,v=>change(d=>{d.featureHistory!.holes![index].pattern!.stepX=v;}))}
+            {num("Step Z (mm)",hole.pattern.stepZ,v=>change(d=>{d.featureHistory!.holes![index].pattern!.stepZ=v;}))}
+          </> : <>
+            {num("Pivot X (mm)",hole.pattern.centerX,v=>change(d=>{d.featureHistory!.holes![index].pattern!.centerX=v;}))}
+            {num("Pivot Z (mm)",hole.pattern.centerZ,v=>change(d=>{d.featureHistory!.holes![index].pattern!.centerZ=v;}))}
+            {num("Angular step (deg)",hole.pattern.angleDeg,v=>change(d=>{d.featureHistory!.holes![index].pattern!.angleDeg=v;}))}
+          </>}
+        </> : <button onClick={()=>change(d=>{d.featureHistory!.holes![index].pattern={id:crypto.randomUUID(),kind:"linear",inputId:hole.id,count:2,stepX:6,stepZ:0,centerX:0,centerZ:0,angleDeg:60};})}>Pattern hole</button>}
+        <label><input type="checkbox" checked={hole.suppressed} onChange={e=>change(d=>{d.featureHistory!.holes![index].suppressed=e.target.checked;})}/>Suppress hole</label>
+      </fieldset>)}
+      {current.featureHistory.holes?.length ? current.featureHistory.rimFinish ? <fieldset>
+        <legend>Top rim treatment</legend>
+        <label>Treated hole <select aria-label="Treated hole" value={current.featureHistory.rimFinish.holeId} onChange={e=>change(d=>{const f=d.featureHistory!.rimFinish!; f.holeId=e.target.value; f.instance=0; delete f.patternId;})}>{current.featureHistory.holes.map((h,i)=><option key={h.id} value={h.id}>Through-hole {i+1}</option>)}</select></label>
+        {num("Rim instance (1-based)",(current.featureHistory.rimFinish.instance??0)+1,v=>change(d=>{
+          const f=d.featureHistory!.rimFinish!;
+          f.instance=v-1; f.patternId=d.featureHistory!.holes!.find(h=>h.id===f.holeId)?.pattern?.id;
+        }))}
+        <label>Operation <select value={current.featureHistory.rimFinish.kind} onChange={e=>change(d=>{d.featureHistory!.rimFinish!.kind=e.target.value as "fillet"|"chamfer";})}><option value="fillet">Fillet</option><option value="chamfer">Chamfer</option></select></label>
+        {num("Treatment size (mm)",current.featureHistory.rimFinish.sizeMm,v=>change(d=>{d.featureHistory!.rimFinish!.sizeMm=v;}))}
+        <label><input type="checkbox" checked={current.featureHistory.rimFinish.suppressed} onChange={e=>change(d=>{d.featureHistory!.rimFinish!.suppressed=e.target.checked;})}/>Suppress treatment</label>
+      </fieldset> : <button onClick={()=>change(d=>{
+        const history=d.featureHistory!, last=history.holes!.at(-1)!;
+        history.rimFinish={id:crypto.randomUUID(),inputId:last.id,holeId:last.id,kind:"fillet",sizeMm:0.5,suppressed:false};
+      })}>Finish a hole rim</button> : null}
       {solution?.valid && <output>Pad depth: {solution.document.extrusionMm} mm</output>}
     </details> : <>
       {num(tr("extrusion"),current.extrusionMm,extrusionMm=>change(d=>{d.extrusionMm=extrusionMm;}))}

@@ -8,6 +8,8 @@ import { buildRevolvedSketchSolid } from "@/lib/cadSketchRevolve";
 import { buildStrokedSketchSolid } from "@/lib/cadSketchStroke";
 import { buildSweptSketchSolid } from "@/lib/cadSketchSweep";
 import { buildInsetSketchSolid } from "@/lib/cadSketchInset";
+import { FeatureSolidCache } from "@/lib/featureSolidCache";
+import { replayThroughHoles } from "@/lib/replayThroughHoles";
 import { pathWire } from "@/lib/sketchCadWire";
 import { buildMessage } from "@/lib/buildStamp";
 import { SKETCH_INSET_UNSUPPORTED, SKETCH_STROKE_UNSUPPORTED, type SketchCadBuildRequest, type SketchCadBuildResponse } from "@/lib/sketchCadTypes";
@@ -42,6 +44,8 @@ function post(message: SketchCadBuildResponse, transfer: Transferable[] = []) {
 // The first thing the page hears: which build this worker is from (lib/buildStamp.ts).
 self.postMessage(buildMessage());
 
+const featureCache = new FeatureSolidCache();
+
 self.onmessage = async (event: MessageEvent<SketchCadBuildRequest>) => {
   const request = event.data;
   let cad: OcctKernel | null = null;
@@ -62,19 +66,34 @@ self.onmessage = async (event: MessageEvent<SketchCadBuildRequest>) => {
       if (!inset) throw new Error(SKETCH_INSET_UNSUPPORTED);
       result = inset;
     } else {
-      const regions = cadSketchRegions(request.profile);
-      if (regions.length === 0) throw new Error("No closed profile found. Draw at least one closed loop and ensure it has no degenerate (zero-area) geometry.");
-      const solids: ShapeHandle[] = regions.map((region) => {
-        let face = cad!.makeFace(pathWire(cad!, region.outer));
-        if (region.holes.length > 0) face = cad!.addHolesInFace(face, region.holes.map((hole) => pathWire(cad!, hole)));
-        return cad!.extrude(face, 0, request.height, 0);
-      });
-      result = solids.length === 1 ? solids[0] : cad.makeCompound(solids);
-      // The validity check grows steeply with the edges: a stroked traced drawing (7 000 straight pieces,
-      // a hole in it) took 51 s of a 56 s build (#461). A body that large is checked by its volume instead.
-      const edgeCount = regions.reduce((sum, region) => sum + region.outer.steps.length + region.holes.reduce((inner, hole) => inner + hole.steps.length, 0), 0);
-      const sound = !request.profile.constraintSketch && edgeCount > LARGE_SKETCH_EDGES ? cad.getVolume(result) > 1e-9 : cad.isValid(result);
-      if (!sound) throw new Error("OpenCascade produced invalid sketch topology");
+      const buildPad = () => {
+        const regions = cadSketchRegions(request.profile);
+        if (regions.length === 0) throw new Error("No closed profile found. Draw at least one closed loop and ensure it has no degenerate (zero-area) geometry.");
+        const solids: ShapeHandle[] = regions.map((region) => {
+          let face = cad!.makeFace(pathWire(cad!, region.outer));
+          if (region.holes.length > 0) face = cad!.addHolesInFace(face, region.holes.map((hole) => pathWire(cad!, hole)));
+          return cad!.extrude(face, 0, request.height, 0);
+        });
+        const pad = solids.length === 1 ? solids[0] : cad!.makeCompound(solids);
+        // The validity check grows steeply with the edges: a stroked traced drawing (7 000 straight pieces,
+        // a hole in it) took 51 s of a 56 s build (#461). A body that large is checked by its volume instead.
+        const edgeCount = regions.reduce((sum, region) => sum + region.outer.steps.length + region.holes.reduce((inner, hole) => inner + hole.steps.length, 0), 0);
+        const sound = !request.profile.constraintSketch && edgeCount > LARGE_SKETCH_EDGES ? cad!.getVolume(pad) > 1e-9 : cad!.isValid(pad);
+        if (!sound) throw new Error("OpenCascade produced invalid sketch topology");
+        return pad;
+      };
+      if (request.profile.constraintSketch?.featureHistory) {
+        // The pad depends on the solved profile and its depth. Changes to
+        // downstream feature parameters cannot change the pad's exact shape.
+        const {constraintSketch, ...geometry} = request.profile;
+        const key = JSON.stringify([constraintSketch.featureHistory!.pad.id, request.height, geometry]);
+        result = featureCache.run(cad,key,buildPad);
+      } else result = buildPad();
+    }
+    const history = request.profile.constraintSketch?.featureHistory;
+    if (history?.holes?.length) {
+      if (request.revolve || request.sweep || request.stroke || request.inset) throw Error("Hole history requires its original pad");
+      result = replayThroughHoles(cad,result,history);
     }
     const deflection = sketchCadDeflection(request.profile);
     const mesh = cad.tessellate(result, { linearDeflection: deflection.linear, angularDeflection: deflection.angular });

@@ -290,6 +290,87 @@ async function verifyNamedPad() {
   assert.deepEqual(reopened.sketch.featureHistory,history);
   assert.equal(brepAssetBytes(reopened.current,reopened.node),brepAssetBytes(saved.current,saved.node));
   pass("Named pad depth drives exact geometry, rejects cyclic edit and survives Undo/Redo and reopening", {objectId:originalId,padId:history.pad.id,volumeMm3:expected});
+  await command("select_objects", {ids:[originalId]});
+  panel = await openSketcher();
+  await panel.getByRole("button",{name:"Add through-hole"}).click();
+  await panel.getByRole("button",{name:"Add through-hole"}).click();
+  await panel.getByLabel("Center X (mm)",{exact:true}).nth(1).fill("10");
+  async function checkHoles(suppressed) {
+    const deadline = Date.now()+30000;
+    while (Date.now()<deadline) {
+      const current = await saveProject();
+      const node = sketchNode(current.state,originalId);
+      const holes = node?.definition.sketchProfile.constraintSketch.featureHistory.holes;
+      if (holes?.length===2 && holes[0].suppressed===suppressed && holes[1].xMm===10) {
+        const volume=await independentVolume(current.archive,current.project,node);
+        assert.ok(Math.abs(volume-(expected-(suppressed?1:2)*Math.PI*4*6))<1e-6);
+        return {holes,current,node};
+      }
+      await pause(100);
+    }
+    throw Error("Hole replay failed to commit the requested features");
+  }
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  const both=await checkHoles(false);
+  await panel.getByLabel("Suppress hole").first().check();
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  const one=await checkHoles(true);
+  assert.deepEqual(one.holes.map(h=>h.id),both.holes.map(h=>h.id));
+  const holesFile=path.join(output,"suppressed-hole.lyl");
+  writeFileSync(holesFile,Buffer.from(one.current.saved.base64,"base64"));
+  await closeSketcher(panel);
+  await page.keyboard.press("Control+z");
+  await checkHoles(false);
+  await page.keyboard.press("Control+y");
+  await checkHoles(true);
+  await reopenProject(holesFile,one.current.project.metadata?.projectName);
+  const loaded=await checkHoles(true);
+  assert.deepEqual(loaded.holes,one.holes);
+  assert.equal(brepAssetBytes(loaded.current,loaded.node),brepAssetBytes(one.current,one.node));
+  pass("Two linked hole cuts rebuild, suppress, undo and reload with correct exact volume and stable feature IDs");
+
+  await command("select_objects",{ids:[originalId]});
+  panel=await openSketcher();
+  await panel.getByRole("button",{name:"Finish a hole rim"}).click();
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  await panel.getByText("Sketch solid built",{exact:true}).waitFor();
+  const finished=await saveProject();
+  const treated=sketchNode(finished.state,originalId);
+  assert.equal(treated.definition.sketchProfile.constraintSketch.featureHistory.rimFinish.holeId,one.holes[1].id);
+  const treatedVolume=await independentVolume(finished.archive,finished.project,treated);
+  assert.ok(treatedVolume>0 && treatedVolume<expected-Math.PI*4*6);
+  await panel.getByLabel("Treated hole",{exact:true}).selectOption(one.holes[0].id);
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  await panel.getByRole("alert").filter({hasText:"Missing feature face"}).waitFor();
+  const rejected=await saveProject();
+  assert.equal(brepAssetBytes(rejected,sketchNode(rejected.state,originalId)),brepAssetBytes(finished,treated));
+  assert.deepEqual(sketchNode(rejected.state,originalId).definition,treated.definition);
+  pass("Rim fillet on surviving hole succeeds; targeting suppressed hole reports missing face and preserves the exact body");
+
+  await closeSketcher(panel);
+  await command("select_objects",{ids:[originalId]});
+  panel=await openSketcher();
+  await panel.getByLabel("Suppress treatment").check();
+  await panel.getByRole("button",{name:"Pattern hole",exact:true}).last().click();
+  await panel.getByLabel("Pattern type",{exact:true}).selectOption("circular");
+  await panel.getByLabel("Instances",{exact:true}).fill("4");
+  await panel.getByLabel("Angular step (deg)",{exact:true}).fill("90");
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  await panel.getByText("Sketch solid built",{exact:true}).waitFor();
+  const repeated=await saveProject();
+  const repeatedNode=sketchNode(repeated.state,originalId);
+  assert.equal(repeatedNode.definition.sketchProfile.constraintSketch.featureHistory.holes[1].pattern.count,4);
+  assert.ok(Math.abs(await independentVolume(repeated.archive,repeated.project,repeatedNode)-(expected-4*Math.PI*4*6))<1e-6);
+  const patternFile=path.join(output,"circular-pattern.lyl");
+  writeFileSync(patternFile,Buffer.from(repeated.saved.base64,"base64"));
+  await closeSketcher(panel);
+  await reopenProject(patternFile,repeated.project.metadata?.projectName);
+  const reopenedPattern=await saveProject();
+  const patternNode=sketchNode(reopenedPattern.state,originalId);
+  assert.deepEqual(patternNode.definition,repeatedNode.definition);
+  assert.equal(brepAssetBytes(reopenedPattern,patternNode),brepAssetBytes(repeated,repeatedNode));
+  pass("Editable circular hole pattern reproduces the analytic volume and survives reopening");
+
 }
 
 let originalId, cancelExperiment = "not-run";

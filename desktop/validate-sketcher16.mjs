@@ -371,6 +371,28 @@ async function verifyNamedPad() {
   assert.equal(brepAssetBytes(reopenedPattern,patternNode),brepAssetBytes(repeated,repeatedNode));
   pass("Editable circular hole pattern reproduces the analytic volume and survives reopening");
 
+  await command("select_objects",{ids:[originalId]});
+  panel=await openSketcher();
+  await panel.getByRole("button",{name:"Add sketch pocket"}).click();
+  await panel.getByRole("button",{name:"Edit pocket profile"}).click();
+  await setDimension("Pocket radius",3.5);
+  await panel.getByRole("button",{name:"Save sketch",exact:true}).click();
+  await panel.getByLabel("Pocket depth (mm)").fill("1.5");
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  await panel.getByText("Sketch solid built",{exact:true}).waitFor();
+  const pocket=await saveProject();
+  const pocketNode=sketchNode(pocket.state,originalId);
+  const pocketVolume=await independentVolume(pocket.archive,pocket.project,pocketNode);
+  assert.ok(Math.abs(pocketVolume-(expected-4*Math.PI*4*6-Math.PI*3.5**2*1.5))<1e-6);
+  const pocketFile=path.join(output,"profile-pocket.lyl");
+  writeFileSync(pocketFile,Buffer.from(pocket.saved.base64,"base64"));
+  await closeSketcher(panel);
+  await reopenProject(pocketFile,pocket.project.metadata?.projectName);
+  const loadedPocket=await saveProject();
+  assert.deepEqual(sketchNode(loadedPocket.state,originalId).definition,pocketNode.definition);
+  assert.equal(brepAssetBytes(loadedPocket,sketchNode(loadedPocket.state,originalId)),brepAssetBytes(pocket,pocketNode));
+  pass("Editable constrained pocket sketch and blind depth regenerate, preserve analytic volume and reopen");
+
 }
 
 let originalId, cancelExperiment = "not-run";

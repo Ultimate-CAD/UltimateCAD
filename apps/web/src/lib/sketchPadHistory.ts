@@ -1,3 +1,4 @@
+import type { ConstraintSketch } from "@/lib/constraintSketch";
 import { evaluateFeatureParameters, type FeatureParameter } from "@/lib/featureParameters";
 
 export interface ThroughHoleFeature {
@@ -38,6 +39,7 @@ export interface SketchPadHistory {
   sketch: { id: string; kind: "sketch" };
   pad: { id: string; kind: "pad"; profileId: string; depthParameter: string };
   parameters: FeatureParameter[];
+  pocket?: { id:string; sketchId:string; inputId:string; profile:ConstraintSketch; depthMm:number; suppressed:boolean };
   holes?: ThroughHoleFeature[];
   rimFinish?: { id: string; inputId: string; holeId: string; instance?: number; patternId?: string; kind: "fillet" | "chamfer"; sizeMm: number; suppressed: boolean };
 }
@@ -60,6 +62,13 @@ export function resolvePadDepth(history: SketchPadHistory): number {
   const ids = new Set([sketch.id,pad.id]);
   let previous = pad.id;
   if (history.holes !== undefined && (!Array.isArray(history.holes) || history.holes.length > 128)) throw Error("Unsupported hole history");
+  if (history.pocket !== undefined) {
+    const p=history.pocket;
+    if (!p || ![p.id,p.sketchId].every(id=>typeof id==="string" && id.length>0 && id.length<=160 && !ids.has(id)) ||
+       p.id===p.sketchId || p.inputId!==pad.id || typeof p.suppressed!=="boolean" || !p.profile || p.profile.featureHistory!==undefined ||
+       !(Number.isFinite(p.depthMm) && p.depthMm>0 && p.depthMm<=1e6)) throw Error("Invalid sketch pocket");
+    ids.add(p.id); ids.add(p.sketchId); previous=p.id;
+  }
   let totalCuts=0;
   for (const hole of history.holes ?? []) {
     if (!hole || hole.kind !== "throughHole" || typeof hole.id !== "string" || !hole.id || hole.id.length > 160 ||

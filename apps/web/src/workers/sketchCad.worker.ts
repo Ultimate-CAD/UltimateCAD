@@ -9,6 +9,7 @@ import { buildStrokedSketchSolid } from "@/lib/cadSketchStroke";
 import { buildSweptSketchSolid } from "@/lib/cadSketchSweep";
 import { buildInsetSketchSolid } from "@/lib/cadSketchInset";
 import { FeatureSolidCache } from "@/lib/featureSolidCache";
+import { replaySketchPocket } from "@/lib/replaySketchPocket";
 import { replayThroughHoles } from "@/lib/replayThroughHoles";
 import { pathWire } from "@/lib/sketchCadWire";
 import { buildMessage } from "@/lib/buildStamp";
@@ -91,6 +92,7 @@ self.onmessage = async (event: MessageEvent<SketchCadBuildRequest>) => {
       } else result = buildPad();
     }
     const history = request.profile.constraintSketch?.featureHistory;
+    if (history?.pocket && !history.pocket.suppressed) result = replaySketchPocket(cad,result,history.pocket,request.height);
     if (history?.holes?.length) {
       if (request.revolve || request.sweep || request.stroke || request.inset) throw Error("Hole history requires its original pad");
       result = replayThroughHoles(cad,result,history);

@@ -24,7 +24,10 @@ export function validateConstraintSketch(value: unknown): asserts value is Const
   if (d.schema !== 1 || typeof d.title !== "string" || !d.title.trim() || d.title.length > 160 || !Array.isArray(d.entities) || !Array.isArray(d.constraints) || d.entities.length > 512 || d.constraints.length > 2048) throw new Error("Unsupported or excessive sketch definition");
   const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 1e6;
   if (!finite(d.extrusionMm) || d.extrusionMm <= 0) throw new Error("Extrusion must be a positive finite length in mm");
-  if (d.featureHistory !== undefined) resolvePadDepth(d.featureHistory);
+  if (d.featureHistory !== undefined) {
+    resolvePadDepth(d.featureHistory);
+    if (d.featureHistory.pocket) validateConstraintSketch(d.featureHistory.pocket.profile);
+  }
   const ids = new Set<string>();
   for (const o of [...d.entities, ...d.constraints]) {
     if (!o || typeof o.id !== "string" || !o.id || o.id.length > 160 || o.id.startsWith("$") || ids.has(o.id)) throw new Error("Sketch IDs must be unique and nonempty");
@@ -112,6 +115,12 @@ export function constraintResiduals(d: ConstraintSketch): ConstraintSolution["re
 export function solveConstraintSketch(input: ConstraintSketch, runtime: PlaneGcsRuntime): ConstraintSolution {
   validateConstraintSketch(input);const document=structuredClone(input);
   if (document.featureHistory) document.extrusionMm = resolvePadDepth(document.featureHistory);
+  const pocket = document.featureHistory?.pocket;
+  if (pocket && !pocket.suppressed) {
+    const solved = solveConstraintSketch(pocket.profile,runtime);
+    if (!solved.valid) throw Error("Pocket sketch " + pocket.sketchId + ": " + solved.message);
+    pocket.profile = solved.document;
+  }
   const wrapper=new runtime.api.GcsWrapper(new runtime.module.GcsSystem(),runtime.module);
   try {
     const objects:SketchPrimitive[]=document.entities.filter(e=>e.kind==="point").map(e=>{const p=e as ConstraintPoint;return {id:p.id,type:"point",x:p.x,y:p.y,fixed:p.fixed};});

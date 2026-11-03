@@ -4,12 +4,14 @@ import { CONSTRAINT_KINDS, mountingPlateSketch, type ConstraintEntity, type Cons
 import { solveSketchInWorker } from "@/lib/constraintSketchWorker";
 import { t } from "@/lib/i18n";
 import type { WorkplaneShape } from "@/types/layerling";
+import { constraintSketchShape } from "@/lib/constraintSketchShape";
 import { createSketchPadHistory } from "@/lib/sketchPadHistory";
 import "./ConstraintSketchWorkbench.css";
 const tr=(key:string)=>t(`constraintSketch.${key}` as Parameters<typeof t>[0]);
 const uid=(prefix:string)=>`${prefix}-${crypto.randomUUID()}`;
 const clone=<T,>(value:T):T=>structuredClone(value);
-export function ConstraintSketchWorkbench({shape,onApply,onClose}:{shape:WorkplaneShape|null;onApply:(document:ConstraintSketch,targetId:string|null,build:boolean,signal:AbortSignal)=>Promise<WorkplaneShape>;onClose:()=>void}){
+export function ConstraintSketchWorkbench({shape,onApply,onClose,profileOnly=false}:{profileOnly?:boolean;shape:WorkplaneShape|null;onApply:(document:ConstraintSketch,targetId:string|null,build:boolean,signal:AbortSignal)=>Promise<WorkplaneShape>;onClose:()=>void}){
+  const [editingPocket,setEditingPocket]=useState(false);
   const [draft,setDraft]=useState<ConstraintSketch>(()=>clone(shape?.sketchProfile?.constraintSketch??mountingPlateSketch()));
   const [targetId,setTargetId]=useState<string|null>(shape?.sketchProfile?.constraintSketch?shape.id:null);
   const [past,setPast]=useState<ConstraintSketch[]>([]),[future,setFuture]=useState<ConstraintSketch[]>([]);
@@ -36,6 +38,16 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose}:{shape:Workpla
   const num=(label:string,n:number,onChange:(value:number)=>void)=><label>{label}<input type="number" aria-label={label} value={Number(n.toPrecision(12))} step="any" onChange={e=>{const value=parseFloat(e.target.value);if(Number.isFinite(value))onChange(value);}}/></label>;
   function pointerMove(event:React.PointerEvent<SVGSVGElement>){if(!drag.current||!svg.current)return;const matrix=svg.current.getScreenCTM();if(!matrix)return;const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());const next=clone(current);next.entities=next.entities.map(e=>e.id===drag.current!.id&&e.kind==="point"?{...e,x:point.x,y:-point.y}:e);edit(next,false);}
   function pointerEnd(){if(!drag.current)return;const before=drag.current.before;setPast(p=>[...p.slice(-99),before]);setFuture([]);drag.current=null;}
+  const activePocket=current.featureHistory?.pocket;
+  if(editingPocket && activePocket) return <ConstraintSketchWorkbench key={activePocket.sketchId}
+    profileOnly shape={constraintSketchShape(activePocket.profile,activePocket.sketchId)}
+    onClose={()=>setEditingPocket(false)} onApply={async(profile)=>{
+      const next=clone(current);
+      next.featureHistory!.pocket!.profile=clone(profile);
+      edit(next);
+      setEditingPocket(false);
+      return constraintSketchShape(profile,activePocket.sketchId);
+    }}/>;
   return <section className="constraint-sketch-workbench" aria-label={tr("title")} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();e.stopPropagation();if(e.shiftKey)redo();else undo();}}}>
     <header><strong>{tr("title")}</strong><button aria-label={tr("close")} onClick={()=>{applyController.current?.abort();onClose();}}>×</button></header>
     <fieldset disabled={busy}>
@@ -74,12 +86,23 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose}:{shape:Workpla
         params.push({name:"length"+n,expression:"1 mm",unit:"mm"});
       })}>Add parameter</button>
       <label>Pad depth parameter <input value={current.featureHistory.pad.depthParameter} onChange={e=>change(d=>{d.featureHistory!.pad.depthParameter=e.target.value;})}/></label>
+      {activePocket ? <fieldset>
+        <legend>Sketch pocket</legend>
+        <button onClick={()=>setEditingPocket(true)}>Edit pocket profile</button>
+        {num("Pocket depth (mm)",activePocket.depthMm,v=>change(d=>{d.featureHistory!.pocket!.depthMm=v;}))}
+        <label><input type="checkbox" checked={activePocket.suppressed} onChange={e=>change(d=>{d.featureHistory!.pocket!.suppressed=e.target.checked;})}/>Suppress pocket</label>
+      </fieldset> : <button onClick={()=>change(d=>{
+        const h=d.featureHistory!,id=crypto.randomUUID();
+        h.pocket={id,inputId:h.pad.id,sketchId:crypto.randomUUID(),depthMm:Math.min(d.extrusionMm/2,2),suppressed:false,
+          profile:{schema:1,title:"Pocket profile",extrusionMm:1,entities:[{id:"center",kind:"point",x:0,y:0,fixed:true},{id:"rim",kind:"circle",center:"center",radius:5}],constraints:[{id:"radius",kind:"radius",first:"rim",value:5,name:"Pocket radius"}]}};
+        if(h.holes?.length) h.holes[0].inputId=id;
+      })}>Add sketch pocket</button>}
       <button onClick={()=>change(d=>{
         const history=d.featureHistory!;
         const holes=history.holes ??= [];
         const newId=crypto.randomUUID();
         if(history.rimFinish) history.rimFinish.inputId=newId;
-        holes.push({id:newId,kind:"throughHole",inputId:holes.at(-1)?.id ?? history.pad.id,suppressed:false,xMm:0,zMm:0,diameterMm:4});
+        holes.push({id:newId,kind:"throughHole",inputId:holes.at(-1)?.id ?? history.pocket?.id ?? history.pad.id,suppressed:false,xMm:0,zMm:0,diameterMm:4});
       })}>Add through-hole</button>
       {current.featureHistory.holes?.map((hole,index)=><fieldset key={hole.id}>
         <legend>Through-hole {index+1}</legend>
@@ -117,10 +140,10 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose}:{shape:Workpla
       {solution?.valid && <output>Pad depth: {solution.document.extrusionMm} mm</output>}
     </details> : <>
       {num(tr("extrusion"),current.extrusionMm,extrusionMm=>change(d=>{d.extrusionMm=extrusionMm;}))}
-      <button onClick={()=>change(d=>{d.featureHistory=createSketchPadHistory(d.extrusionMm);})}>Drive pad with parameters</button>
+      {!profileOnly && <button onClick={()=>change(d=>{d.featureHistory=createSketchPadHistory(d.extrusionMm);})}>Drive pad with parameters</button>}
     </>}
 
     </fieldset>
-    <footer><button disabled={!solution?.valid||busy} onClick={()=>void apply(true)}>{tr("build")}</button>{!targetId||!shape?.cadBrep||shape.sketchOnly?<button disabled={!solution?.valid||busy} onClick={()=>void apply(false)}>{tr("save")}</button>:null}{busy?<button onClick={()=>applyController.current?.abort()}>{tr("close")}</button>:null}</footer>
+    <footer>{!profileOnly && <button disabled={!solution?.valid||busy} onClick={()=>void apply(true)}>{tr("build")}</button>}{!targetId||!shape?.cadBrep||shape.sketchOnly?<button disabled={!solution?.valid||busy} onClick={()=>void apply(false)}>{tr("save")}</button>:null}{busy?<button onClick={()=>applyController.current?.abort()}>{tr("close")}</button>:null}</footer>
   </section>;
 }

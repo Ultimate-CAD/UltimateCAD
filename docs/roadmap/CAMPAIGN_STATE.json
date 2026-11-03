@@ -11,10 +11,11 @@
     "GUI through-hole suppression, Undo/Redo and exact B-rep reopen",
     "surviving hole fillet and chamfer; removed rim diagnostics preserve last-good body",
     "linear and circular hole patterns; missing instance detection",
-    "bounded exact pad geometry cache"
+    "bounded exact pad geometry cache",
+    "constrained secondary pocket profile, editable blind depth, exact volume and LYL reopen"
   ],
-  "evidence": ".codex-run/sketch16/dev-2026-11-03T05-39-03.343Z/report.json",
-  "nextAction": "Implement editable sketch-based pocket using analytic profile wires and the existing OCCT cut worker, then validate exact volume, invalid inputs, edit/reload and independent feature recomputation.",
+  "evidence": ".codex-run/sketch16/dev-2026-11-03T05-41-11.236Z/report.json",
+  "nextAction": "Integrate the existing analytic revolve constructor as an editable history operation, verify profile axis, pose and angular dimensions against an independent solid, then exercise failed edits and LYL reopening.",
   "pending": [
     "dependent solid operations",
     "feature-level caching and branching",

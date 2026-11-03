@@ -203,3 +203,8 @@ Integrated normal dashboard entry and existing model importer. Exact original by
 
 Development GUI imports four formats plus a duplicate, checks four thumbnails, edits metadata/search/filter, reloads, independently rehashes every stored original and opens the selected model through normal import. .codex-run/library20/gui-final.log. TypeScript passes. FEM benchmark source is now versioned at tests/reference/fem/verify-runtime.cjs. .20 packaged acceptance is next.
 NEXT_ACTION: Run packaged library acceptance, preserve rollback, then complete flat lithophane/bas-relief with editable source/settings and manufacturing exports. GPU optional.
+
+## .20 packaged offline library V1 accepted
+
+Actual packaged suite .codex-run/sketch16/packaged-2026-11-03T08-36-37.081Z/report.json completed with four formats and one exact duplicate, all thumbnails, metadata edits/search/filter, reload, independent hashes of every retained original, and model opening. User-selected local Tinkercad STL/OBJ files are supported; automated account access is outside this private offline workflow. The existing My Shapes v2 store remains readable by rollback releases; the raw original library has a separate DB schema. Installer and runtime preserved under .codex-run/preserved-ultimate20. Installed production application still untouched.
+NEXT_ACTION: Validate the integrated flat image workbench and manufactured STL/3MF in the final offline package, then run consolidated feature/assembly/FEM/library regressions and installer verification.

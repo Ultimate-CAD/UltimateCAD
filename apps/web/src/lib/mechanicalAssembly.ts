@@ -24,7 +24,7 @@ export function solveAssembly(def:AssemblyDefinition,shapes:readonly WorkplaneSh
       !byId.has(j.parent) || !byId.has(j.child) || j.child===def.root || inbound.has(j.child)) throw Error("Invalid or multiply constrained assembly member");
     if(!Array.isArray(j.axis) || !Array.isArray(j.pivot) || !Array.isArray(j.rest) || j.rest.length!==16 || !j.rest.every(Number.isFinite) ||
        ![...j.axis,...j.pivot,j.position,j.min,j.max].every(Number.isFinite) ||
-       j.axis.length!==3 || j.pivot.length!==3 || Math.hypot(...j.axis)<1e-9 || j.min>j.max || j.position<j.min || j.position>j.max) throw Error("Invalid joint frame or travel");
+       j.axis.length!==3 || j.pivot.length!==3 || [...j.axis,...j.pivot,j.position,j.min,j.max].some(v=>Math.abs(v)>1e6) || Math.hypot(...j.axis)<1e-9 || j.min>j.max || j.position<j.min || j.position>j.max) throw Error("Invalid joint frame or travel");
     const rest=new Matrix4().fromArray(j.rest),r=new Vector3(),q=new Quaternion(),scale=new Vector3();
     rest.decompose(r,q,scale);
     if(scale.distanceTo(new Vector3(1,1,1))>1e-8 || Math.abs(rest.determinant()-1)>1e-8 ||
@@ -49,6 +49,7 @@ export function solveAssembly(def:AssemblyDefinition,shapes:readonly WorkplaneSh
       }
       result=parent.clone().multiply(move).multiply(new Matrix4().fromArray(joint.rest));
     }
+    if(!result.elements.every(Number.isFinite))throw Error("Assembly frame overflow");
     active.delete(id);frames.set(id,result);return result;
   }
   visit(def.root);for(const id of inbound.keys())visit(id);

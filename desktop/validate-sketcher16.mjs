@@ -787,7 +787,8 @@ try {
   pass("No renderer errors or successful external requests", { deniedWorkstationInjectorRequests: [...externalRequests], workers: [...workerUrls] });
   acceptanceCompleted = true;
 } catch (error) {
-  writeFileSync(path.join(output, "failure.json"), JSON.stringify({ error: error?.stack ?? String(error), checks, pageErrors, externalRequests: [...externalRequests], cancelExperiment }, null, 2));
+  const visibleWorkbench = await page?.locator(".constraint-sketch-workbench").allTextContents().catch(()=>[]);
+  writeFileSync(path.join(output, "failure.json"), JSON.stringify({ visibleWorkbench, error: error?.stack ?? String(error), checks, pageErrors, externalRequests: [...externalRequests], cancelExperiment }, null, 2));
   throw error;
 } finally {
   writeFileSync(path.join(output, "report.json"), JSON.stringify({ mode, executable: mode === "packaged" ? exe : null, output, originalId, checks, pageErrors, externalRequests: [...externalRequests], cancelExperiment, complete: acceptanceCompleted }, null, 2));

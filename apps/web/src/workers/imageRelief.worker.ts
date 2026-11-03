@@ -3,7 +3,13 @@ import {buildReliefMesh,validateImageRelief,type ImageRelief} from "@/lib/imageR
 self.onmessage=async(e:MessageEvent<{source:ImageRelief}>)=>{
  try{
   const {source}=e.data;validateImageRelief(source);
-  const image=await createImageBitmap(await(await fetch(source.dataUrl)).blob());
+  // Decode retained bytes directly. The packaged desktop deliberately excludes
+  // data: URLs from connect-src; no fetch is needed for an embedded image.
+  const comma=source.dataUrl.indexOf(","),raw=atob(source.dataUrl.slice(comma+1));
+  const bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  const mime=source.dataUrl.slice(5,source.dataUrl.indexOf(";"));
+  const image=await createImageBitmap(new Blob([bytes],{type:mime}));
   let result;
   try{
    if(image.width*image.height>100000000)throw Error("Image exceeds the 100 megapixel decode budget");

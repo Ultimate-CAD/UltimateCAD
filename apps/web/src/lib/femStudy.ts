@@ -28,4 +28,13 @@ export function validateFemStudy(study:FemStudy) {
  if(r.appliedForceN.length!==3||r.reactionForceN.length!==3||r.loadedAreaM2<=0||r.maxDisplacementM<0||r.maxVonMisesPa<0||r.forceResidualN<0||r.momentResidualNm<0)throw Error("Invalid FEM diagnostic ranges");
  for(let i=0;i<3;i++)if(Math.abs(r.appliedForceN[i]-s.force[i])>1e-6*Math.max(1,Math.abs(s.force[i])))throw Error("Applied force disagrees with study settings");
 
+ let peak=0,stress=0;
+ for(let i=0;i<r.nodes;i++){
+  peak=Math.max(peak,Math.hypot(r.displacements[i*3],r.displacements[i*3+1],r.displacements[i*3+2]));
+  stress=Math.max(stress,r.vonMises[i]);
+ }
+ if(!Number.isFinite(peak)||Math.abs(peak-r.maxDisplacementM)>1e-9*Math.max(1,peak)||Math.abs(stress-r.maxVonMisesPa)>1e-9*Math.max(1,stress))throw Error("FEM summary disagrees with saved fields");
+ const residual=Math.hypot(...r.reactionForceN.map((v,i)=>v+r.appliedForceN[i]));
+ if(Math.abs(residual-r.forceResidualN)>1e-9*Math.max(1,residual)||residual>1e-4*Math.max(1,Math.hypot(...r.appliedForceN)))throw Error("Saved reaction equilibrium failed");
+
 }

@@ -1,3 +1,4 @@
+import { solveAssembly } from "@/lib/mechanicalAssembly";
 import { checkedTypefaceData, customFontName, isCustomFontId, textCharacters, typefaceSubset } from "@/lib/customFonts";
 import { customFontEntry, registerCustomFont } from "@/lib/textFonts";
 import { strFromU8, strToU8, unzip } from "fflate";
@@ -61,7 +62,8 @@ export const LYL_FILE_TYPES_FORMAT_VERSION = 4;
 export const LYL_CONSTRAINED_SKETCH_FORMAT_VERSION = 5;
 /** The newest format this layerling reads. */
 export const LYL_FEATURE_HISTORY_FORMAT_VERSION = 6;
-export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_FEATURE_HISTORY_FORMAT_VERSION;
+export const LYL_ASSEMBLY_FORMAT_VERSION = 7;
+export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_ASSEMBLY_FORMAT_VERSION;
 export const LYL_OLDEST_READABLE_FORMAT_VERSION = 1;
 export const LYL_CREATED_WITH_VERSION = "1.114.0";
 export const LYL_MEDIA_TYPE = "application/vnd.layerling.project+zip";
@@ -202,7 +204,7 @@ function validateFonts(fonts: unknown) {
 
 export type LylProjectDocumentV1 = {
   schema: typeof LYL_SCHEMA_ID | typeof LEGACY_LYL_SCHEMA_ID;
-  formatVersion: 1 | 2 | 3 | 4 | 5 | 6;
+  formatVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   minimumReaderVersion: number;
   createdWithVersion: string;
   metadata: {
@@ -1114,7 +1116,8 @@ export async function exportLylProject(input: LylProjectExportInput) {
   function includeShapeVersion(shape: WorkplaneShape) {
     if (seenShapes.has(shape)) return;
     seenShapes.add(shape);
-    if (shape.sketchProfile?.constraintSketch?.featureHistory) requiredFormatVersion = LYL_FEATURE_HISTORY_FORMAT_VERSION;
+    if (shape.assembly) requiredFormatVersion = LYL_ASSEMBLY_FORMAT_VERSION;
+    else if (requiredFormatVersion < 6 && shape.sketchProfile?.constraintSketch?.featureHistory) requiredFormatVersion = LYL_FEATURE_HISTORY_FORMAT_VERSION;
     else if (requiredFormatVersion < LYL_CONSTRAINED_SKETCH_FORMAT_VERSION && (shape.sketchOnly || shape.sketchProfile?.constraintSketch)) requiredFormatVersion = LYL_CONSTRAINED_SKETCH_FORMAT_VERSION;
     shape.groupedShapes?.forEach(includeShapeVersion);
     shape.edgeTreatmentHistory?.forEach(entry => includeShapeVersion(entry.before));
@@ -1891,6 +1894,7 @@ async function validateDocumentAndAssets(raw: unknown, files: ArchiveFiles) {
       if (nodeById.has(nodeId)) throw new Error(`State '${stateId}' contains duplicate node ID '${nodeId}'`);
       const definition = objectRecord(node.definition, `node '${nodeId}'.definition`);
       const constrainedSource=definition.sketchOnly===true||(definition.sketchProfile&&typeof definition.sketchProfile==="object"&&(definition.sketchProfile as Record<string,unknown>).constraintSketch!==undefined);
+      if (definition.assembly !== undefined && (document.formatVersion < 7 || document.minimumReaderVersion < 7)) throw Error("Assemblies require project reader version 7");
       const source = (definition.sketchProfile as {constraintSketch?: {featureHistory?: unknown}} | undefined)?.constraintSketch;
       if (source?.featureHistory !== undefined && (document.formatVersion < 6 || document.minimumReaderVersion < 6)) throw Error("Feature history requires project reader version 6");
       if(constrainedSource&&(document.formatVersion<LYL_CONSTRAINED_SKETCH_FORMAT_VERSION||document.minimumReaderVersion<LYL_CONSTRAINED_SKETCH_FORMAT_VERSION))throw new Error("Constrained sketches require project format and reader version 5");
@@ -1931,6 +1935,13 @@ async function validateDocumentAndAssets(raw: unknown, files: ArchiveFiles) {
       visited.add(`${primary ? "primary" : "history"}:${nodeId}`);
     };
     roots.forEach((root) => walk(root, true));
+    const rootDefinitions=roots.map(id=>nodeById.get(id)!.definition as unknown as WorkplaneShape);
+    for (const definition of rootDefinitions) {
+      if (definition.assembly) {
+        if (definition.assembly.root!==definition.id) throw Error("Assembly must be stored on its grounded component");
+        solveAssembly(definition.assembly,rootDefinitions);
+      }
+    }
     if (stateId === document.sceneStateId) primaryObjectIds.forEach((id) => activeObjectIds.add(id));
     stateById.set(stateId, state);
   }

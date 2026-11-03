@@ -441,6 +441,60 @@ async function verifyRevolve() {
   pass("Editable full and partial revolve match analytic volume, reject zero sweep, undo and reopen with stable identity");
 }
 
+async function verifyAssembly() {
+  const root=(await command("create_shape",{kind:"box",name:"Ground",width:10,depth:10,height:10,x:100})).object;
+  const child=(await command("create_shape",{kind:"box",name:"Arm",width:10,depth:10,height:10,x:120})).object;
+  await page.getByRole("button",{name:"Assembly workspace",exact:true}).click();
+  const panel=page.getByRole("region",{name:"Assembly workspace"});
+  // section with an accessible name is a region.
+  await panel.getByLabel("Grounded component",{exact:true}).selectOption(root.id);
+  await panel.getByLabel("Attach component",{exact:true}).selectOption(child.id);
+  await panel.getByLabel("Joint type",{exact:true}).selectOption("revolute");
+  await panel.getByRole("button",{name:"Add joint",exact:true}).click();
+  await panel.getByLabel("Position 1",{exact:true}).fill("90");
+  async function savedChild(x,z) {
+    const deadline=Date.now()+15000;
+    while(Date.now()<deadline){
+      const saved=await saveProject(),node=saved.state.nodes.find(n=>n.objectId===child.id);
+      if(node && Math.abs(node.definition.x-x)<1e-6 && Math.abs(node.definition.z-z)<1e-6)return {saved,node};
+      await pause(100);
+    }
+    throw Error("Assembly component did not reach expected joint position");
+  }
+  const rotated=await savedChild(100,-20);
+  const owner=rotated.saved.state.nodes.find(n=>n.objectId===root.id);
+  assert.equal(owner.definition.assembly.joints[0].position,90);
+  await panel.getByRole("button",{name:"Close assembly"}).click();
+  await page.keyboard.press("Control+z");await savedChild(120,0);
+  await page.keyboard.press("Control+y");await savedChild(100,-20);
+  const file=path.join(output,"hinge.lyl");writeFileSync(file,Buffer.from(rotated.saved.saved.base64,"base64"));
+  await reopenProject(file,rotated.saved.project.metadata?.projectName);
+  const loaded=await savedChild(100,-20);
+  assert.deepEqual(loaded.saved.state.nodes.find(n=>n.objectId===root.id).definition.assembly,owner.definition.assembly);
+  await page.getByRole("button",{name:"Assembly workspace",exact:true}).click();
+  await panel.getByRole("button",{name:"Remove joint"}).click();
+  await panel.getByLabel("Joint type",{exact:true}).selectOption("slider");
+  await panel.getByRole("button",{name:"Add joint",exact:true}).click();
+  await panel.getByLabel("Axis x 1",{exact:true}).fill("1");
+  await panel.getByLabel("Axis y 1",{exact:true}).fill("0");
+  await panel.getByLabel("Position 1",{exact:true}).fill("25");
+  await savedChild(125,-20);
+  await panel.getByRole("button",{name:"Check grounded / selected overlap"}).click();
+  await panel.getByRole("status").filter({hasText:"No intersecting material"}).waitFor({timeout:60000});
+  await panel.getByLabel("Axis z 1",{exact:true}).fill("1");
+  await panel.getByLabel("Axis x 1",{exact:true}).fill("0");
+  await panel.getByLabel("Position 1",{exact:true}).fill("20");
+  await savedChild(100,0);
+  await panel.getByRole("button",{name:"Check grounded / selected overlap"}).click();
+  await panel.getByRole("status").filter({hasText:"Intersecting material detected"}).waitFor({timeout:60000});
+  await panel.getByRole("button",{name:"Remove joint"}).click();
+  await panel.getByLabel("Joint type",{exact:true}).selectOption("fixed");
+  await panel.getByRole("button",{name:"Add joint",exact:true}).click();
+  await savedChild(100,0);
+  await panel.getByRole("button",{name:"Close assembly"}).click();
+  pass("Independent assembly components retain exact revolute, slider and fixed constraints through Undo, reopening and worker overlap checks");
+}
+
 let originalId, cancelExperiment = "not-run";
 try {
   await launch();
@@ -454,6 +508,7 @@ try {
   }
   await page.getByRole("button", { name: "Create new 3D design", exact: true }).click();
   await editorReady();
+  if(process.env.LAYERLING_TEST_ASSEMBLY === "1") { await verifyAssembly(); } else {
   const panel = await openSketcher();
   assert.equal(await panel.locator('.constraint-sketch-status[data-solve-valid="true"]').count(), 1);
   assert.match(await panel.locator('[role="status"]').first().innerText(), /Degrees of freedom:\s*0/);
@@ -558,6 +613,7 @@ try {
   pass("Captured mixed project viewport", pageScreenshot);
   await runCancellationAndRetry();
   if (process.env.LAYERLING_TEST_FEATURE_HISTORY === "1") { await verifyNamedPad(); await verifyRevolve(); }
+  }
   assert.deepEqual(pageErrors, [], `Renderer page errors: ${pageErrors.join(" | ")}`);
   assert.deepEqual(externalResponses, [], "External endpoint responded");
   for (const address of externalRequests) {

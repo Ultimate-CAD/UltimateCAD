@@ -1,5 +1,5 @@
 {
-  "milestone": ".17",
+  "milestone": ".18",
   "status": "packaged_acceptance_pending",
   "baselineTag": "checkpoint-ultimate16-sketcher",
   "verified": [
@@ -13,10 +13,12 @@
     "linear and circular hole patterns; missing instance detection",
     "bounded exact pad geometry cache",
     "constrained secondary pocket profile, editable blind depth, exact volume and LYL reopen",
-    "GUI full and partial revolve, analytic volume, zero-angle rejection, Undo and exact LYL reopening"
+    "GUI full and partial revolve, analytic volume, zero-angle rejection, Undo and exact LYL reopening",
+    ".17 packaged offline feature V1 (27 checks), manufacturing and OpenSCAD regressions",
+    "Assembly GUI fixed/revolute/slider, hierarchical numerical constraints, independent component geometry, Undo/reopen and real overlap/no-overlap checks"
   ],
-  "evidence": ".codex-run/sketch16/dev-2026-11-03T07-58-48.289Z/report.json",
-  "nextAction": "Build .17, run the feature history GUI suite on the packaged executable offline; preserve its rollback, then implement the independent-component assembly workspace.",
+  "evidence": ".codex-run/sketch16/dev-2026-11-03T08-11-18.114Z/report.json",
+  "nextAction": "Package .18 and validate Assembly workspace offline; stage verified Gmsh and CalculiX runtimes for .19.",
   "pending": [
     "dependent solid operations",
     "feature-level caching and branching",

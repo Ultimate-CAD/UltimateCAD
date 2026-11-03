@@ -259,6 +259,7 @@ export function SecondaryToolbar({
   onTopPanel,
   onOpenScad,
   onConstraintSketch,
+  onAssembly,
   onAddShape,
   onShortcuts,
   onInteractiveHelp,
@@ -399,6 +400,7 @@ export function SecondaryToolbar({
   onTopPanel: (panel: TopPanel) => void;
   onOpenScad?: () => void;
   onConstraintSketch?: () => void;
+  onAssembly?: () => void;
   onAddShape: (shape: ShapeAsset) => void;
   onShortcuts: () => void;
   onInteractiveHelp: () => void;
@@ -1113,6 +1115,7 @@ export function SecondaryToolbar({
         <div className="action-buttons">
           {onOpenScad ? <button className="action-icon-button" aria-label="OpenSCAD workbench" title="OpenSCAD parametric workbench" onClick={onOpenScad} disabled={historyViewActive}><span style={{ fontSize: 11, fontWeight: 800 }}>SCAD</span></button> : null}
           {onConstraintSketch ? <button className="action-icon-button" aria-label={t("constraintSketch.title")} title={t("constraintSketch.title")} onClick={onConstraintSketch} disabled={historyViewActive}><span style={{fontWeight:800}}>2D</span></button> : null}
+          {onAssembly && <button className="action-icon-button" aria-label="Assembly workspace" onClick={onAssembly} disabled={historyViewActive}>Joints</button>}
           {simpleMode ? null : <NoteToolButton active={noteMode} shortcut={COMMAND_SHORTCUTS.note} onClick={onNoteTool} disabled={historyViewActive} />}
           {simpleMode ? null : <button className="action-icon-button" aria-label={t("editor.import")} title={`${t("editor.import")} (${COMMAND_SHORTCUTS.import})`} onClick={() => onTopPanel("import")} disabled={historyViewActive}>
             <ToolbarImportIcon />

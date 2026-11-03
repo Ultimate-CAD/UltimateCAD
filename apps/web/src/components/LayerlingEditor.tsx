@@ -1,4 +1,6 @@
 "use client";
+import { solveAssembly } from "@/lib/mechanicalAssembly";
+import { AssemblyWorkbench } from "@/components/workplane/AssemblyWorkbench";
 import { assertCadMeshBudget, CAD_FALLBACK_MESH_TRIANGLES } from "@/lib/cadMeshBudget";
 import { AlertTriangle, X } from "lucide-react";
 import { ObjectListPanel } from "@/components/workplane/ObjectListPanel";
@@ -2706,6 +2708,7 @@ export function LayerlingEditor({
   const [workplaneMode, setWorkplaneMode] = useState(false);
   const [topPanel, setTopPanel] = useState<TopPanel>(null);
   const [openScadWorkbench, setOpenScadWorkbench] = useState(false);
+  const [assemblyWorkbench,setAssemblyWorkbench]=useState(false);
   const [constraintWorkbench,setConstraintWorkbench]=useState(false);
   const [constraintTarget,setConstraintTarget]=useState<string|null>(null);
   /** The icon tag window: an SVG file, its width and OK (the library's Icon tag). */
@@ -4376,6 +4379,11 @@ export function LayerlingEditor({
       if (historyViewStateRef.current) {
         setNotice(t("status.historyViewBlocksEdits"));
         return;
+      }
+      const assembly = next.find(shape=>shape.assembly)?.assembly;
+      if (assembly) {
+        try { next = solveAssembly(assembly,next); }
+        catch(error) { setNotice(error instanceof Error?error.message:String(error)); return; }
       }
       const canonicalNext = next.map(canonicalizeShape);
       const requestedSelection = Array.isArray(nextSelection) ? nextSelection : nextSelection ? [nextSelection] : [];
@@ -13592,6 +13600,7 @@ export function LayerlingEditor({
     <div className={`layerling-editor ${historyViewState ? "history-view-active" : ""}`}>
       <SecondaryToolbar
         onOpenScad={() => setOpenScadWorkbench(open => !open)}
+        onAssembly={()=>setAssemblyWorkbench(open=>!open)}
         onConstraintSketch={()=>{setConstraintTarget(selectedShape?.sketchProfile?.constraintSketch?selectedShape.id:null);setConstraintWorkbench(open=>!open);}}
         toolbarMode={toolbarMode}
         projectName={projectName}
@@ -14041,6 +14050,11 @@ export function LayerlingEditor({
         />
       ) : null}
       {openScadWorkbench ? <OpenScadWorkbench shape={selectedShape ?? (shapes.filter(shape => shape.openScad).length === 1 ? shapes.find(shape => shape.openScad)! : null)} onApply={applyOpenScad} onKeepSource={keepOpenScadSource} onClose={() => setOpenScadWorkbench(false)} /> : null}
+      {assemblyWorkbench && <AssemblyWorkbench shapes={shapes} onClose={()=>setAssemblyWorkbench(false)} onCommit={next=>{
+        if(historyViewStateRef.current) throw Error("Exit history view before editing an assembly");
+        if(shapesRef.current.some(s=>s.locked && JSON.stringify(s)!==JSON.stringify(next.find(n=>n.id===s.id)))) throw Error("Assembly includes a locked component");
+        commitShapes(next,undefined,"Assembly joints updated");
+      }}/>}
       {constraintWorkbench?<ConstraintSketchWorkbench key={`${projectId}:${constraintTarget??"new"}`} shape={shapes.find(s=>s.id===constraintTarget)??null} onApply={applyConstraintSketch} onClose={()=>setConstraintWorkbench(false)}/>:null}
       <AppFooter variant="editor" version={LYL_CREATED_WITH_VERSION} onBugReport={() => void saveBugReport()} />
       {historyViewState && toolbarMode === "geometry" ? (

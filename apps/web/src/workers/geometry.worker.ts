@@ -1,3 +1,4 @@
+import { buildIntersectionShapeFromSelection } from "@/lib/editorBooleans";
 /// <reference lib="webworker" />
 
 import { buildMessage } from "@/lib/buildStamp";
@@ -36,6 +37,9 @@ self.onmessage = async (event: MessageEvent<GeometryWorkerRequest>) => {
     if (request.task === "group") {
       const { selected, triangleLimit } = args as { selected: WorkplaneShape[]; triangleLimit: number };
       result = await buildGroupedShapeFromSelection(selected, triangleLimit);
+    } else if (request.task === "intersection") {
+      const {selected,triangleLimit}=args as {selected:WorkplaneShape[];triangleLimit:number};
+      result=await buildIntersectionShapeFromSelection(selected,triangleLimit);
     } else if (request.task === "split") {
       const { shape, plane } = args as { shape: WorkplaneShape; plane: Pick<ModelSplitPlane, "axis" | "normal" | "position"> };
       result = await splitShapeIfCrossed(shape, plane);

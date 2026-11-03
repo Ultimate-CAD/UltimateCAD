@@ -1,3 +1,4 @@
+import { buildIntersectionShapeFromSelection } from "@/lib/editorBooleans";
 import { buildsDiffer, BUILD_ID, isBuildMessage, reportWorkerBuild } from "@/lib/buildStamp";
 import { buildGroupedShapeFromSelection, exportSolidVolume, faceReadJoins, faceReadPositions, splitShapeIfCrossed, splitShapesByPlane, type ExportSolidVolume, type GroupBuildResult, type SplitShapesOutcome } from "@/lib/editorBooleans";
 import { packValue, packedTransfer, unpackValue } from "@/lib/geometryTransfer";
@@ -418,4 +419,10 @@ export function createFaceReadKeeper(onRead: (fingerprint: string, positions: Fl
       callOffFaceRead(entry?.abort, closing);
     },
   };
+}
+
+export function assemblyOverlapOffThread(selected:WorkplaneShape[], signal:AbortSignal) {
+  return runGeometryTask("intersection", {selected,triangleLimit:2_000_000},
+    ()=>buildIntersectionShapeFromSelection(selected,2_000_000),
+    ()=>({group:null,empty:false,failureNotice:"Interference check timed out"}),signal);
 }

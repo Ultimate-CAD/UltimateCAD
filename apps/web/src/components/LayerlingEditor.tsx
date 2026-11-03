@@ -1,4 +1,5 @@
 "use client";
+import { FemWorkbench } from "@/components/workplane/FemWorkbench";
 import { solveAssembly } from "@/lib/mechanicalAssembly";
 import { AssemblyWorkbench } from "@/components/workplane/AssemblyWorkbench";
 import { assertCadMeshBudget, CAD_FALLBACK_MESH_TRIANGLES } from "@/lib/cadMeshBudget";
@@ -2708,6 +2709,7 @@ export function LayerlingEditor({
   const [workplaneMode, setWorkplaneMode] = useState(false);
   const [topPanel, setTopPanel] = useState<TopPanel>(null);
   const [openScadWorkbench, setOpenScadWorkbench] = useState(false);
+  const [femWorkbench,setFemWorkbench]=useState(false);
   const [assemblyWorkbench,setAssemblyWorkbench]=useState(false);
   const [constraintWorkbench,setConstraintWorkbench]=useState(false);
   const [constraintTarget,setConstraintTarget]=useState<string|null>(null);
@@ -13600,6 +13602,7 @@ export function LayerlingEditor({
     <div className={`layerling-editor ${historyViewState ? "history-view-active" : ""}`}>
       <SecondaryToolbar
         onOpenScad={() => setOpenScadWorkbench(open => !open)}
+        onFem={()=>setFemWorkbench(open=>!open)}
         onAssembly={()=>setAssemblyWorkbench(open=>!open)}
         onConstraintSketch={()=>{setConstraintTarget(selectedShape?.sketchProfile?.constraintSketch?selectedShape.id:null);setConstraintWorkbench(open=>!open);}}
         toolbarMode={toolbarMode}
@@ -14050,6 +14053,11 @@ export function LayerlingEditor({
         />
       ) : null}
       {openScadWorkbench ? <OpenScadWorkbench shape={selectedShape ?? (shapes.filter(shape => shape.openScad).length === 1 ? shapes.find(shape => shape.openScad)! : null)} onApply={applyOpenScad} onKeepSource={keepOpenScadSource} onClose={() => setOpenScadWorkbench(false)} /> : null}
+      {femWorkbench && <FemWorkbench shapes={shapes} selected={selectedShape?.id} onClose={()=>setFemWorkbench(false)} onSave={(id,study)=>{
+        const current=shapesRef.current.find(s=>s.id===id);
+        if(!current||current.locked||historyViewStateRef.current)throw Error("Analysis target is no longer editable");
+        commitShapes(shapesRef.current.map(s=>s.id===id?{...s,femStudy:study}:s),id,"Analysis study saved");
+      }}/>}
       {assemblyWorkbench && <AssemblyWorkbench shapes={shapes} onClose={()=>setAssemblyWorkbench(false)} onCommit={next=>{
         if(historyViewStateRef.current) throw Error("Exit history view before editing an assembly");
         if(shapesRef.current.some(s=>s.locked && JSON.stringify(s)!==JSON.stringify(next.find(n=>n.id===s.id)))) throw Error("Assembly includes a locked component");

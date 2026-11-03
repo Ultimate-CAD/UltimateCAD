@@ -495,6 +495,39 @@ async function verifyAssembly() {
   pass("Independent assembly components retain exact revolute, slider and fixed constraints through Undo, reopening and worker overlap checks");
 }
 
+async function verifyFem() {
+  const beam=(await command("create_shape",{kind:"box",name:"SI cantilever",width:1000,depth:100,height:100})).object;
+  await command("select_objects",{ids:[beam.id]});
+  await page.getByRole("button",{name:"Structural analysis",exact:true}).click();
+  const panel=page.getByRole("region",{name:"Structural analysis"});
+  await panel.getByLabel("Mesh size (mm)",{exact:true}).fill("50");
+  await panel.getByRole("button",{name:"Mesh and solve",exact:true}).click();
+  await panel.getByRole("status").filter({hasText:"Linear static solve completed"}).waitFor({timeout:120000});
+  const solved=await saveProject(),node=solved.state.nodes.find(n=>n.objectId===beam.id),study=node.definition.femStudy;
+  assert.ok(Math.abs(study.result.maxDisplacementM-.0002)/.0002<.025);
+  assert.ok(study.result.forceResidualN<.01 && study.result.momentResidualNm<.01);
+  assert.equal(study.result.units.stress,"Pa");
+  assert.ok(study.result.maxVonMisesPa>0);
+  await panel.getByLabel("Deformation magnification",{exact:true}).fill("100");
+  await panel.getByLabel("Deformed FEM result preview",{exact:true}).locator("canvas").waitFor();
+  const file=path.join(output,"solved-beam.lyl");writeFileSync(file,Buffer.from(solved.saved.base64,"base64"));
+  await panel.getByRole("button",{name:"Close analysis"}).click();
+  await reopenProject(file,solved.project.metadata?.projectName);
+  const restored=await saveProject();
+  assert.deepEqual(restored.state.nodes.find(n=>n.objectId===beam.id).definition.femStudy,study);
+  await command("select_objects",{ids:[beam.id]});
+  await page.getByRole("button",{name:"Structural analysis",exact:true}).click();
+  await panel.getByText(/Maximum displacement/).waitFor();
+  await panel.getByLabel("Mesh size (mm)",{exact:true}).fill("5");
+  await panel.getByRole("button",{name:"Mesh and solve",exact:true}).click();
+  await panel.getByRole("button",{name:"Cancel analysis",exact:true}).click();
+  await panel.getByRole("button",{name:"Mesh and solve",exact:true}).waitFor({state:"visible",timeout:30000});
+  await panel.getByRole("button",{name:"Close analysis"}).click();
+  const after=await saveProject();
+  assert.deepEqual(after.state.nodes.find(n=>n.objectId===beam.id).definition.femStudy,study);
+  pass("Bundled CAD meshing and CalculiX solve produce verified SI displacement/stress, render, save/reopen and cancel without losing saved results",{nodes:study.result.nodes,displacementM:study.result.maxDisplacementM,forceResidualN:study.result.forceResidualN});
+}
+
 let originalId, cancelExperiment = "not-run";
 try {
   await launch();
@@ -508,7 +541,7 @@ try {
   }
   await page.getByRole("button", { name: "Create new 3D design", exact: true }).click();
   await editorReady();
-  if(process.env.LAYERLING_TEST_ASSEMBLY === "1") { await verifyAssembly(); } else {
+  if(process.env.LAYERLING_TEST_FEM === "1") { await verifyFem(); } else if(process.env.LAYERLING_TEST_ASSEMBLY === "1") { await verifyAssembly(); } else {
   const panel = await openSketcher();
   assert.equal(await panel.locator('.constraint-sketch-status[data-solve-valid="true"]').count(), 1);
   assert.match(await panel.locator('[role="status"]').first().innerText(), /Degrees of freedom:\s*0/);

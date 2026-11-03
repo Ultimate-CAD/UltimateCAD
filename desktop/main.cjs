@@ -25,6 +25,7 @@ const writeJson = (name, data) => {
 };
 let server, window, quitting = false, baseUrl;
 let geometryJobs;
+let femJobs;
 const connectionPath = path.join(profile, 'connection.json');
 
 function openLocalPage(url) {
@@ -45,6 +46,7 @@ function freePort(wanted) {
 function cleanup() {
   quitting = true;
   geometryJobs?.close();
+  femJobs?.cancelAll();
   if (server) {
     // Also terminate a native OpenSCAD render below the managed utility process.
     // Killing only the Node parent can leave a console launcher/CGAL child alive.
@@ -68,6 +70,11 @@ async function start() {
     const trusted=event=>{if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame)throw new Error('Untrusted native geometry request');};
     ipcMain.handle('geometry:run',async(event,id,bytes)=>{trusted(event);try{return {ok:true,...await geometryJobs.run(id,bytes,text=>{if(!event.sender.isDestroyed())event.sender.send('geometry:progress',id,text);})};}catch(error){return {ok:false,message:error.message,code:error.code};}});
     ipcMain.on('geometry:cancel',(event,id)=>{try{trusted(event);geometryJobs.cancel(id);}catch{ /* Ignore frames that do not own the editor. */ }});
+    const {FemJobs}=require('./fem-jobs.cjs');
+    femJobs=new FemJobs(path.join(resources,'fem'),path.join(profile,'fem-jobs'));
+    ipcMain.handle('fem:run',async(event,id,request)=>{trusted(event);try{return {ok:true,result:await femJobs.run(id,request,text=>{if(!event.sender.isDestroyed())event.sender.send('fem:progress',id,text);})};}catch(error){return {ok:false,message:error.message};}});
+    ipcMain.on('fem:cancel',(event,id)=>{try{trusted(event);femJobs.cancel(id);}catch{}});
+
   }
   const runtime = path.join(resources, 'runtime/apps/web');
   fs.mkdirSync(path.join(profile, 'Projects'), { recursive: true });

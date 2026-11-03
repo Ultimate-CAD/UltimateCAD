@@ -1,3 +1,4 @@
+import { validateFemStudy, type FemStudy } from "@/lib/femStudy";
 import { solveAssembly } from "@/lib/mechanicalAssembly";
 import { checkedTypefaceData, customFontName, isCustomFontId, textCharacters, typefaceSubset } from "@/lib/customFonts";
 import { customFontEntry, registerCustomFont } from "@/lib/textFonts";
@@ -63,7 +64,8 @@ export const LYL_CONSTRAINED_SKETCH_FORMAT_VERSION = 5;
 /** The newest format this layerling reads. */
 export const LYL_FEATURE_HISTORY_FORMAT_VERSION = 6;
 export const LYL_ASSEMBLY_FORMAT_VERSION = 7;
-export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_ASSEMBLY_FORMAT_VERSION;
+export const LYL_FEM_FORMAT_VERSION = 8;
+export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_FEM_FORMAT_VERSION;
 export const LYL_OLDEST_READABLE_FORMAT_VERSION = 1;
 export const LYL_CREATED_WITH_VERSION = "1.114.0";
 export const LYL_MEDIA_TYPE = "application/vnd.layerling.project+zip";
@@ -204,7 +206,7 @@ function validateFonts(fonts: unknown) {
 
 export type LylProjectDocumentV1 = {
   schema: typeof LYL_SCHEMA_ID | typeof LEGACY_LYL_SCHEMA_ID;
-  formatVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  formatVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   minimumReaderVersion: number;
   createdWithVersion: string;
   metadata: {
@@ -1116,7 +1118,8 @@ export async function exportLylProject(input: LylProjectExportInput) {
   function includeShapeVersion(shape: WorkplaneShape) {
     if (seenShapes.has(shape)) return;
     seenShapes.add(shape);
-    if (shape.assembly) requiredFormatVersion = LYL_ASSEMBLY_FORMAT_VERSION;
+    if (shape.femStudy) requiredFormatVersion = LYL_FEM_FORMAT_VERSION;
+    else if (requiredFormatVersion < 7 && shape.assembly) requiredFormatVersion = LYL_ASSEMBLY_FORMAT_VERSION;
     else if (requiredFormatVersion < 6 && shape.sketchProfile?.constraintSketch?.featureHistory) requiredFormatVersion = LYL_FEATURE_HISTORY_FORMAT_VERSION;
     else if (requiredFormatVersion < LYL_CONSTRAINED_SKETCH_FORMAT_VERSION && (shape.sketchOnly || shape.sketchProfile?.constraintSketch)) requiredFormatVersion = LYL_CONSTRAINED_SKETCH_FORMAT_VERSION;
     shape.groupedShapes?.forEach(includeShapeVersion);
@@ -1894,6 +1897,10 @@ async function validateDocumentAndAssets(raw: unknown, files: ArchiveFiles) {
       if (nodeById.has(nodeId)) throw new Error(`State '${stateId}' contains duplicate node ID '${nodeId}'`);
       const definition = objectRecord(node.definition, `node '${nodeId}'.definition`);
       const constrainedSource=definition.sketchOnly===true||(definition.sketchProfile&&typeof definition.sketchProfile==="object"&&(definition.sketchProfile as Record<string,unknown>).constraintSketch!==undefined);
+      if (definition.femStudy !== undefined) {
+        if(document.formatVersion<8 || document.minimumReaderVersion<8)throw Error("FEM studies require project reader version 8");
+        validateFemStudy(definition.femStudy as FemStudy);
+      }
       if (definition.assembly !== undefined && (document.formatVersion < 7 || document.minimumReaderVersion < 7)) throw Error("Assemblies require project reader version 7");
       const source = (definition.sketchProfile as {constraintSketch?: {featureHistory?: unknown}} | undefined)?.constraintSketch;
       if (source?.featureHistory !== undefined && (document.formatVersion < 6 || document.minimumReaderVersion < 6)) throw Error("Feature history requires project reader version 6");

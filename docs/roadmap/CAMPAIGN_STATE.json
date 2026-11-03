@@ -1,6 +1,6 @@
 {
   "milestone": "Image workbench / final production acceptance",
-  "status": "packaged_acceptance_pending",
+  "status": "final_packaging",
   "baselineTag": "checkpoint-ultimate16-sketcher",
   "verified": [
     "hole rim lineage under suppression",
@@ -21,14 +21,16 @@
     "Offline library development GUI: STL/OBJ/STEP/LYL originals, hashes, thumbnails, dedup aliases, metadata filtering, reload and normal model reopening",
     ".20 packaged offline original library: four formats, hashes, metadata, thumbnails, duplicates and reopening",
     "Image geometry kernel: luminance/alpha/mode/orientation/dimensions, smoothing/borders and exact/Float32 closed topology",
-    "Image development GUI: PNG/JPEG/WebP, preview/backlight, same-object regeneration, exact original PNG retention, Undo/Redo and LYL reopening"
+    "Image development GUI: PNG/JPEG/WebP, preview/backlight, same-object regeneration, exact original PNG retention, Undo/Redo and LYL reopening",
+    ".21 packaged image generation/cancellation and independently reimported STL/3MF passed before interruption",
+    "Final full unit suite: 3556 passed, 7 skipped; TypeScript passed",
+    "Pending 19 localization catalogs and image-export validator correction inspected and retained"
   ],
   "evidence": ".codex-run/sketch16/dev-2026-11-03T08-44-24.467Z/report.json",
-  "nextAction": "Run packaged image generation/cancellation, manufacturing STL/3MF and consolidated final offline suites. Verify installer and preserve final rollback; document bounded V1 limits.",
+  "nextAction": "Build committed final sources; rerun packaged interactions affected by locale-aware measure controls, remaining OpenSCAD/branding checks and validate installer payload.",
   "pending": [
-    "packaged image and exports",
-    "consolidated offline regression",
-    "installer acceptance to extent available infrastructure",
-    "optional GPU evaluation deferred"
+    "final packaged interaction regression after localized measure-control fix",
+    "final OpenSCAD/branding offline verification",
+    "installer payload integrity and extracted-layout acceptance; isolated fresh-machine installation unavailable"
   ]
 }

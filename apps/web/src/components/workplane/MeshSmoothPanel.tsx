@@ -1,4 +1,5 @@
 "use client";
+import {MeasurementInput} from "./MeasurementInput";
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
@@ -307,14 +308,13 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
       <fieldset disabled={busy} style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         <label>
           Brush radius (mm) {" "}
-          <input
+          <MeasurementInput
             aria-label="Brush radius"
-            type="number"
             min="0.1"
             max="1000"
             value={radius}
-            onChange={(event) =>
-              setRadius(Math.max(0.1, Math.min(1000, Number(event.target.value) || 0.1)))
+            onValueChange={(value) =>
+              setRadius(Math.max(0.1, Math.min(1000, value)))
             }
           />
         </label>
@@ -345,15 +345,14 @@ export function MeshSmoothPanel({ shape, onApply, onCancel }: Props) {
         </label>
         <label>
           Iterations {" "}
-          <input
+          <MeasurementInput
             aria-label="Smoothing iterations"
-            type="number"
             min="1"
             max="100"
             value={iterations}
-            onChange={(event) => {
+            onValueChange={(value) => {
               setIterations(
-                Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))),
+                Math.max(1, Math.min(100, Math.round(value))),
               );revision.current++;setPreview(null);setStats(null);
             }}
           />

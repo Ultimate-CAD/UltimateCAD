@@ -636,9 +636,10 @@ async function verifyImageRelief() {
       });
     });
     for(const format of ["stl","3mf"]){
-      await page.keyboard.press("Control+e");
+      if(format==="stl") await page.keyboard.press("Control+e");
       const studio=page.getByRole("region",{name:"Precision Mesh Studio"});
-      await studio.getByRole("radio",{name:new RegExp("^"+format.toUpperCase()+":")}).check();
+      await studio.waitFor();
+      await page.getByRole("radio",{name:new RegExp("^"+format.toUpperCase()+":")}).click();
       await studio.getByRole("button",{name:"Generate export preview",exact:true}).click();
       await studio.locator('.precision-results[data-ready="true"]').waitFor({timeout:120000});
       const target=path.join(output,"image-solid."+format);
@@ -651,7 +652,7 @@ async function verifyImageRelief() {
       const audit=format==="stl"?verifyStl(target):verify3mf(target);
       assert.ok(audit.volumeMm3>0);
       pass("Image solid manufacturing export independently reimports with strict closed topology",{format,audit});
-      await studio.getByRole("button",{name:"Close",exact:true}).click();
+      if(format==="3mf") await page.keyboard.press("Escape");
     }
   }
   pass("PNG/JPEG/WebP flat image solids preview, regenerate same identity, retain exact original, undo and reopen",{objectId:id});

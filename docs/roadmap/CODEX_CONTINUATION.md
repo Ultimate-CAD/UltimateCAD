@@ -1,3 +1,9 @@
+# Final release verification — 2026-11-03
+
+Branch codex/image-relief-21. Major workbench development is finished at bounded V1 scope. Original runtime a8d792d5 packaged image (including STL/3MF), feature history, assembly, FEM, library and manufacturing suites passed; logs retained in .codex-run/relief21. Full-suite failures were localized status messages, measure input policy and Node 26 host storage shadowing jsdom. Fixed without geometry changes or weakened assertions. Final full unit run: 3556 passed, 7 skipped; TypeScript passed. Locale-aware measure controls retain incomplete drafts and parse decimal commas/arithmetic. Existing 19 catalog edits and export-radio harness correction preserved.
+
+NEXT_ACTION: Package the committed final sources, run affected packaged GUI suites and remaining OpenSCAD/branding checks, inspect/extract/launch the installer payload in an isolated profile, preserve .21 rollback, and record final hashes/limits. Do not execute the installer against the existing user installation. No feature expansion or optional GPU work.
+
 # Codex continuation checkpoint
 
 Current checkpoint: packaged .16 verified. Runtime da185c36d5602ed57e6a7017275a23e3dc13d10b; branch codex/constrained-sketcher-16. Earlier permission and reopening failures below are historical. Git metadata write probe succeeded. The packaging directory alone received the inheritable ALL APPLICATION PACKAGES read/execute grant. Prior directory DACL is recorded in .codex-run/sketch16/gui-package-acl-before.txt.

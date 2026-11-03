@@ -1,4 +1,5 @@
 "use client";
+import {MeasurementInput} from "./MeasurementInput";
 import {useEffect,useRef,useState} from "react";
 import {DEFAULT_RELIEF,validateImageRelief,type ImageRelief,type ReliefMesh} from "@/lib/imageRelief";
 import {generateImageRelief} from "@/lib/imageReliefWorker";
@@ -39,7 +40,7 @@ export function ImageReliefWorkbench({shape,onApply,onClose}:{shape?:WorkplaneSh
   finally{setBusy(false);}
  }
  function patch(update:Partial<ImageRelief["settings"]>){if(source)setSource({...source,settings:{...source.settings,...update}});}
- const num=(label:string,value:number,change:(v:number)=>void)=><label>{label}<input type="number" aria-label={label} step="any" value={value} onChange={e=>{const v=Number(e.target.value);if(Number.isFinite(v))change(v);}}/></label>;
+ const num=(label:string,value:number,change:(v:number)=>void)=><label>{label}<MeasurementInput aria-label={label} step="any" value={value} onValueChange={change}/></label>;
  return <section className="constraint-sketch-workbench" aria-label="Image-to-solid designer">
   <header><strong>Lithophane and bas-relief</strong><button aria-label="Close image designer" onClick={()=>{applyController.current?.abort();onClose();}}>×</button></header>
   <fieldset disabled={busy}>

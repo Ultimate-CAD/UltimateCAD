@@ -1,4 +1,5 @@
 "use client";
+import {MeasurementInput} from "./MeasurementInput";
 import {useState,useEffect,useRef} from "react";
 import {attachJoint,solveAssembly,type AssemblyDefinition,type JointKind} from "@/lib/mechanicalAssembly";
 import {isNonSolidShape} from "@/lib/workplaneShapes";
@@ -34,7 +35,7 @@ export function AssemblyWorkbench({shapes,onCommit,onClose}:{shapes:WorkplaneSha
      setError("");
    }catch(e){setError(e instanceof Error?e.message:String(e));}
  }
- const number=(label:string,value:number,change:(n:number)=>void)=><label>{label}<input aria-label={label} type="number" step="any" value={value} onChange={e=>{const n=Number(e.target.value);if(Number.isFinite(n))change(n);}}/></label>;
+ const number=(label:string,value:number,change:(n:number)=>void)=><label>{label}<MeasurementInput aria-label={label} step="any" value={value} onValueChange={change}/></label>;
  return <section className="constraint-sketch-workbench" aria-label="Assembly workspace">
    <header><strong>Assembly</strong><button aria-label="Close assembly" onClick={onClose}>×</button></header>
    <p>Independent rigid components. Joint axes and pivots use the parent component's local frame. Each component has one parent; joint loops require a future solver.</p>

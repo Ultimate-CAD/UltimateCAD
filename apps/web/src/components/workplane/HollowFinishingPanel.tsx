@@ -1,4 +1,5 @@
 "use client";
+import {MeasurementInput} from "./MeasurementInput";
 import { useEffect, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
 import * as THREE from "three";
@@ -550,15 +551,14 @@ export function HollowFinishingPanel({ shape, onApply, onCancel }: Props) {
         </label>
         <label>
           Cut position (mm){" "}
-          <input
+          <MeasurementInput
             aria-label="Cut position (mm)"
-            type="number"
             step="0.1"
             value={Number.isFinite(cut.position) ? cut.position : ""}
-            onChange={(e) =>
+            onValueChange={(value) =>
               change({
                 ...cut,
-                position: e.target.value === "" ? NaN : Number(e.target.value),
+                position: value,
               })
             }
           />

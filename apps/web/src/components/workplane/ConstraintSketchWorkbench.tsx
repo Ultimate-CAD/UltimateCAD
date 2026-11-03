@@ -1,4 +1,5 @@
 "use client";
+import {MeasurementInput} from "./MeasurementInput";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CONSTRAINT_KINDS, mountingPlateSketch, type ConstraintEntity, type ConstraintKind, type ConstraintPoint, type ConstraintSketch, type ConstraintSolution } from "@/lib/constraintSketch";
 import { solveSketchInWorker } from "@/lib/constraintSketchWorker";
@@ -35,7 +36,7 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose,profileOnly=fal
   async function apply(build:boolean){if(!solution?.valid||busy)return;const controller=new AbortController();applyController.current=controller;setBusy(true);try{const next=await onApply(solution.document,targetId,build,controller.signal);if(!controller.signal.aborted){setTargetId(next.id);setDiagnostic(tr(build?"solidBuilt":"sourceSaved"));}}catch(error){if(!controller.signal.aborted)setDiagnostic(error instanceof Error?error.message:String(error));}finally{setBusy(false);}}
   const name=(id:string)=>{const e=current.entities.find(e=>e.id===id);return e?.name??`${e?tr(e.kind):"?"} ${id.slice(0,10)}`;};
   const pick=(id:string,onChange:(id:string)=>void,list=current.entities)=><select value={id} onChange={e=>onChange(e.target.value)}><option value="">{tr("select")}</option>{list.map(e=><option key={e.id} value={e.id}>{name(e.id)}</option>)}</select>;
-  const num=(label:string,n:number,onChange:(value:number)=>void)=><label>{label}<input type="number" aria-label={label} value={Number(n.toPrecision(12))} step="any" onChange={e=>{const value=parseFloat(e.target.value);if(Number.isFinite(value))onChange(value);}}/></label>;
+  const num=(label:string,n:number,onChange:(value:number)=>void)=><label>{label}<MeasurementInput aria-label={label} value={Number(n.toPrecision(12))} step="any" onValueChange={onChange}/></label>;
   function pointerMove(event:React.PointerEvent<SVGSVGElement>){if(!drag.current||!svg.current)return;const matrix=svg.current.getScreenCTM();if(!matrix)return;const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());const next=clone(current);next.entities=next.entities.map(e=>e.id===drag.current!.id&&e.kind==="point"?{...e,x:point.x,y:-point.y}:e);edit(next,false);}
   function pointerEnd(){if(!drag.current)return;const before=drag.current.before;setPast(p=>[...p.slice(-99),before]);setFuture([]);drag.current=null;}
   const activePocket=current.featureHistory?.pocket;

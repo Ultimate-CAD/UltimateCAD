@@ -17,6 +17,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Node 26's host Web Storage shadows jsdom's per-window storage. Browser
+    // tests must exercise jsdom storage, including its blocked-access behavior.
+    execArgv: ["--no-experimental-webstorage"],
     include: ["tests/unit/**/*.test.ts"],
   },
 });

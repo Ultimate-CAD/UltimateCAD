@@ -3767,6 +3767,9 @@ export const MESSAGES_EN = {
   "constraintSketch.kind.y": "Y coordinate",
   "constraintSketch.kind.angle": "Angle",
   "constraintSketch.kind.pointOnCircle": "Point on circle",
+  "status.imageSolidGenerated": "Image solid generated",
+  "status.analysisStudySaved": "Analysis study saved",
+  "status.assemblyJointsUpdated": "Assembly joints updated",
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES_EN;

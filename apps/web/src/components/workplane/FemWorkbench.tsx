@@ -1,4 +1,5 @@
 "use client";
+import {MeasurementInput} from "./MeasurementInput";
 import {useEffect,useRef,useState} from "react";
 import type {WorkplaneShape} from "@/types/layerling";
 import {isNonSolidShape} from "@/lib/workplaneShapes";
@@ -47,7 +48,7 @@ export function FemWorkbench({shapes,selected,onSave,onClose}:{shapes:WorkplaneS
   }catch(e){if(!job.aborted)setMessage(e instanceof Error?e.message:String(e));}
   finally{stop();active.current=null;setRunning(false);}
  }
- const number=(label:string,value:number,change:(v:number)=>void)=><label>{label}<input type="number" aria-label={label} step="any" value={value} onChange={e=>{const n=Number(e.target.value);if(Number.isFinite(n))change(n);}}/></label>;
+ const number=(label:string,value:number,change:(v:number)=>void)=><label>{label}<MeasurementInput aria-label={label} step="any" value={value} onValueChange={change}/></label>;
  return <section className="constraint-sketch-workbench" aria-label="Structural analysis">
   <header><strong>Structural analysis</strong><button aria-label="Close analysis" onClick={onClose}>×</button></header>
   <fieldset disabled={running}>

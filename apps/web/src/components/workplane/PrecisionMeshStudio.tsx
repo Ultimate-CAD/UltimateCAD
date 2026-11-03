@@ -1,3 +1,4 @@
+import {MeasurementInput} from "./MeasurementInput";
 import { useEffect, useRef, useState } from "react";
 import type { WorkplaneShape } from "@/types/layerling";
 import {
@@ -135,14 +136,13 @@ export function PrecisionMeshStudio({
   ) => (
     <label className="precision-field" key={key}>
       {label}
-      <input
+      <MeasurementInput
         aria-label={label}
-        type="number"
         min={min}
         max={max}
         step={step}
         value={settings[key] as number}
-        onChange={(e) => update({ [key]: e.target.valueAsNumber })}
+        onValueChange={(value) => update({ [key]: value })}
       />
     </label>
   );

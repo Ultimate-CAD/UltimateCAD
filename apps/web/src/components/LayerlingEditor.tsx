@@ -14066,18 +14066,18 @@ export function LayerlingEditor({
           width:source.settings.width,depth:source.settings.height,height:mesh.height,
           imageRelief:structuredClone(source),cadBrep:undefined,cadBrepFrame:undefined,sketchProfile:undefined,
           importedMesh:{positions:Array.from(mesh.positions),triangleCount:mesh.triangleCount,baseWidth:source.settings.width,baseDepth:source.settings.height,baseHeight:mesh.height,sourceFormat:"json"}};
-        commitShapes(old?shapesRef.current.map(s=>s.id===old.id?next:s):[...shapesRef.current,next],next.id,"Image solid generated");
+        commitShapes(old?shapesRef.current.map(s=>s.id===old.id?next:s):[...shapesRef.current,next],next.id,t("status.imageSolidGenerated"));
         setImageTarget(next.id);return next;
       }}/>}
       {femWorkbench && <FemWorkbench shapes={shapes} selected={selectedShape?.id} onClose={()=>setFemWorkbench(false)} onSave={(id,study)=>{
         const current=shapesRef.current.find(s=>s.id===id);
         if(!current||current.locked||historyViewStateRef.current)throw Error("Analysis target is no longer editable");
-        commitShapes(shapesRef.current.map(s=>s.id===id?{...s,femStudy:study}:s),id,"Analysis study saved");
+        commitShapes(shapesRef.current.map(s=>s.id===id?{...s,femStudy:study}:s),id,t("status.analysisStudySaved"));
       }}/>}
       {assemblyWorkbench && <AssemblyWorkbench shapes={shapes} onClose={()=>setAssemblyWorkbench(false)} onCommit={next=>{
         if(historyViewStateRef.current) throw Error("Exit history view before editing an assembly");
         if(shapesRef.current.some(s=>s.locked && JSON.stringify(s)!==JSON.stringify(next.find(n=>n.id===s.id)))) throw Error("Assembly includes a locked component");
-        commitShapes(next,undefined,"Assembly joints updated");
+        commitShapes(next,undefined,t("status.assemblyJointsUpdated"));
       }}/>}
       {constraintWorkbench?<ConstraintSketchWorkbench key={`${projectId}:${constraintTarget??"new"}`} shape={shapes.find(s=>s.id===constraintTarget)??null} onApply={applyConstraintSketch} onClose={()=>setConstraintWorkbench(false)}/>:null}
       <AppFooter variant="editor" version={LYL_CREATED_WITH_VERSION} onBugReport={() => void saveBugReport()} />

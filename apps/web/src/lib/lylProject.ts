@@ -1,3 +1,4 @@
+import { validateImageRelief, validateReliefSettings, type ImageRelief } from "@/lib/imageRelief";
 import { validateFemStudy, type FemStudy } from "@/lib/femStudy";
 import { solveAssembly } from "@/lib/mechanicalAssembly";
 import { checkedTypefaceData, customFontName, isCustomFontId, textCharacters, typefaceSubset } from "@/lib/customFonts";
@@ -65,7 +66,8 @@ export const LYL_CONSTRAINED_SKETCH_FORMAT_VERSION = 5;
 export const LYL_FEATURE_HISTORY_FORMAT_VERSION = 6;
 export const LYL_ASSEMBLY_FORMAT_VERSION = 7;
 export const LYL_FEM_FORMAT_VERSION = 8;
-export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_FEM_FORMAT_VERSION;
+export const LYL_IMAGE_RELIEF_FORMAT_VERSION = 9;
+export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_IMAGE_RELIEF_FORMAT_VERSION;
 export const LYL_OLDEST_READABLE_FORMAT_VERSION = 1;
 export const LYL_CREATED_WITH_VERSION = "1.114.0";
 export const LYL_MEDIA_TYPE = "application/vnd.layerling.project+zip";
@@ -206,7 +208,7 @@ function validateFonts(fonts: unknown) {
 
 export type LylProjectDocumentV1 = {
   schema: typeof LYL_SCHEMA_ID | typeof LEGACY_LYL_SCHEMA_ID;
-  formatVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  formatVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   minimumReaderVersion: number;
   createdWithVersion: string;
   metadata: {
@@ -775,6 +777,7 @@ async function serializeShapeNode(
 ): Promise<string> {
   const {
     importedMesh,
+    imageRelief,
     groupedShapes,
     edgeTreatmentHistory,
     cadBrep,
@@ -789,6 +792,12 @@ async function serializeShapeNode(
   const cadDisplayEdgesAssetId = cadDisplayEdges?.length ? (await builder.addDisplayEdges(cadDisplayEdges)).id : undefined;
   if (cadDisplayEdges && !cadDisplayEdges.length) definition.cadDisplayEdges = [];
 
+  if (imageRelief) {
+    validateImageRelief(imageRelief);
+    const {dataUrl,...metadata}=imageRelief,decoded=decodeDataUrl(dataUrl);
+    const asset=await builder.addAsset("image",decoded.bytes,decoded.mediaType,{fileName:imageRelief.fileName});
+    definition.imageRelief={...metadata,assetId:asset.id};
+  }
   if (imagePlate) {
     const { dataUrl, ...plateDefinition } = imagePlate;
     const decoded = decodeDataUrl(dataUrl);
@@ -1118,7 +1127,8 @@ export async function exportLylProject(input: LylProjectExportInput) {
   function includeShapeVersion(shape: WorkplaneShape) {
     if (seenShapes.has(shape)) return;
     seenShapes.add(shape);
-    if (shape.femStudy) requiredFormatVersion = LYL_FEM_FORMAT_VERSION;
+    if (shape.imageRelief) requiredFormatVersion = LYL_IMAGE_RELIEF_FORMAT_VERSION;
+    else if (requiredFormatVersion < 8 && shape.femStudy) requiredFormatVersion = LYL_FEM_FORMAT_VERSION;
     else if (requiredFormatVersion < 7 && shape.assembly) requiredFormatVersion = LYL_ASSEMBLY_FORMAT_VERSION;
     else if (requiredFormatVersion < 6 && shape.sketchProfile?.constraintSketch?.featureHistory) requiredFormatVersion = LYL_FEATURE_HISTORY_FORMAT_VERSION;
     else if (requiredFormatVersion < LYL_CONSTRAINED_SKETCH_FORMAT_VERSION && (shape.sketchOnly || shape.sketchProfile?.constraintSketch)) requiredFormatVersion = LYL_CONSTRAINED_SKETCH_FORMAT_VERSION;
@@ -1897,6 +1907,13 @@ async function validateDocumentAndAssets(raw: unknown, files: ArchiveFiles) {
       if (nodeById.has(nodeId)) throw new Error(`State '${stateId}' contains duplicate node ID '${nodeId}'`);
       const definition = objectRecord(node.definition, `node '${nodeId}'.definition`);
       const constrainedSource=definition.sketchOnly===true||(definition.sketchProfile&&typeof definition.sketchProfile==="object"&&(definition.sketchProfile as Record<string,unknown>).constraintSketch!==undefined);
+      if (definition.imageRelief !== undefined) {
+        const relief=definition.imageRelief as unknown as ImageRelief & {assetId:string};
+        if(document.formatVersion<9 || document.minimumReaderVersion<9)throw Error("Image solids require project reader version 9");
+        validateReliefSettings(relief.settings);
+        const asset=assetById.get(relief.assetId);
+        if(!asset || asset.kind!=="image" || !["image/png","image/jpeg","image/webp"].includes(asset.mediaType))throw Error("Image solid has a missing original image");
+      }
       if (definition.femStudy !== undefined) {
         if(document.formatVersion<8 || document.minimumReaderVersion<8)throw Error("FEM studies require project reader version 8");
         validateFemStudy(definition.femStudy as FemStudy);
@@ -2067,6 +2084,14 @@ async function restoreShapeFromNode(
   if (!node) throw new Error(`Missing shape node '${nodeId}'`);
   restoring.add(nodeId);
   const definition = { ...node.definition } as Record<string, unknown>;
+  const serializedRelief=definition.imageRelief as (Record<string,unknown>&{assetId?:string})|undefined;
+  if(serializedRelief){
+    const record=assetById.get(serializedRelief.assetId??"");
+    if(!record || record.kind!=="image")throw Error("Image solid has a missing source asset");
+    const {assetId,...metadata}=serializedRelief;
+    const source={...metadata,dataUrl:bytesToDataUrl(files[record.path],record.mediaType)} as unknown as ImageRelief;
+    validateImageRelief(source);definition.imageRelief=source;
+  }
   const serializedPlate = definition.imagePlate as (Record<string, unknown> & { assetId?: string }) | undefined;
   if (serializedPlate?.assetId) {
     const record = assetById.get(serializedPlate.assetId);

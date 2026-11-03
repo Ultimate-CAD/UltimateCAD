@@ -1,3 +1,4 @@
+import {verifyStl,verify3mf} from "./manufacturing-file-audit.mjs";
 import { _electron as electron, chromium } from "playwright-core";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -565,6 +566,97 @@ async function verifyLibrary() {
   pass("Bulk STL/OBJ/STEP/LYL originals preserve hashes, deduplicate, thumbnail, filter metadata, persist and open through normal import");
 }
 
+async function verifyImageRelief() {
+  await page.getByRole("button",{name:"Image-to-solid designer",exact:true}).click();
+  const panel=page.getByRole("region",{name:"Image-to-solid designer"});
+  for(const suffix of ["jpeg","webp","png"]){
+    await panel.getByLabel("Source image",{exact:true}).setInputFiles(path.resolve("tests/fixtures/image-relief/checker."+suffix));
+    await panel.getByLabel("Image geometry preview",{exact:true}).locator("canvas").waitFor();
+  }
+  await panel.getByLabel("Width (mm)",{exact:true}).fill("20");
+  await panel.getByLabel("Sampling resolution (long side)",{exact:true}).fill("16");
+  await panel.getByLabel("Simulated backlighting",{exact:true}).check();
+  await panel.getByLabel("Simulated backlit preview",{exact:true}).locator("canvas").waitFor();
+  await panel.getByRole("button",{name:"Apply image solid",exact:true}).click();
+  let id;
+  async function waitImage(mode,min) {
+    const deadline=Date.now()+30000;
+    while(Date.now()<deadline){
+      const saved=await saveProject(),node=saved.state.nodes.find(n=>n.definition?.imageRelief?.settings.mode===mode&&n.definition.imageRelief.settings.minThickness===min);
+      if(node){if(id)assert.equal(node.objectId,id);else id=node.objectId;return {saved,node};}
+      await pause(100);
+    }
+    throw Error("Image solid was not generated");
+  }
+  const first=await waitImage("lithophane",.8);
+  assert.equal(first.node.definition.width,20);assert.equal(first.node.definition.depth,20);
+  const imageAsset=first.saved.project.assets.find(a=>a.id===first.node.definition.imageRelief.assetId);
+  assert.deepEqual(Buffer.from(first.saved.archive[imageAsset.path]),readFileSync(path.resolve("tests/fixtures/image-relief/checker.png")));
+  await panel.getByLabel("Image modeling mode",{exact:true}).selectOption("relief");
+  await panel.getByLabel("Minimum thickness / base (mm)",{exact:true}).fill("1");
+  await panel.getByRole("button",{name:"Apply image solid",exact:true}).click();
+  const changed=await waitImage("relief",1);
+  await panel.getByRole("button",{name:"Close image designer"}).click();
+  await page.keyboard.press("Control+z");await waitImage("lithophane",.8);
+  await page.keyboard.press("Control+y");await waitImage("relief",1);
+  const file=path.join(output,"editable-image-solid.lyl");writeFileSync(file,Buffer.from(changed.saved.saved.base64,"base64"));
+  await reopenProject(file,changed.saved.project.metadata?.projectName);
+  const restored=await waitImage("relief",1);
+  assert.deepEqual(restored.node.definition,changed.node.definition);
+  await command("select_objects",{ids:[id]});
+  await page.getByRole("button",{name:"Image-to-solid designer",exact:true}).click();
+  assert.equal(await panel.getByLabel("Width (mm)",{exact:true}).inputValue(),"20");
+  await panel.getByLabel("Simulated backlighting",{exact:true}).check();
+  await panel.getByLabel("Simulated backlit preview",{exact:true}).locator("canvas").waitFor();
+  await panel.getByLabel("Sampling resolution (long side)",{exact:true}).fill("512");
+  await panel.getByLabel("Simulated backlit preview",{exact:true}).locator("canvas").waitFor();
+  await page.evaluate(()=>{
+    const original=Worker.prototype.postMessage,terminate=Worker.prototype.terminate;
+    const probe=window.imageCancelProbe={held:null,terminated:false};
+    Worker.prototype.postMessage=function(message,...args){if(message?.source?.settings?.resolution===512){probe.held=this;return;}return original.call(this,message,...args);};
+    Worker.prototype.terminate=function(){if(this===probe.held)probe.terminated=true;return terminate.call(this);};
+    probe.restore=()=>{Worker.prototype.postMessage=original;Worker.prototype.terminate=terminate;};
+  });
+  try{
+    await panel.getByRole("button",{name:"Apply image solid",exact:true}).click();
+    await page.waitForFunction(()=>Boolean(window.imageCancelProbe.held));
+    await panel.getByRole("button",{name:"Cancel image generation",exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.imageCancelProbe.terminated),true);
+    const cancelled=await saveProject();
+    assert.deepEqual(cancelled.state.nodes.find(n=>n.objectId===id).definition,changed.node.definition);
+  }finally{await page.evaluate(()=>{window.imageCancelProbe.restore();delete window.imageCancelProbe;});}
+  pass("Canceled image geometry worker terminates and preserves the saved source, parameters and mesh");
+  await panel.getByRole("button",{name:"Close image designer"}).click();
+  if(mode==="packaged"){
+    await app.evaluate(({BrowserWindow})=>{
+      BrowserWindow.getAllWindows()[0].webContents.session.on("will-download",(_event,item)=>{
+        if(!globalThis.__imageExportTarget)return;
+        item.setSavePath(globalThis.__imageExportTarget);
+        item.once("done",(_event,state)=>{globalThis.__imageExportDone=state;});
+      });
+    });
+    for(const format of ["stl","3mf"]){
+      await page.keyboard.press("Control+e");
+      const studio=page.getByRole("region",{name:"Precision Mesh Studio"});
+      await studio.getByRole("radio",{name:new RegExp("^"+format.toUpperCase()+":")}).check();
+      await studio.getByRole("button",{name:"Generate export preview",exact:true}).click();
+      await studio.locator('.precision-results[data-ready="true"]').waitFor({timeout:120000});
+      const target=path.join(output,"image-solid."+format);
+      await app.evaluate((_electron,file)=>{globalThis.__imageExportTarget=file;globalThis.__imageExportDone=null;},target);
+      await studio.getByRole("button",{name:format==="stl"?"Export validated Binary STL":"Export validated 3MF",exact:true}).click();
+      await page.waitForTimeout(200);
+      let done;
+      for(let i=0;i<600;i++){done=await app.evaluate(()=>globalThis.__imageExportDone);if(done)break;await pause(100);}
+      assert.equal(done,"completed");
+      const audit=format==="stl"?verifyStl(target):verify3mf(target);
+      assert.ok(audit.volumeMm3>0);
+      pass("Image solid manufacturing export independently reimports with strict closed topology",{format,audit});
+      await studio.getByRole("button",{name:"Close",exact:true}).click();
+    }
+  }
+  pass("PNG/JPEG/WebP flat image solids preview, regenerate same identity, retain exact original, undo and reopen",{objectId:id});
+}
+
 let originalId, cancelExperiment = "not-run";
 try {
   await launch();
@@ -579,7 +671,7 @@ try {
   if(process.env.LAYERLING_TEST_LIBRARY==="1"){await verifyLibrary();}else{
   await page.getByRole("button", { name: "Create new 3D design", exact: true }).click();
   await editorReady();
-  if(process.env.LAYERLING_TEST_FEM === "1") { await verifyFem(); } else if(process.env.LAYERLING_TEST_ASSEMBLY === "1") { await verifyAssembly(); } else {
+  if(process.env.LAYERLING_TEST_IMAGE === "1") { await verifyImageRelief(); } else if(process.env.LAYERLING_TEST_FEM === "1") { await verifyFem(); } else if(process.env.LAYERLING_TEST_ASSEMBLY === "1") { await verifyAssembly(); } else {
   const panel = await openSketcher();
   assert.equal(await panel.locator('.constraint-sketch-status[data-solve-valid="true"]').count(), 1);
   assert.match(await panel.locator('[role="status"]').first().innerText(), /Degrees of freedom:\s*0/);

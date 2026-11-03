@@ -261,6 +261,7 @@ export function SecondaryToolbar({
   onConstraintSketch,
   onAssembly,
   onFem,
+  onImageRelief,
   onAddShape,
   onShortcuts,
   onInteractiveHelp,
@@ -403,6 +404,7 @@ export function SecondaryToolbar({
   onConstraintSketch?: () => void;
   onAssembly?: () => void;
   onFem?: () => void;
+  onImageRelief?: () => void;
   onAddShape: (shape: ShapeAsset) => void;
   onShortcuts: () => void;
   onInteractiveHelp: () => void;
@@ -1119,6 +1121,7 @@ export function SecondaryToolbar({
           {onConstraintSketch ? <button className="action-icon-button" aria-label={t("constraintSketch.title")} title={t("constraintSketch.title")} onClick={onConstraintSketch} disabled={historyViewActive}><span style={{fontWeight:800}}>2D</span></button> : null}
           {onAssembly && <button className="action-icon-button" aria-label="Assembly workspace" onClick={onAssembly} disabled={historyViewActive}>Joints</button>}
           {onFem && <button className="action-icon-button" aria-label="Structural analysis" onClick={onFem} disabled={historyViewActive}>FEM</button>}
+          {onImageRelief && <button className="action-icon-button" aria-label="Image-to-solid designer" onClick={onImageRelief} disabled={historyViewActive}>Image 3D</button>}
           {simpleMode ? null : <NoteToolButton active={noteMode} shortcut={COMMAND_SHORTCUTS.note} onClick={onNoteTool} disabled={historyViewActive} />}
           {simpleMode ? null : <button className="action-icon-button" aria-label={t("editor.import")} title={`${t("editor.import")} (${COMMAND_SHORTCUTS.import})`} onClick={() => onTopPanel("import")} disabled={historyViewActive}>
             <ToolbarImportIcon />

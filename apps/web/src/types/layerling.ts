@@ -764,6 +764,7 @@ export type CadPrimitiveFrame = {
 export type TextEdge = { kind: "round" | "chamfer"; size: number };
 
 export type WorkplaneShape = {
+  imageRelief?: import("@/lib/imageRelief").ImageRelief;
   femStudy?: import("@/lib/femStudy").FemStudy;
   assembly?: import("@/lib/mechanicalAssembly").AssemblyDefinition;
   /** Preserved source and state for native OpenSCAD tessellation; never exact B-rep geometry. */

@@ -1,4 +1,5 @@
 "use client";
+import { ImageReliefWorkbench } from "@/components/workplane/ImageReliefWorkbench";
 import { FemWorkbench } from "@/components/workplane/FemWorkbench";
 import { solveAssembly } from "@/lib/mechanicalAssembly";
 import { AssemblyWorkbench } from "@/components/workplane/AssemblyWorkbench";
@@ -2709,6 +2710,8 @@ export function LayerlingEditor({
   const [workplaneMode, setWorkplaneMode] = useState(false);
   const [topPanel, setTopPanel] = useState<TopPanel>(null);
   const [openScadWorkbench, setOpenScadWorkbench] = useState(false);
+  const [imageWorkbench,setImageWorkbench]=useState(false);
+  const [imageTarget,setImageTarget]=useState<string|null>(null);
   const [femWorkbench,setFemWorkbench]=useState(false);
   const [assemblyWorkbench,setAssemblyWorkbench]=useState(false);
   const [constraintWorkbench,setConstraintWorkbench]=useState(false);
@@ -13602,6 +13605,7 @@ export function LayerlingEditor({
     <div className={`layerling-editor ${historyViewState ? "history-view-active" : ""}`}>
       <SecondaryToolbar
         onOpenScad={() => setOpenScadWorkbench(open => !open)}
+        onImageRelief={()=>{setImageTarget(selectedShape?.imageRelief?selectedShape.id:null);setImageWorkbench(open=>!open);}}
         onFem={()=>setFemWorkbench(open=>!open)}
         onAssembly={()=>setAssemblyWorkbench(open=>!open)}
         onConstraintSketch={()=>{setConstraintTarget(selectedShape?.sketchProfile?.constraintSketch?selectedShape.id:null);setConstraintWorkbench(open=>!open);}}
@@ -14053,6 +14057,18 @@ export function LayerlingEditor({
         />
       ) : null}
       {openScadWorkbench ? <OpenScadWorkbench shape={selectedShape ?? (shapes.filter(shape => shape.openScad).length === 1 ? shapes.find(shape => shape.openScad)! : null)} onApply={applyOpenScad} onKeepSource={keepOpenScadSource} onClose={() => setOpenScadWorkbench(false)} /> : null}
+      {imageWorkbench && <ImageReliefWorkbench key={imageTarget??"new"} shape={shapes.find(s=>s.id===imageTarget)} onClose={()=>setImageWorkbench(false)} onApply={(source,mesh,target)=>{
+        const old=target?shapesRef.current.find(s=>s.id===target):undefined;
+        if(historyViewStateRef.current||old?.locked)throw Error("Image solid is not editable");
+        if(target&&!old)throw Error("Image solid was removed");
+        const next:WorkplaneShape={...old,id:old?.id??createLocalId("image-relief"),name:old?.name??source.fileName,kind:"mesh",color:old?.color??"#f5ecdc",
+          x:old?.x??0,z:old?.z??0,elevation:old?.elevation??0,rotation:old?.rotation??0,size:Math.max(source.settings.width,source.settings.height),
+          width:source.settings.width,depth:source.settings.height,height:mesh.height,
+          imageRelief:structuredClone(source),cadBrep:undefined,cadBrepFrame:undefined,sketchProfile:undefined,
+          importedMesh:{positions:Array.from(mesh.positions),triangleCount:mesh.triangleCount,baseWidth:source.settings.width,baseDepth:source.settings.height,baseHeight:mesh.height,sourceFormat:"json"}};
+        commitShapes(old?shapesRef.current.map(s=>s.id===old.id?next:s):[...shapesRef.current,next],next.id,"Image solid generated");
+        setImageTarget(next.id);return next;
+      }}/>}
       {femWorkbench && <FemWorkbench shapes={shapes} selected={selectedShape?.id} onClose={()=>setFemWorkbench(false)} onSave={(id,study)=>{
         const current=shapesRef.current.find(s=>s.id===id);
         if(!current||current.locked||historyViewStateRef.current)throw Error("Analysis target is no longer editable");

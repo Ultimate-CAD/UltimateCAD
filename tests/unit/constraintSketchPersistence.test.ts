@@ -37,3 +37,17 @@ it("requires a feature-aware reader even when only an undo state carries the nam
   const restored=await importLylProject(bytes);
   expect(restored.history?.[0].shapes[0].sketchProfile?.constraintSketch?.featureHistory).toEqual(sketch.featureHistory);
 });
+import {readFileSync} from "node:fs";
+import {DEFAULT_RELIEF} from "@/lib/imageRelief";
+it("stores the exact original image as a deduplicated asset and restores editable settings",async()=>{
+  const bytes=new Uint8Array(readFileSync("tests/fixtures/image-relief/checker.png"));
+  const source={schema:1 as const,fileName:"checker.png",dataUrl:"data:image/png;base64,"+Buffer.from(bytes).toString("base64"),imageWidth:2,imageHeight:2,settings:{...DEFAULT_RELIEF,width:20,height:20}};
+  const shape={...constraintSketchShape(mountingPlateSketch(),"image"),kind:"mesh" as const,sketchOnly:undefined,sketchProfile:undefined,imageRelief:source};
+  const pkg=await exportLylProject({projectId:"image",projectName:"Image",createdAt:1,modifiedAt:2,shapes:[shape],history:[editorHistoryEntry([shape],[])],historyIndex:0,assets:[],workspace:DEFAULT_WORKPLANE_WORKSPACE,snapGrid:DEFAULT_SNAP_GRID,placementElevation:0});
+  const restored=await importLylProject(pkg);
+  expect(restored.shapes[0].imageRelief).toEqual(source);
+  const document=JSON.parse(strFromU8(unzipSync(pkg)["project.json"]));
+  expect([document.formatVersion,document.minimumReaderVersion]).toEqual([9,9]);
+  const image=document.assets.find((a:{kind:string})=>a.kind==="image");
+  expect(unzipSync(pkg)[image.path]).toEqual(bytes);
+});

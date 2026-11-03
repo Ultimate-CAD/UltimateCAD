@@ -1,5 +1,5 @@
 {
-  "milestone": ".20",
+  "milestone": "Image workbench / final production acceptance",
   "status": "packaged_acceptance_pending",
   "baselineTag": "checkpoint-ultimate16-sketcher",
   "verified": [
@@ -18,20 +18,17 @@
     "Assembly GUI fixed/revolute/slider, hierarchical numerical constraints, independent component geometry, Undo/reopen and real overlap/no-overlap checks",
     ".18 packaged assembly joint tree and exact intersection checks",
     ".19 packaged native CAD meshing, SI solve/results, visualization, reopening and cancellation",
-    "Offline library development GUI: STL/OBJ/STEP/LYL originals, hashes, thumbnails, dedup aliases, metadata filtering, reload and normal model reopening"
+    "Offline library development GUI: STL/OBJ/STEP/LYL originals, hashes, thumbnails, dedup aliases, metadata filtering, reload and normal model reopening",
+    ".20 packaged offline original library: four formats, hashes, metadata, thumbnails, duplicates and reopening",
+    "Image geometry kernel: luminance/alpha/mode/orientation/dimensions, smoothing/borders and exact/Float32 closed topology",
+    "Image development GUI: PNG/JPEG/WebP, preview/backlight, same-object regeneration, exact original PNG retention, Undo/Redo and LYL reopening"
   ],
-  "evidence": ".codex-run/library20/gui-final.log",
-  "nextAction": "Build and verify offline library in packaged .20; then integrate the editable image-to-solid workbench and run final consolidated offline acceptance.",
+  "evidence": ".codex-run/sketch16/dev-2026-11-03T08-44-24.467Z/report.json",
+  "nextAction": "Run packaged image generation/cancellation, manufacturing STL/3MF and consolidated final offline suites. Verify installer and preserve final rollback; document bounded V1 limits.",
   "pending": [
-    "dependent solid operations",
-    "feature-level caching and branching",
-    "suppression and broken-reference repair UI",
-    ".17 packaged acceptance",
-    ".18",
-    ".19",
-    ".20",
-    "lithophane",
-    "bounded optional GPU",
-    "final installation verification"
+    "packaged image and exports",
+    "consolidated offline regression",
+    "installer acceptance to extent available infrastructure",
+    "optional GPU evaluation deferred"
   ]
 }

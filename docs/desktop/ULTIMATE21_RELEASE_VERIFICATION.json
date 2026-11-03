@@ -1,0 +1,193 @@
+{
+  "product": "Ultimate CAD",
+  "version": "1.114.0-ultimate.21",
+  "runtimeCommit": "910b1b92f81608f179737eb34c4459c537d7556b",
+  "releaseTag": "checkpoint-ultimate21-release",
+  "branch": "codex/image-relief-21",
+  "installer": {
+    "path": "C:\\Users\\Justin\\layerling-desktop\\dist\\ultimate\\windows\\Ultimate-CAD-Setup-x64.exe",
+    "sha256": "d605b2441ef74e67fb8e201b99117ebffad67a25fbd543e2f8d2938b37043744",
+    "bytes": 438897149
+  },
+  "executable": {
+    "path": "C:\\Users\\Justin\\layerling-desktop\\dist\\ultimate\\windows\\win-unpacked\\Layerling Ultimate.exe",
+    "sha256": "10fdf4e53dd9090cf82ea8d886abb4aca449009954eb983d18a9a2750088af4b"
+  },
+  "sourceValidation": {
+    "unitPassed": 3556,
+    "unitSkipped": 7,
+    "filesPassed": 440,
+    "filesSkipped": 5,
+    "unitLog": ".codex-run/relief21/full-unit-final.log",
+    "typecheck": ".codex-run/relief21/typecheck-release.log",
+    "retainedOcctEvidence": ".codex-run/feature17/revolve-cad.log",
+    "retainedFemReference": ".codex-run/fem19/reference.log"
+  },
+  "packagedChecks": 104,
+  "suites": [
+    {
+      "suite": "image",
+      "checks": 9,
+      "report": ".codex-run/sketch16/packaged-2026-11-03T19-33-42.639Z/report.json",
+      "sha256": "084361a85952dfb021ba3beb6e50d1cb81b4453e689f2ed765394e6e924eb6e5",
+      "complete": true
+    },
+    {
+      "suite": "feature",
+      "checks": 27,
+      "report": ".codex-run/sketch16/packaged-2026-11-03T19-33-59.784Z/report.json",
+      "sha256": "c7e5f06bc17bb299ac428738f946c3dbf5dd85e86a033dc14605bb5725069194",
+      "complete": true
+    },
+    {
+      "suite": "assembly",
+      "checks": 6,
+      "report": ".codex-run/sketch16/packaged-2026-11-03T19-34-26.600Z/report.json",
+      "sha256": "2cb934e956c2612fa35a7ecdf2088c63b2bd0c25842411215249b5e1b6530eda",
+      "complete": true
+    },
+    {
+      "suite": "fem",
+      "checks": 6,
+      "report": ".codex-run/sketch16/packaged-2026-11-03T19-33-59.788Z/report.json",
+      "sha256": "a968431911eadca3fcd48c72be0819a2839c5fe1adac182304e1e7e29a661782",
+      "complete": true
+    },
+    {
+      "suite": "library",
+      "checks": 5,
+      "report": ".codex-run/sketch16/packaged-2026-11-03T19-34-26.640Z/report.json",
+      "sha256": "14e6a9fa6a5c9fba1c9c21c44227bec41f6e3723fd94b54ad12ae39236750ed2",
+      "complete": true
+    },
+    {
+      "suite": "openscad",
+      "checks": 22,
+      "report": ".codex-run/final21-release/openscad/results.json",
+      "sha256": "59008bff7d49307f39d229310ee9ec4272347973fa6215fca5031f0c0f47df8f",
+      "complete": true
+    },
+    {
+      "suite": "branding-extracted",
+      "checks": 16,
+      "report": ".codex-run/final21-release/branding-extracted/results.json",
+      "sha256": "37c3af422a956a8aa0962c411f6db9912642d6c4724d1e9a3068ebc607f4e43f",
+      "complete": true
+    },
+    {
+      "suite": "manufacturing",
+      "checks": 13,
+      "report": ".codex-run/export11/packaged-1793734492073/summary.json",
+      "sha256": "a7bc7a8cb637e5425f2f86182fdc14930da04e443fd1a8954ac1f6aafefbfc18",
+      "complete": true
+    }
+  ],
+  "installerVerification": {
+    "archiveIntegrity": true,
+    "payloadFiles": 3905,
+    "byteIdenticalFiles": 3905,
+    "cacheMetadataOnlyDifferences": [
+      {
+        "path": "resources\\runtime\\apps\\web\\.next\\server\\route-cache\\APP_PAGE\\c6377dd9ce6a1c2cd100eb4344e843eb4639b9ed26f84643f77680e9eb454c4b\\$\\index.meta",
+        "onlyDifference": "routeCacheLastModified",
+        "unpacked": 1793734386542,
+        "extracted": 1793734472000
+      }
+    ],
+    "extractedLayoutAcceptanceChecks": 16,
+    "fullInstallationVerified": false,
+    "postLaunchFiles": 3908,
+    "generatedRuntimeCacheFiles": [
+      "resources\\runtime\\apps\\web\\.next\\server\\route-cache\\APP_PAGE\\c6377dd9ce6a1c2cd100eb4344e843eb4639b9ed26f84643f77680e9eb454c4b\\$\\index.html",
+      "resources\\runtime\\apps\\web\\.next\\server\\route-cache\\APP_PAGE\\c6377dd9ce6a1c2cd100eb4344e843eb4639b9ed26f84643f77680e9eb454c4b\\$\\index.meta",
+      "resources\\runtime\\apps\\web\\.next\\server\\route-cache\\APP_PAGE\\c6377dd9ce6a1c2cd100eb4344e843eb4639b9ed26f84643f77680e9eb454c4b\\$\\index.rsc"
+    ],
+    "allArchivedFileCrcsVerified": true
+  },
+  "offlineVerification": "External HTTP(S) denied in packaged/native tests; successful workflows use local engines and minimal Windows-only PATH. OS-wide adapter disable was not performed.",
+  "rollback": ".codex-run/preserved-ultimate21",
+  "limitations": [
+    "Fresh-machine NSIS wizard/install-registration/uninstall not executed: Windows Sandbox unavailable; existing installed application must remain untouched. Installer integrity, complete extracted payload comparison, extracted-layout launch/restart/shortcut API/native geometry/local help/licenses verified instead.",
+    "Unsigned private Windows x64 build; Windows may display an unknown-publisher warning.",
+    "Feature history is a bounded serial V1 (Pad/Revolve, pocket, hole/pattern, rim finish), not a general arbitrary feature graph.",
+    "Assembly V1 solves fixed/revolute/slider joint trees; closed loops, dynamics and general contact solving are unsupported.",
+    "FEM V1 is single exact body, isotropic linear static with planar opposite-end support/traction; not a general assembly/nonlinear/contact/anisotropic simulation. Equilibrium is checked; algebraic stiffness residual is not reported.",
+    "Image workbench is flat, bounded at 512 samples per long side, 64 MiB / 100 MP source; simulated backlighting assumes attenuation, not calibrated filament optics. Curved/cylindrical image geometry deferred.",
+    "Library uses legitimately exported local STL/OBJ/STEP/LYL; no Tinkercad account automation or invented source feature history. Some new workbench labels and fallback translations remain English.",
+    "Optional CUDA work deferred. Earlier complex organic hollowing print-readiness limitations remain; no new organic benchmark or blanket manufacturing certification claim."
+  ],
+  "manufacturingMeasurements": [
+    {
+      "case": "high-first",
+      "format": "stl",
+      "triangles": 3076,
+      "analyticDeviationMm": 0.012433962499801986,
+      "totalDeviationBudgetMm": 0.012433962503548586,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "high-first",
+      "format": "3mf",
+      "triangles": 3076,
+      "analyticDeviationMm": 0.012433962499801986,
+      "totalDeviationBudgetMm": 0.012433962499801986,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "ultra",
+      "format": "stl",
+      "triangles": 3912,
+      "analyticDeviationMm": 0.0025016380506993428,
+      "totalDeviationBudgetMm": 0.0025016380554858967,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "ultra",
+      "format": "3mf",
+      "triangles": 3912,
+      "analyticDeviationMm": 0.0025016380506993428,
+      "totalDeviationBudgetMm": 0.0025016380506993428,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "custom-edge",
+      "format": "stl",
+      "triangles": 353884,
+      "analyticDeviationMm": 0.012433962499801986,
+      "totalDeviationBudgetMm": 0.012436094980401866,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "custom-edge",
+      "format": "3mf",
+      "triangles": 353884,
+      "analyticDeviationMm": 0.012433962499801986,
+      "totalDeviationBudgetMm": 0.012433962499801986,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "high-repeat",
+      "format": "stl",
+      "triangles": 3076,
+      "analyticDeviationMm": 0.012433962499801986,
+      "totalDeviationBudgetMm": 0.012433962503548586,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    },
+    {
+      "case": "high-repeat",
+      "format": "3mf",
+      "triangles": 3076,
+      "analyticDeviationMm": 0.012433962499801986,
+      "totalDeviationBudgetMm": 0.012433962499801986,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0
+    }
+  ]
+}

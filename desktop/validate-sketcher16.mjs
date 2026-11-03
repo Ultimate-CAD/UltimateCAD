@@ -573,7 +573,8 @@ async function verifyImageRelief() {
     await panel.getByLabel("Source image",{exact:true}).setInputFiles(path.resolve("tests/fixtures/image-relief/checker."+suffix));
     await panel.getByLabel("Image geometry preview",{exact:true}).locator("canvas").waitFor();
   }
-  await panel.getByLabel("Width (mm)",{exact:true}).fill("20");
+  // Decimal comma must work in the actual packaged control, not just the parser.
+  await panel.getByLabel("Width (mm)",{exact:true}).fill("20,0");
   await panel.getByLabel("Sampling resolution (long side)",{exact:true}).fill("16");
   await panel.getByLabel("Simulated backlighting",{exact:true}).check();
   await panel.getByLabel("Simulated backlit preview",{exact:true}).locator("canvas").waitFor();

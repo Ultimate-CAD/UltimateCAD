@@ -1,3 +1,15 @@
+# Final .21 release checkpoint — 2026-11-03
+
+Final runtime: 910b1b92f81608f179737eb34c4459c537d7556b; branch codex/image-relief-21; release tag checkpoint-ultimate21-release. This record supersedes the historical next actions below. No feature development or optional GPU work remains authorized in this final verification task.
+
+Full unit suite: 3556 passed, 7 skipped; TypeScript passed. Final runtime packaged acceptance: 104 checks, zero recorded renderer errors: feature history 27, assembly 6, FEM 6, library 5, image solids/exports/cancellation 9, manufacturing 13, OpenSCAD 22, installer-extracted branding/native geometry/local help/licenses/shortcut API/restart 16. External HTTP(S) blocked; Windows-only PATH excludes development runtimes. OS-wide network adapters were not disabled. Exact evidence and bounded V1 limitations: docs/desktop/ULTIMATE21_RELEASE_VERIFICATION.json. All 3905 archived installer files match the tested build; three Next cache files are created at launch (only their metadata timestamp differs between runs).
+
+Installer: C:\Users\Justin\layerling-desktop\dist\ultimate\windows\Ultimate-CAD-Setup-x64.exe; 438897149 bytes; SHA256 d605b2441ef74e67fb8e201b99117ebffad67a25fbd543e2f8d2938b37043744. Executable: dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe. Full final rollback: .codex-run/preserved-ultimate21; previous versions, installed application and projects preserved. No push/publish.
+
+NEXT_ACTION: Deliver the verified release. No additional code action is required. Full fresh-machine NSIS wizard/registration/uninstall acceptance is not verified: Windows Sandbox is unavailable and existing installation must not be overwritten. This limitation is documented; archive/extracted-layout validation is complete. Do not repeat workbench development or expensive unaffected organic benchmarks.
+
+## Historical checkpoint records
+
 # Final release verification — 2026-11-03
 
 Branch codex/image-relief-21. Major workbench development is finished at bounded V1 scope. Original runtime a8d792d5 packaged image (including STL/3MF), feature history, assembly, FEM, library and manufacturing suites passed; logs retained in .codex-run/relief21. Full-suite failures were localized status messages, measure input policy and Node 26 host storage shadowing jsdom. Fixed without geometry changes or weakened assertions. Final full unit run: 3556 passed, 7 skipped; TypeScript passed. Locale-aware measure controls retain incomplete drafts and parse decimal commas/arithmetic. Existing 19 catalog edits and export-radio harness correction preserved.

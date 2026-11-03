@@ -177,3 +177,10 @@ Actual Assembly workspace integrated with normal editor commit/Undo and LYL7. Ri
 
 Development GUI verified movement numerically, global Undo/Redo, persistent joints and poses after reopen, fixed/revolute/slider and overlap both ways with no renderer errors/external responses. Two numerical assembly tests and 42 targeted assembly/LYL regressions passed; typecheck passed. .17 remains preserved; .18 package verification next.
 NEXT_ACTION: Run the assembly scenario on packaged .18 offline, preserve its rollback, then integrate established Gmsh/CalculiX for .19.
+
+## .18 packaged V1 acceptance
+
+Runtime e312046df047c9a4f6f8365d0a7ae768c68a4f52 / version 1.114.0-ultimate.18. Packaged isolated GUI assembly suite completed successfully, report .codex-run/sketch16/packaged-2026-11-03T08-15-32.835Z/report.json. It asserts numerical revolute/slider poses, fixed constraint, global Undo/Redo, same-project restored IDs/joint frames/poses and both positive and negative real intersection checks. Independent component geometry is retained. Runtime, installer, legal and sources copied to .codex-run/preserved-ultimate18. Final clean installed-location acceptance remains outstanding.
+
+.19 runtime downloads now cached under .codex-run/fem19/deps from upstream HTTPS. Gmsh 4.15.2 Windows ZIP matches its published SHA256; corresponding source is cached. CalculiX official 2.23 Windows and source archives cached. ccx_dynamic.exe fails startup under restricted PATH with missing DLLs, while ccx_static.exe runs and solves. Use static solver. Initial real Gmsh quadratic tetrahedral cantilever and CalculiX solve completes (999 nodes, 434 elements, total support force +1000 N for -1000 N applied). Integration, refinement/moment/residual verification and saved analysis results remain to implement. No FEM production claims yet.
+NEXT_ACTION: Implement the isolated FEM job manager using Gmsh for analytic BREP meshing in SI and CalculiX static for linear elasticity. Connect materials/support/load settings, actual deformed stress preview and persisted studies, then require cantilever/refinement/equilibrium checks before production.

@@ -15,9 +15,9 @@
     "copy:occt": "node scripts/copy-occt-wasm.mjs",
     "fonts:japanese": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-japanese-typeface.mjs",
     "clean:cache": "node scripts/clean-next-cache.mjs",
-    "predev": "node scripts/check-node-version.mjs && npm run copy:occt && npm run fonts:japanese && npm run guide",
+    "predev": "node scripts/check-node-version.mjs && node scripts/stage-planegcs.mjs && npm run copy:occt && npm run fonts:japanese && npm run guide",
     "dev": "next dev apps/web",
-    "prebuild": "node scripts/check-node-version.mjs && npm run copy:occt && npm run fonts:japanese && npm run guide",
+    "prebuild": "node scripts/check-node-version.mjs && node scripts/stage-planegcs.mjs && npm run copy:occt && npm run fonts:japanese && npm run guide",
     "build": "next build apps/web",
     "export": "node scripts/build-static-export.mjs",
     "verify:static-worker-assets": "node scripts/verify-static-worker-assets.mjs",
@@ -52,6 +52,7 @@
     "ultimate:validate:precision": "node desktop/validate-precision.mjs"
   },
   "dependencies": {
+    "@salusoft89/planegcs": "1.3.0",
     "@types/three": "^0.184.1",
     "brepjs": "^20.10.3",
     "fflate": "^0.8.3",

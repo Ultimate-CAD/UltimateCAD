@@ -64,6 +64,11 @@ function ensureSketchCadWorker() {
 /** How long the kernel may take for a sketch; a sweep runs a profile along a whole path and gets longer (#884). */
 const SKETCH_CAD_TIMEOUT_MS = 30_000;
 const SKETCH_SWEEP_TIMEOUT_MS = 120_000;
+export function cancelSketchCadBuilds() {
+  const worker=sketchCadWorker;if(!worker)return;
+  sketchCadPending.forEach(p=>{window.clearTimeout(p.timer);p.reject(new DOMException("Cancelled","AbortError"));});
+  sketchCadPending.clear();worker.terminate();sketchCadWorker=null;
+}
 
 /**
  * One build on the sketch worker. When it takes too long the worker is stopped, not left to finish: it

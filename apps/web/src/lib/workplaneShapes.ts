@@ -152,8 +152,8 @@ export function isNonSolidShapeKind(kind: WorkplaneShape["kind"]) {
  * the plate or a face to line parts up on. Neither is exported, cut, grouped, printed or counted
  * in the print estimate.
  */
-export function isNonSolidShape(shape: Pick<WorkplaneShape, "kind" | "imagePlate">) {
-  return isNonSolidShapeKind(shape.kind) || Boolean(shape.imagePlate);
+export function isNonSolidShape(shape: Pick<WorkplaneShape, "kind" | "imagePlate" | "sketchOnly">) {
+  return isNonSolidShapeKind(shape.kind) || Boolean(shape.imagePlate) || shape.sketchOnly === true;
 }
 
 /**

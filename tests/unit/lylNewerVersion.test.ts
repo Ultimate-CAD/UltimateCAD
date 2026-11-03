@@ -4,6 +4,7 @@ import { editorHistoryEntry } from "@/lib/editorHistory";
 import { exportLylProject, importLylProject, isNewerLayerlingVersion, LYL_CREATED_WITH_VERSION, type LylProjectDocumentV1 } from "@/lib/lylProject";
 import { localizedError } from "@/lib/userErrors";
 import { setLanguage } from "@/lib/i18n";
+import { PRODUCT_BRANDING } from "@/lib/productBranding";
 import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE } from "@/lib/workplaneSettings";
 import type { WorkplaneShape } from "@/types/layerling";
 
@@ -63,9 +64,9 @@ describe("designs from a newer layerling", () => {
     expect(message).toMatch(/^This design was saved with layerling 99\.0\.0, newer than this layerling/);
     expect(message).toMatch(/warpDrive/);
     setLanguage("de");
-    expect(localizedError(message)).toContain(`mit layerling 99.0.0 gespeichert, du hast ${LYL_CREATED_WITH_VERSION}`);
+    expect(localizedError(message)).toContain(`mit ${PRODUCT_BRANDING.name} 99.0.0 gespeichert, du hast ${LYL_CREATED_WITH_VERSION}`);
     setLanguage("en");
-    expect(localizedError(message)).toContain(`saved with layerling 99.0.0, and you have ${LYL_CREATED_WITH_VERSION}`);
+    expect(localizedError(message)).toContain(`saved with ${PRODUCT_BRANDING.name} 99.0.0, and you have ${LYL_CREATED_WITH_VERSION}`);
   });
 
   it("keeps the plain reason for a broken design from this or an older version", async () => {

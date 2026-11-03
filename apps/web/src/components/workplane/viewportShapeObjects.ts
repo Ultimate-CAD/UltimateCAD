@@ -1,6 +1,8 @@
 "use client";
 
 import * as THREE from "three";
+import { constraintSketchLinePositions } from "@/lib/constraintSketch";
+import { constraintSketchBounds } from "@/lib/constraintSketchShape";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
 import { groupShowsPartColors } from "@/lib/groupColors";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -1475,6 +1477,16 @@ export function createShapeObject(
     THREE.MathUtils.degToRad(shape.rotationZ ?? 0),
   );
   group.scale.set(mirrorSign(shape.mirrorX), mirrorSign(shape.mirrorY), mirrorSign(shape.mirrorZ));
+  if (shape.sketchOnly && shape.sketchProfile?.constraintSketch) {
+    const doc=shape.sketchProfile.constraintSketch,bounds=constraintSketchBounds(doc),positions=constraintSketchLinePositions(doc);
+    for(let i=0;i<positions.length;i+=3){positions[i]-=bounds.x;positions[i+2]-=bounds.y;}
+    const lines=new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position",new THREE.Float32BufferAttribute(positions,3)),new THREE.LineBasicMaterial({color:shape.color}));
+    lines.userData.shapeId=shape.id;group.add(lines);
+    const points=doc.entities.filter(p=>p.kind==="point").flatMap(p=>[p.x-bounds.x,0,p.y-bounds.y]);
+    const markers=new THREE.Points(new THREE.BufferGeometry().setAttribute("position",new THREE.Float32BufferAttribute(points,3)),new THREE.PointsMaterial({color:shape.color,size:5,sizeAttenuation:false}));
+    markers.userData.shapeId=shape.id;group.add(markers);group.position.y=(shape.elevation??0)+.02;
+    setObjectRenderLayer(group,RENDER_LAYER_SHAPES);freezeStaticObjectMatrices(group);return group;
+  }
 
   if (shape.groupedShapes?.length && !shape.importedMesh) {
     const content = new THREE.Group();

@@ -73,7 +73,7 @@ self.onmessage = async (event: MessageEvent<SketchCadBuildRequest>) => {
       // The validity check grows steeply with the edges: a stroked traced drawing (7 000 straight pieces,
       // a hole in it) took 51 s of a 56 s build (#461). A body that large is checked by its volume instead.
       const edgeCount = regions.reduce((sum, region) => sum + region.outer.steps.length + region.holes.reduce((inner, hole) => inner + hole.steps.length, 0), 0);
-      const sound = edgeCount > LARGE_SKETCH_EDGES ? cad.getVolume(result) > 1e-9 : cad.isValid(result);
+      const sound = !request.profile.constraintSketch && edgeCount > LARGE_SKETCH_EDGES ? cad.getVolume(result) > 1e-9 : cad.isValid(result);
       if (!sound) throw new Error("OpenCascade produced invalid sketch topology");
     }
     const deflection = sketchCadDeflection(request.profile);

@@ -117,6 +117,11 @@ import { importedShapeFromObj } from "@/lib/objImport";
 import { takeImportSvgWidth } from "@/lib/importPreferences";
 import { importFailureSummary, importModelFiles } from "@/lib/modelImport";
 import { OpenScadWorkbench } from "@/components/workplane/OpenScadWorkbench";
+import { ConstraintSketchWorkbench } from "@/components/workplane/ConstraintSketchWorkbench";
+import { solveSketchInWorker } from "@/lib/constraintSketchWorker";
+import { constraintSketchShape } from "@/lib/constraintSketchShape";
+import { type ConstraintSketch } from "@/lib/constraintSketch";
+import { cancelSketchCadBuilds } from "@/lib/editorSketchCad";
 import { renderScadShape } from "@/lib/openScadClient";
 import { newOpenScadDocument, validateOpenScadDocument, type OpenScadDocument } from "@/lib/openScadTypes";
 import { parseCustomizer } from "@/lib/openscad/vendor/scadParser.cjs";
@@ -2701,6 +2706,8 @@ export function LayerlingEditor({
   const [workplaneMode, setWorkplaneMode] = useState(false);
   const [topPanel, setTopPanel] = useState<TopPanel>(null);
   const [openScadWorkbench, setOpenScadWorkbench] = useState(false);
+  const [constraintWorkbench,setConstraintWorkbench]=useState(false);
+  const [constraintTarget,setConstraintTarget]=useState<string|null>(null);
   /** The icon tag window: an SVG file, its width and OK (the library's Icon tag). */
   const [iconTagPanelOpen, setIconTagPanelOpen] = useState(false);
   const [qrCodePanelOpen, setQrCodePanelOpen] = useState(false);
@@ -4424,6 +4431,26 @@ export function LayerlingEditor({
     commitShapes(previous ? shapesRef.current.map(shape => shape.id === previous.id ? applied.shape : shape) : [...shapesRef.current, applied.shape], applied.shape.id, applied.result.cached ? "OpenSCAD geometry reused from cache" : "OpenSCAD geometry regenerated");
     return applied;
   }, [commitShapes]);
+  const applyConstraintSketch=useCallback(async(document:ConstraintSketch,targetId:string|null,build:boolean,signal:AbortSignal)=>{
+    const project=projectInfoRef.current.projectId,previous=targetId?shapesRef.current.find(s=>s.id===targetId):null;
+    const sourceRevision=previous?JSON.stringify(previous):null;
+    if(historyViewStateRef.current||previous?.locked)throw new Error("This sketch is not editable");
+    if(targetId&&!previous)throw new Error("The sketch was removed; create a new sketch");
+    if(!build&&previous?.cadBrep&&!previous.sketchOnly)throw new Error("Build the solid to apply changed sketch dimensions");
+    const solved=await solveSketchInWorker(document,signal);
+    if(signal.aborted)throw new DOMException("Cancelled","AbortError");
+    if(!solved.valid)throw new Error(solved.message);
+    const base=constraintSketchShape(solved.document,previous?.id??createLocalId("constraint-sketch"),previous);
+    let next=base;
+    const abort=()=>cancelSketchCadBuilds();
+    if(build){signal.addEventListener("abort",abort,{once:true});try{next=await cadShapeFromSketchProfile(base.sketchProfile!,solved.document.extrusionMm,base);next={...next,sketchOnly:undefined,name:document.title,x:base.x,z:base.z,elevation:base.elevation,rotation:base.rotation,rotationX:base.rotationX,rotationZ:base.rotationZ,mirrorX:base.mirrorX,mirrorY:base.mirrorY,mirrorZ:base.mirrorZ};}finally{signal.removeEventListener("abort",abort);}}
+    if(signal.aborted)throw new DOMException("Cancelled","AbortError");
+    if(projectInfoRef.current.projectId!==project)throw new Error("Project changed; sketch result discarded");
+    if(previous&&JSON.stringify(shapesRef.current.find(s=>s.id===previous.id))!==sourceRevision)throw new Error("Sketch changed while building; retry the current revision");
+    if(historyViewStateRef.current)throw new Error("History changed; sketch result discarded");
+    commitShapes(previous?shapesRef.current.map(s=>s.id===previous.id?next:s):[...shapesRef.current,next],next.id,t(build?"constraintSketch.solidBuilt":"constraintSketch.sourceSaved"));
+    setConstraintTarget(next.id);return next;
+  },[commitShapes]);
   const keepOpenScadSource = useCallback((document: OpenScadDocument, targetId: string) => {
     validateOpenScadDocument(document);
     const target = shapesRef.current.find(shape => shape.id === targetId);
@@ -4655,6 +4682,7 @@ export function LayerlingEditor({
     workplaneOverride?: PlacementWorkplane,
   ) => {
     const body = editingId ? shapesRef.current.find((shape) => shape.id === editingId) : undefined;
+    if(body?.sketchProfile?.constraintSketch){setConstraintTarget(body.id);setConstraintWorkbench(true);return;}
     const drawn = profile ?? emptySketchProfile();
     // The body's notes come along, shown on the sketch, and go back to the body when it is finished.
     const initial = cloneSketchProfile({ ...drawn, notes: body ? sketchNotesFromBody(notesRef.current, body, sketchNoteFrame(body, operation, drawn, revolveSettings)) : [] });
@@ -13564,6 +13592,7 @@ export function LayerlingEditor({
     <div className={`layerling-editor ${historyViewState ? "history-view-active" : ""}`}>
       <SecondaryToolbar
         onOpenScad={() => setOpenScadWorkbench(open => !open)}
+        onConstraintSketch={()=>{setConstraintTarget(selectedShape?.sketchProfile?.constraintSketch?selectedShape.id:null);setConstraintWorkbench(open=>!open);}}
         toolbarMode={toolbarMode}
         projectName={projectName}
         onProjectNameChange={onProjectNameChange}
@@ -14012,6 +14041,7 @@ export function LayerlingEditor({
         />
       ) : null}
       {openScadWorkbench ? <OpenScadWorkbench shape={selectedShape ?? (shapes.filter(shape => shape.openScad).length === 1 ? shapes.find(shape => shape.openScad)! : null)} onApply={applyOpenScad} onKeepSource={keepOpenScadSource} onClose={() => setOpenScadWorkbench(false)} /> : null}
+      {constraintWorkbench?<ConstraintSketchWorkbench key={`${projectId}:${constraintTarget??"new"}`} shape={shapes.find(s=>s.id===constraintTarget)??null} onApply={applyConstraintSketch} onClose={()=>setConstraintWorkbench(false)}/>:null}
       <AppFooter variant="editor" version={LYL_CREATED_WITH_VERSION} onBugReport={() => void saveBugReport()} />
       {historyViewState && toolbarMode === "geometry" ? (
         <HistoryViewOverlay

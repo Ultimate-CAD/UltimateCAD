@@ -12,6 +12,7 @@ import { normalizeSketchStroke, SKETCH_STROKE_JOINS } from "@/lib/sketchStroke";
 import { normalizeTextEdge } from "@/lib/textEdge";
 import { isTextKeyring } from "@/lib/textGeometry";
 import { normalizeNotes } from "@/lib/workplaneNotes";
+import { validateConstraintSketch } from "@/lib/constraintSketch";
 import {
   attachmentListProblem,
   attachmentProblemText,
@@ -55,8 +56,11 @@ export const LYL_ATTACHMENTS_FORMAT_VERSION = 3;
 // are all text stays a version 3 file. Which version each type needs is the `formatVersion` column
 // of ATTACHMENT_TYPES in projectAttachments.ts.
 export const LYL_FILE_TYPES_FORMAT_VERSION = 4;
+// Constrained source and non-solid sketch nodes must never become placeholder
+// solids or lose their constraints when opened in an older reader.
+export const LYL_CONSTRAINED_SKETCH_FORMAT_VERSION = 5;
 /** The newest format this layerling reads. */
-export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_FILE_TYPES_FORMAT_VERSION;
+export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_CONSTRAINED_SKETCH_FORMAT_VERSION;
 export const LYL_OLDEST_READABLE_FORMAT_VERSION = 1;
 export const LYL_CREATED_WITH_VERSION = "1.114.0";
 export const LYL_MEDIA_TYPE = "application/vnd.layerling.project+zip";
@@ -197,7 +201,7 @@ function validateFonts(fonts: unknown) {
 
 export type LylProjectDocumentV1 = {
   schema: typeof LYL_SCHEMA_ID | typeof LEGACY_LYL_SCHEMA_ID;
-  formatVersion: 1 | 2 | 3 | 4;
+  formatVersion: 1 | 2 | 3 | 4 | 5;
   minimumReaderVersion: number;
   createdWithVersion: string;
   metadata: {
@@ -797,6 +801,7 @@ async function serializeShapeNode(
     definition.sketchProfile = {
       points: sketchProfile.points,
       segments: sketchProfile.segments,
+      ...(sketchProfile.constraintSketch ? { constraintSketch: sketchProfile.constraintSketch } : {}),
       ...(images.length ? { images } : {}),
       ...(sketchProfile.stroke ? { stroke: sketchProfile.stroke } : {}),
       ...(sketchProfile.silhouette ? { silhouette: true } : {}),
@@ -1103,14 +1108,21 @@ export async function exportLylProject(input: LylProjectExportInput) {
   const cornerRulers = normalizeSavedCornerRulers(input.cornerRulers === undefined ? readCornerRulers(input.projectId) : input.cornerRulers);
   const tapeMeasurements = normalizeSavedTape(input.tapeMeasurements === undefined ? readTape(input.projectId) : input.tapeMeasurements);
   const selectedWorkplaneId = placementWorkplaneIsBase(placementWorkplane) ? "workplane-base" : "workplane-active";
+  const checkedSketchNodes=new WeakSet<WorkplaneShape>();
+  const needsConstrainedReader=(shape:WorkplaneShape):boolean=>{
+    if(checkedSketchNodes.has(shape))return false;checkedSketchNodes.add(shape);
+    return Boolean(shape.sketchOnly||shape.sketchProfile?.constraintSketch||shape.groupedShapes?.some(needsConstrainedReader)||shape.edgeTreatmentHistory?.some(e=>needsConstrainedReader(e.before)));
+  };
+  const constrainedVersion=hydrated.entries.some(entry=>entry.shapes.some(needsConstrainedReader))?LYL_CONSTRAINED_SKETCH_FORMAT_VERSION:LYL_FORMAT_VERSION;
+  const requiredFormatVersion=constrainedVersion===LYL_CONSTRAINED_SKETCH_FORMAT_VERSION?LYL_CONSTRAINED_SKETCH_FORMAT_VERSION:attachmentsFormatVersion(attachments)??LYL_FORMAT_VERSION;
   const document: Omit<LylProjectDocumentV1, "states"> & { states: typeof STATES_PLACEHOLDER } = {
     schema: LYL_SCHEMA_ID,
     // Only a design that has attachments is a version 3 package, or version 4 when one of them is of a
     // type that came with version 4: a layerling that does not know them refuses it (see
     // LYL_ATTACHMENTS_FORMAT_VERSION and LYL_FILE_TYPES_FORMAT_VERSION) instead of dropping the files
     // at its next save. Every other design is written exactly as before.
-    formatVersion: attachmentsFormatVersion(attachments) ?? LYL_FORMAT_VERSION,
-    minimumReaderVersion: attachmentsFormatVersion(attachments) ?? LYL_MINIMUM_READER_VERSION,
+    formatVersion: requiredFormatVersion,
+    minimumReaderVersion: requiredFormatVersion,
     createdWithVersion: LYL_CREATED_WITH_VERSION,
     metadata: {
       ...(input.projectId ? { projectId: input.projectId } : {}),
@@ -1241,6 +1253,7 @@ function stringArray(value: unknown, label: string) {
 
 function validateSketchProfile(value: unknown, label: string) {
   const profile = objectRecord(value, label);
+  if (profile.constraintSketch !== undefined) validateConstraintSketch(profile.constraintSketch);
   if (!Array.isArray(profile.points) || !Array.isArray(profile.segments)) throw new Error(`${label} is missing points or segments`);
   const pointIds = new Set<string>();
   profile.points.forEach((rawPoint, index) => {
@@ -1262,6 +1275,10 @@ function validateSketchProfile(value: unknown, label: string) {
     const endId = stringValue(segment.endId, `${label}.segments[${index}].endId`);
     if (!pointIds.has(startId) || !pointIds.has(endId)) throw new Error(`${label} contains a segment with a missing point reference`);
     if (segment.construction !== undefined && typeof segment.construction !== "boolean") throw new Error(`${label}.segments[${index}].construction must be true or false`);
+    if (segment.analyticMidpoint !== undefined) {
+      const midpoint = objectRecord(segment.analyticMidpoint, `${label}.segments[${index}].analyticMidpoint`);
+      finiteNumber(midpoint.x, `${label}.analyticMidpoint.x`); finiteNumber(midpoint.z, `${label}.analyticMidpoint.z`);
+    }
   });
   if (profile.silhouette !== undefined && typeof profile.silhouette !== "boolean") throw new Error(`${label}.silhouette must be true or false`);
   if (profile.keyring !== undefined && !isSketchKeyring(profile.keyring)) throw new Error(`${label}.keyring must be { side, diameter, x, z } and a free place (#598) with corners of -1 or 1 if it has one`);
@@ -1403,6 +1420,8 @@ function validateShapeDefinition(definition: Record<string, unknown>, label: str
       throw new Error(`${label}.parametricSource dimensions are outside the supported range`);
     }
   }
+  if (definition.sketchOnly !== undefined && typeof definition.sketchOnly !== "boolean") throw new Error(`${label}.sketchOnly must be boolean`);
+  if (definition.sketchOnly && !definition.sketchProfile) throw new Error(`${label} planar sketch requires a sketch profile`);
   if (definition.sketchProfile) validateSketchProfile(definition.sketchProfile, `${label}.sketchProfile`);
   if (definition.sketchOperation !== undefined && definition.sketchOperation !== "extrude" && definition.sketchOperation !== "revolve" && definition.sketchOperation !== "sweep") {
     throw new Error(`${label}.sketchOperation is invalid`);
@@ -1866,6 +1885,9 @@ async function validateDocumentAndAssets(raw: unknown, files: ArchiveFiles) {
       const nodeId = stringValue(node?.nodeId, `states[${stateIndex}].nodes[${nodeIndex}].nodeId`);
       if (nodeById.has(nodeId)) throw new Error(`State '${stateId}' contains duplicate node ID '${nodeId}'`);
       const definition = objectRecord(node.definition, `node '${nodeId}'.definition`);
+      const constrainedSource=definition.sketchOnly===true||(definition.sketchProfile&&typeof definition.sketchProfile==="object"&&(definition.sketchProfile as Record<string,unknown>).constraintSketch!==undefined);
+      if(constrainedSource&&(document.formatVersion<LYL_CONSTRAINED_SKETCH_FORMAT_VERSION||document.minimumReaderVersion<LYL_CONSTRAINED_SKETCH_FORMAT_VERSION))throw new Error("Constrained sketches require project format and reader version 5");
+      if(definition.sketchOnly&&((definition.sketchProfile as Record<string,unknown>|undefined)?.constraintSketch===undefined||node.cadBrepAssetId))throw new Error("A planar sketch requires editable source and cannot contain a solid BREP");
       const objectId = validateShapeDefinition(definition, `node '${nodeId}'`);
       if (node.objectId !== objectId) throw new Error(`Node '${nodeId}' objectId does not match its shape definition`);
       if (node.importedMesh) {

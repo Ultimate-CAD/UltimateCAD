@@ -1,42 +1,44 @@
-# Master campaign — .13 validated; OpenVDB experiment checkpoint
+# Ultimate CAD master campaign — .16 Constrained Sketcher in progress
 
-## Current isolated request: offset versus interior dilation
+The latest user directive (see `docs/roadmap/CODEX_CONTINUATION.md`) supersedes the earlier isolated-OpenVDB handoff. Continue autonomously through integrated, validated features in this order: **.16 Sketcher -> .17 Feature History -> .18 Assemblies -> .19 FEM -> .20 Offline Library/Migration -> .15 GPU evaluation -> final integrated verification**.
 
-Scope override: perform this experiment only; do not resume C–H or change production engines.
-- [x] Inspect actual pinned implementation and upstream API; existing p/pitch conversion is correct for its zero-origin uniform transform.
-- [x] Build a separate fixed-pitch experiment with explicit worldToIndex, zero adaptivity, controlled quad triangulation, no smoothing/simplification, stage memory/timing and exact failure witnesses.
-- [x] Diagnose face-only dilation mask failure at diagonal normals; use documented negative-domain sweep with 26-neighbor dilation.
-- [x] Finish paired 0.10/0.075/0.05/0.02 mm benchmarks under 8 GiB process / 180 s trial budgets; record exhaustion separately from invalid geometry.
-- [x] Independently check cavity accuracy, final manufacturing integrity, exact normalized exterior preservation and coordinate-origin regression; compare full costs to native 23.80 s.
-- [x] Record best validated configuration/limits and commit locally; no production integration without demonstrated complete improvement.
+## Verified baseline and guardrails
 
-Experiment complete on `codex/openvdb-offset-dilation-experiment`, tag `checkpoint-openvdb-offset-comparison`. Report `docs/performance/OPENVDB_OFFSET_DILATION_EXPERIMENT.md`; code `native/experiments/openvdb14/offset_experiment.cpp`, runner `scripts/run-openvdb-offset-experiment.mjs`, artifacts `.codex-run/sparse14-offset`. Six completed geometries pass full app/CGAL checks, analytic offset bounds and exact exterior/cavity-face preservation. Best native generation .100 dilation 18.170 s / 1.555 GB / 0.093405 mm sampled error; faster than 23.799 s but worse error/memory, so no production integration. Fastest lower-error alternative .100 offset 27.363 s. .020 dilation confirmed bad_alloc at 8 GiB limit, offset timed out 180 s. Fastest actual STL/3MF reimport/CGAL checks pass, four world/index-origin checks pass. Thin-wall concerns remain; no print-ready claim. .13 app/installer/worker hashes unchanged. This isolated request is finished; do not automatically resume the broader campaign.
+- Branch: `codex/constrained-sketcher-16`, based on `9ab6ab7923d6750f3980cd76045a49ede17a3ea2`. The shared tree has active uncommitted .16 work; preserve it.
+- Latest validated baseline remains .13 runtime `811ddc16936593e08a3c551565a374acf69bd800`, verification commit `7b7d49fe7fbc68f713fdb4ca6d1cec88b50af994`, installer SHA-256 `f9438e5435b8ea6e3c040ccb7cb6ad079e8bd1eb1e1599b34aedb8770b54cae8`. Rollback: `.codex-run/preserved-ultimate13`.
+- .14 OpenVDB was evaluated and not adopted. It is closed; do not restart its benchmarks or integrate it without a demonstrated dependency.
+- Do not push/publish or overwrite the installed app or preserved rollback artifacts. Keep all release validation offline and bundled.
 
-User authorizes ordered engineering releases through implementation, tests, independent verification and packaging, then later milestones while resources permit. Do not stop at a proposal. Master record: `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md`.
+## Current milestone: .16 Constrained Sketcher
 
-## Current surgical context
-- `apps/web/src/lib/meshManufacturingQa.ts:133-291,292-371`: paired BVH traversal, exact bounds, robust contacts, budgets, shell/thickness checks and result.
-- `apps/web/src/lib/triangleSharedContact.ts:31-120`, `robustTriangleIntersection.ts`: .11 robust predicates and shared-simplex handling; retain correctness.
-- `apps/web/src/lib/geometryTiming.ts`: opt-in per-stage profiling; no per-triangle logging.
-- `apps/web/src/lib/precisionExport.ts:300-450`, `precisionExportWorker.ts`: encoded-coordinate checks, readiness, isolation/deadline/cancel.
-- Saved cone/native source/build/test paths: audit in progress; record exact repeatable validation-only command in master roadmap.
+Status: **in progress**. Six actual WASM/OCCT tests, 47 persistence/cancellation unit tests and 88 existing sketch/localization tests pass. Final typecheck and development editor save/reopen/Undo/cancellation/retry pass. Packaging remains pending. Do not mark .16 complete until the integrated save/edit/Undo/Redo/downstream-geometry flow passes in the packaged app.
 
-## Current milestones
-- [x] Verify clean .12 source/config/artifact hashes and recorded packaged evidence; preserve complete .12 rollback; create branch.
-- [x] Read campaign and create master roadmap with A–H status/dependencies/recovery actions.
-- [x] Profile saved cone and small correctness fixtures; research established acceleration/contact implementations.
-- [x] Implement bounded scalable checks and explicit verified/inconclusive/cancel/error outcomes without changing geometry or weakening checks.
-- [x] Obtain defensible independent dense-cone verdict; plate, intentional intersections, STL/3MF, worker cancellation/resource regressions; practical inherited i18n fix.
-- [x] Runtime commit, .13 Windows package, offline packaged validation, report/verification commit and preserved rollback.
-- [x] Build and assess isolated B prototype; retain native/WASM after unsafe or slower variants; record incomplete allocator metrics honestly.
-- [ ] C: isolated GPU distance/sign pilot and transfer-inclusive comparison against validated native CPU; then D–H in dependency order.
+PlaneGCS is pinned to `@salusoft89/planegcs` 1.3.0, Git `9d26baef0b240fe0eef4186d4e5e5e66ec3620b7`, npm integrity `sha512-ugIkFCPnKRK1Yed+5297S/RmmfgEhIp5Xxx8PYhgfbcS+AxYV3chZ8LMGlEbEqrkbK6fwmNVLtEpLFq5KDl2lw==`. `scripts/stage-planegcs.mjs` verifies and stages the offline WASM dependency and required notices; no separately installed FreeCAD runtime is needed.
 
-## Current handoff
-Validated .13 runtime `811ddc16936593e08a3c551565a374acf69bd800`; 30 unit tests, 23 integration tests (three old optional skips), TypeScript, Windows build and 59 packaged checks pass. Independent CGAL confirms cached native/STL/3MF and actual downloaded 3MF complete with zero contacts. Surface verdict is scoped; 0.028632 mm wall concern keeps ready=false. Imported placement Float32 loss is diagnosed and STL blocked; 3MF retains geometry. Public BVH range traversal reduces cached STL surface check 3.953→3.244 s with identical counts/hashes. Full rollback `.codex-run/preserved-ultimate13`; .12 preserved separately. Current manifest `dist/ultimate/windows/release-verification.json`. B is assessed below; next is the isolated C pilot before any GPU integration. Main report `docs/performance/DENSE_MANUFACTURING_CERTIFICATION.md`; campaign master roadmap records A–H states. Installed app untouched; no push.
+Implementation in progress includes new `constraintSketch.ts`, `constraintSketchShape.ts`, `constraintSketchWorker.ts`, `constraintSketch.worker.ts`, `ConstraintSketchWorkbench.tsx`/`.css`, `scripts/stage-planegcs.mjs`, and `tests/e2e/constraintSketch16.e2e.ts`, plus integration edits to editor/toolbar/rendering/OCCT wire/LYL persistence/types/locales/package staging. Preserve these shared changes.
 
-B checkpoint on `codex/sparse-volume-14`: working OpenVDB 14 static prototype and reproducible hash-checked benchmark runner. Fast simplified dense cone has 3 real CGAL crossings; unsimplified cone is valid but 111.36 s / 1.479 GB versus native 23.80 s / 1.076 GB. Exact normalized exterior preserved; organic fails unchanged 0.1 mm accuracy limit, concave/thin and actual cancellation pass. No .14 desktop integration/package. Source, notices and builds isolated; source control defaults reproduce native meshes byte-for-byte. Report `docs/performance/OPENVDB14_EVALUATION.md`. Next: C inventory/research/pilot against .13 native. `nvcc` not on PATH; verify actual local toolchain before deciding approach. No allocator-event peak, GPU or Bunny result claimed.
+### Next checks
 
----
+After current integration edits settle, run focused scenario then typecheck:
+
+```powershell
+npm run test:e2e -- tests/e2e/constraintSketch16.e2e.ts
+npm run typecheck
+```
+
+Fix failures and repeat. Use the six-hole circular mounting plate to verify constraints, dimensions, DOF/conflict diagnostics, editing, Undo/Redo, LYL save/reopen and downstream OCCT output. Before completing .16, package and test the actual application; release packaging requires committed, verified sources. Keep the installed app untouched at this checkpoint.
+
+## Remaining sequence
+
+- .17 Parametric Feature History: not started; editor snapshots are not a parametric feature graph.
+- .18 Mechanical Assemblies: not started; retain separate components and persisted joints.
+- .19 Local FEM: not started; include solver, mesh, boundary, residual/reaction and stale-result checks.
+- .20 Offline Design Library and migration: not started.
+- Additional Native Lithophane and Bas-Relief Designer: planned after .20, before .15. Flat offline PNG/JPEG/WebP with editable source/parameters, bounded cancellable generation, closed manifold geometry, backlit/3D preview and existing manufacturing export; validate flat before curved/cylindrical. Full acceptance is recorded in CODEX_CONTINUATION.md.
+- .15 Bounded GPU evaluation: not started; last, with CPU comparison and fallback.
+- Final integrated release verification: not started.
+
+Detailed continuation and evidence are in `docs/roadmap/CODEX_CONTINUATION.md`. The campaign ledger `docs/roadmap/ULTIMATE_MASTER_ROADMAP.md` records the current campaign order and evidence.
 
 # Historical private desktop identity and offline UI (.12)
 

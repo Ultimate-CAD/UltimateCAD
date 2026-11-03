@@ -1,3 +1,5 @@
+import type { ConstraintSketch } from "@/lib/constraintSketch";
+
 export type ShapeKind =
   | "box"
   | "roundedBox"
@@ -480,6 +482,8 @@ export type SketchSegment = {
   kind?: "line" | "bezier" | "smooth";
   /** A construction line (#229): drawn dashed, never part of the body, points snap to its crossings. */
   construction?: boolean;
+  /** Exact circular midpoint from a constrained analytic curve; never inferred from a mesh. */
+  analyticMidpoint?: { x: number; z: number };
 };
 
 export type SketchImage = {
@@ -551,6 +555,7 @@ export type SketchNote = { id: string; text: string; x: number; z: number; colla
 export type SketchProfile = {
   points: SketchPoint[];
   segments: SketchSegment[];
+  constraintSketch?: ConstraintSketch;
   images?: SketchImage[];
   stroke?: SketchStroke;
   /** Built without its holes: only the outermost outlines count, as the usual Silhouette (#197). */
@@ -1151,6 +1156,8 @@ export type WorkplaneShape = {
   };
   parametricSource?: ParametricSource;
   sketchProfile?: SketchProfile;
+  /** An editable planar sketch has no manufactured solid until explicitly built. */
+  sketchOnly?: boolean;
   sketchOperation?: SketchOperation;
   sketchRevolve?: SketchRevolveSettings;
   edgeTreatments?: EdgeTreatmentFeature[];

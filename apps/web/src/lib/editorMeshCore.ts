@@ -693,6 +693,7 @@ export function meshReachAlong(mesh: Pick<MeshData, "vertices">, direction: { x:
 }
 
 export function meshForShape(shape: WorkplaneShape): MeshData {
+  if (shape.sketchOnly) return { name: shape.name, vertices: [], faces: [] };
   if (shape.kind === "mesh" && shape.importedMesh) {
     return importedMeshForShape(shape);
   }

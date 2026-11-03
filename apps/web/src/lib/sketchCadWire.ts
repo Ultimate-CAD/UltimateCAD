@@ -6,6 +6,7 @@ import { circularArcMidpoint } from "@/lib/sketchCircularArc";
 export function pathWire(cad: OcctKernel, path: OrderedCadSketchPath) {
   const edges = path.steps.map(({ segment, from, to }) => {
     const forward = segment.startId === from.id;
+    if (segment.analyticMidpoint) return cad.makeArcEdge({ x: from.x, y: 0, z: from.z }, { x: segment.analyticMidpoint.x, y: 0, z: segment.analyticMidpoint.z }, { x: to.x, y: 0, z: to.z });
     const first = forward ? from.handleOut : from.handleIn;
     const second = forward ? to.handleIn : to.handleOut;
     if (segment.kind !== "line" && first && second) {

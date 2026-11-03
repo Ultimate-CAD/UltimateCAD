@@ -1,3 +1,4 @@
+import { resolvePadDepth, type SketchPadHistory } from "@/lib/sketchPadHistory";
 import type { ModuleStatic, SketchPrimitive } from "@salusoft89/planegcs";
 import type { SketchProfile, SketchPoint, SketchSegment } from "@/types/layerling";
 
@@ -10,7 +11,7 @@ export const CONSTRAINT_KINDS = ["coincident", "concentric", "horizontal", "vert
 export type ConstraintKind = typeof CONSTRAINT_KINDS[number];
 export type SketchConstraint = { id: string; kind: ConstraintKind; first: string; second?: string; value?: number; name?: string };
 /** Sketch lengths and coordinates are mm; persisted angular dimensions are degrees. */
-export type ConstraintSketch = { schema: 1; title: string; entities: ConstraintEntity[]; constraints: SketchConstraint[]; extrusionMm: number };
+export type ConstraintSketch = { schema: 1; title: string; entities: ConstraintEntity[]; constraints: SketchConstraint[]; extrusionMm: number; featureHistory?: SketchPadHistory };
 export type ConstraintSolution = { valid: boolean; document: ConstraintSketch; dof: number; status: number; conflicts: string[]; redundant: string[]; residuals: { id: string; value: number; unit: "mm" | "rad" }[]; message: string };
 export type PlaneGcsRuntime = { api: Pick<typeof import("@salusoft89/planegcs"), "GcsWrapper">; module: ModuleStatic };
 const radians = (degrees: number) => degrees * Math.PI / 180;
@@ -23,6 +24,7 @@ export function validateConstraintSketch(value: unknown): asserts value is Const
   if (d.schema !== 1 || typeof d.title !== "string" || !d.title.trim() || d.title.length > 160 || !Array.isArray(d.entities) || !Array.isArray(d.constraints) || d.entities.length > 512 || d.constraints.length > 2048) throw new Error("Unsupported or excessive sketch definition");
   const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 1e6;
   if (!finite(d.extrusionMm) || d.extrusionMm <= 0) throw new Error("Extrusion must be a positive finite length in mm");
+  if (d.featureHistory !== undefined) resolvePadDepth(d.featureHistory);
   const ids = new Set<string>();
   for (const o of [...d.entities, ...d.constraints]) {
     if (!o || typeof o.id !== "string" || !o.id || o.id.length > 160 || o.id.startsWith("$") || ids.has(o.id)) throw new Error("Sketch IDs must be unique and nonempty");
@@ -109,6 +111,7 @@ export function constraintResiduals(d: ConstraintSketch): ConstraintSolution["re
 
 export function solveConstraintSketch(input: ConstraintSketch, runtime: PlaneGcsRuntime): ConstraintSolution {
   validateConstraintSketch(input);const document=structuredClone(input);
+  if (document.featureHistory) document.extrusionMm = resolvePadDepth(document.featureHistory);
   const wrapper=new runtime.api.GcsWrapper(new runtime.module.GcsSystem(),runtime.module);
   try {
     const objects:SketchPrimitive[]=document.entities.filter(e=>e.kind==="point").map(e=>{const p=e as ConstraintPoint;return {id:p.id,type:"point",x:p.x,y:p.y,fixed:p.fixed};});

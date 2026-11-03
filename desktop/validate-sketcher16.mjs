@@ -261,6 +261,37 @@ async function runCancellationAndRetry() {
   }
 }
 
+async function verifyNamedPad() {
+  await command("select_objects", {ids:[originalId]});
+  let panel = await openSketcher();
+  await panel.getByRole("button",{name:"Drive pad with parameters"}).click();
+  await panel.getByRole("button",{name:"Add parameter"}).click();
+  await panel.getByLabel("Expression",{exact:true}).nth(1).fill("3 mm");
+  await panel.getByLabel("Expression",{exact:true}).first().fill("2 * length1");
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  const saved = await waitSavedGeometry(originalId,45,16,3,6);
+  const history = saved.sketch.featureHistory;
+  assert.equal(history.pad.profileId,history.sketch.id);
+  const expected = Math.PI*(45**2-6*3**2)*6;
+  assert.ok(Math.abs(await independentVolume(saved.current.archive,saved.current.project,saved.node)-expected)<1e-6);
+  await panel.getByLabel("Expression",{exact:true}).nth(1).fill("depth");
+  await panel.getByRole("alert").filter({hasText:"cycle"}).waitFor();
+  assert.ok(await panel.getByRole("button",{name:"Build solid",exact:true}).isDisabled());
+  await closeSketcher(panel);
+  await page.keyboard.press("Control+z");
+  await waitSavedGeometry(originalId,45,16,3,5);
+  await page.keyboard.press("Control+y");
+  const redone = await waitSavedGeometry(originalId,45,16,3,6);
+  assert.deepEqual(redone.sketch.featureHistory,history);
+  const file = path.join(output,"editable-pad.lyl");
+  writeFileSync(file,Buffer.from(redone.current.saved.base64,"base64"));
+  await reopenProject(file,redone.current.project.metadata?.projectName);
+  const reopened = await waitSavedGeometry(originalId,45,16,3,6);
+  assert.deepEqual(reopened.sketch.featureHistory,history);
+  assert.equal(brepAssetBytes(reopened.current,reopened.node),brepAssetBytes(saved.current,saved.node));
+  pass("Named pad depth drives exact geometry, rejects cyclic edit and survives Undo/Redo and reopening", {objectId:originalId,padId:history.pad.id,volumeMm3:expected});
+}
+
 let originalId, cancelExperiment = "not-run";
 try {
   await launch();
@@ -377,6 +408,7 @@ try {
   await page.screenshot({ path: pageScreenshot, fullPage: false });
   pass("Captured mixed project viewport", pageScreenshot);
   await runCancellationAndRetry();
+  if (process.env.LAYERLING_TEST_FEATURE_HISTORY === "1") await verifyNamedPad();
   assert.deepEqual(pageErrors, [], `Renderer page errors: ${pageErrors.join(" | ")}`);
   assert.deepEqual(externalResponses, [], "External endpoint responded");
   for (const address of externalRequests) {

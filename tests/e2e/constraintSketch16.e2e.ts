@@ -51,3 +51,25 @@ describe("bundled PlaneGCS constrained sketches",()=>{
     const cad=await OcctKernel.init({wasm:join(dirname(fileURLToPath(import.meta.resolve("occt-wasm"))),"occt-wasm.wasm")});try{const face=cad.makeFace(pathWire(cad,regions[0].outer)),solid=cad.extrude(face,0,2,0);expect(cad.isValid(solid)).toBe(true);expect(Math.abs(cad.getVolume(solid)-64*(Math.PI/4-.5)*2)).toBeLessThan(1e-6);}finally{cad.releaseAll();}
   });
 });
+import { createSketchPadHistory } from "@/lib/sketchPadHistory";
+it("drives an actual pad from named expressions and preserves its sketch source", async()=>{
+  const apiModule=await api.init_planegcs_module({wasmBinary:new Uint8Array(readFileSync("node_modules/@salusoft89/planegcs/dist/planegcs_dist/planegcs.wasm"))});
+  const cad=await OcctKernel.init({wasm:"node_modules/occt-wasm/dist/occt-wasm.wasm"});
+  try {
+    const source=mountingPlateSketch();
+    source.featureHistory=createSketchPadHistory(5);
+    source.featureHistory.parameters=[{name:"stock",expression:"3 mm",unit:"mm"},{name:"depth",expression:"2 * stock",unit:"mm"}];
+    for(const depth of [6,8]){
+      source.featureHistory.parameters[0].expression=depth/2+" mm";
+      const result=solveConstraintSketch(source,{api,module:apiModule});
+      expect(result.valid).toBe(true);
+      expect(result.document.extrusionMm).toBe(depth);
+      const [region]=cadSketchRegions(constraintSketchProfile(result.document));
+      const face=cad.addHolesInFace(cad.makeFace(pathWire(cad,region.outer)),region.holes.map(h=>pathWire(cad,h)));
+      const solid=cad.extrude(face,0,result.document.extrusionMm,0);
+      expect(cad.isValid(solid)).toBe(true);
+      expect(cad.getVolume(solid)).toBeCloseTo(Math.PI*(40**2-6*2.5**2)*depth,6);
+    }
+    expect(source.extrusionMm).toBe(5);
+  } finally {cad.releaseAll();}
+});

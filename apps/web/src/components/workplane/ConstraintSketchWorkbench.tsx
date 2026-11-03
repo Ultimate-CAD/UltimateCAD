@@ -4,6 +4,7 @@ import { CONSTRAINT_KINDS, mountingPlateSketch, type ConstraintEntity, type Cons
 import { solveSketchInWorker } from "@/lib/constraintSketchWorker";
 import { t } from "@/lib/i18n";
 import type { WorkplaneShape } from "@/types/layerling";
+import { createSketchPadHistory } from "@/lib/sketchPadHistory";
 import "./ConstraintSketchWorkbench.css";
 const tr=(key:string)=>t(`constraintSketch.${key}` as Parameters<typeof t>[0]);
 const uid=(prefix:string)=>`${prefix}-${crypto.randomUUID()}`;
@@ -57,7 +58,28 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose}:{shape:Workpla
     <details><summary>{tr("constraints")} ({current.constraints.length})</summary><div className="constraint-add"><select aria-label={tr("constraints")} value={kind} onChange={e=>setKind(e.target.value as ConstraintKind)}>{CONSTRAINT_KINDS.map(k=><option key={k} value={k}>{tr(`kind.${k}`)}</option>)}</select><label>{tr("first")}{pick(first,setFirst)}</label><label>{tr("second")}{pick(second,setSecond)}</label>{num(tr("value"),value,setValue)}<button onClick={()=>change(d=>{d.constraints.push({id:uid("constraint"),kind,first,...(second?{second}:{}),value});})}>{tr("add")}</button></div>
       {current.constraints.map(c=><div className={`constraint-row ${solution?.conflicts.includes(c.id)?"has-conflict":""}`} key={c.id}><span title={c.id}>{c.name??tr(`kind.${c.kind}`)} · {name(c.first)} {c.second?`/ ${name(c.second)}`:""}</span>{c.value!==undefined?num(c.name??tr("value"),c.value,value=>change(d=>{d.constraints=d.constraints.map(x=>x.id===c.id?{...x,value}:x);})):null}<button aria-label={`${tr("delete")} ${c.id}`} onClick={()=>change(d=>{d.constraints=d.constraints.filter(x=>x.id!==c.id);})}>×</button></div>)}
     </details>
-    {num(tr("extrusion"),current.extrusionMm,extrusionMm=>change(d=>{d.extrusionMm=extrusionMm;}))}
+    {current.featureHistory ? <details open>
+      <summary>Feature history</summary>
+      <ol><li>Sketch · {current.title}</li><li>Pad · {current.featureHistory.pad.depthParameter}</li></ol>
+      {current.featureHistory.parameters.map((param,index)=><div key={index}>
+        <label>Name <input value={param.name} onChange={e=>change(d=>{d.featureHistory!.parameters[index].name=e.target.value;})}/></label>
+        <label>Expression <input value={param.expression} onChange={e=>change(d=>{d.featureHistory!.parameters[index].expression=e.target.value;})}/></label>
+        <label>Unit <select value={param.unit} onChange={e=>change(d=>{d.featureHistory!.parameters[index].unit=e.target.value as typeof param.unit;})}>{["mm","deg","scalar"].map(unit=><option key={unit}>{unit}</option>)}</select></label>
+        <button onClick={()=>change(d=>{d.featureHistory!.parameters.splice(index,1);})}>Remove parameter</button>
+      </div>)}
+      <button onClick={()=>change(d=>{
+        const params=d.featureHistory!.parameters;
+        let n=1;
+        while(params.some(p=>p.name==="length"+n)) n++;
+        params.push({name:"length"+n,expression:"1 mm",unit:"mm"});
+      })}>Add parameter</button>
+      <label>Pad depth parameter <input value={current.featureHistory.pad.depthParameter} onChange={e=>change(d=>{d.featureHistory!.pad.depthParameter=e.target.value;})}/></label>
+      {solution?.valid && <output>Pad depth: {solution.document.extrusionMm} mm</output>}
+    </details> : <>
+      {num(tr("extrusion"),current.extrusionMm,extrusionMm=>change(d=>{d.extrusionMm=extrusionMm;}))}
+      <button onClick={()=>change(d=>{d.featureHistory=createSketchPadHistory(d.extrusionMm);})}>Drive pad with parameters</button>
+    </>}
+
     </fieldset>
     <footer><button disabled={!solution?.valid||busy} onClick={()=>void apply(true)}>{tr("build")}</button>{!targetId||!shape?.cadBrep||shape.sketchOnly?<button disabled={!solution?.valid||busy} onClick={()=>void apply(false)}>{tr("save")}</button>:null}{busy?<button onClick={()=>applyController.current?.abort()}>{tr("close")}</button>:null}</footer>
   </section>;

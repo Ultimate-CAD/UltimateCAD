@@ -60,7 +60,8 @@ export const LYL_FILE_TYPES_FORMAT_VERSION = 4;
 // solids or lose their constraints when opened in an older reader.
 export const LYL_CONSTRAINED_SKETCH_FORMAT_VERSION = 5;
 /** The newest format this layerling reads. */
-export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_CONSTRAINED_SKETCH_FORMAT_VERSION;
+export const LYL_FEATURE_HISTORY_FORMAT_VERSION = 6;
+export const LYL_NEWEST_READABLE_FORMAT_VERSION = LYL_FEATURE_HISTORY_FORMAT_VERSION;
 export const LYL_OLDEST_READABLE_FORMAT_VERSION = 1;
 export const LYL_CREATED_WITH_VERSION = "1.114.0";
 export const LYL_MEDIA_TYPE = "application/vnd.layerling.project+zip";
@@ -201,7 +202,7 @@ function validateFonts(fonts: unknown) {
 
 export type LylProjectDocumentV1 = {
   schema: typeof LYL_SCHEMA_ID | typeof LEGACY_LYL_SCHEMA_ID;
-  formatVersion: 1 | 2 | 3 | 4 | 5;
+  formatVersion: 1 | 2 | 3 | 4 | 5 | 6;
   minimumReaderVersion: number;
   createdWithVersion: string;
   metadata: {
@@ -1108,13 +1109,17 @@ export async function exportLylProject(input: LylProjectExportInput) {
   const cornerRulers = normalizeSavedCornerRulers(input.cornerRulers === undefined ? readCornerRulers(input.projectId) : input.cornerRulers);
   const tapeMeasurements = normalizeSavedTape(input.tapeMeasurements === undefined ? readTape(input.projectId) : input.tapeMeasurements);
   const selectedWorkplaneId = placementWorkplaneIsBase(placementWorkplane) ? "workplane-base" : "workplane-active";
-  const checkedSketchNodes=new WeakSet<WorkplaneShape>();
-  const needsConstrainedReader=(shape:WorkplaneShape):boolean=>{
-    if(checkedSketchNodes.has(shape))return false;checkedSketchNodes.add(shape);
-    return Boolean(shape.sketchOnly||shape.sketchProfile?.constraintSketch||shape.groupedShapes?.some(needsConstrainedReader)||shape.edgeTreatmentHistory?.some(e=>needsConstrainedReader(e.before)));
-  };
-  const constrainedVersion=hydrated.entries.some(entry=>entry.shapes.some(needsConstrainedReader))?LYL_CONSTRAINED_SKETCH_FORMAT_VERSION:LYL_FORMAT_VERSION;
-  const requiredFormatVersion=constrainedVersion===LYL_CONSTRAINED_SKETCH_FORMAT_VERSION?LYL_CONSTRAINED_SKETCH_FORMAT_VERSION:attachmentsFormatVersion(attachments)??LYL_FORMAT_VERSION;
+  const seenShapes = new WeakSet<WorkplaneShape>();
+  let requiredFormatVersion: LylProjectDocumentV1["formatVersion"] = attachmentsFormatVersion(attachments) ?? LYL_FORMAT_VERSION;
+  function includeShapeVersion(shape: WorkplaneShape) {
+    if (seenShapes.has(shape)) return;
+    seenShapes.add(shape);
+    if (shape.sketchProfile?.constraintSketch?.featureHistory) requiredFormatVersion = LYL_FEATURE_HISTORY_FORMAT_VERSION;
+    else if (requiredFormatVersion < LYL_CONSTRAINED_SKETCH_FORMAT_VERSION && (shape.sketchOnly || shape.sketchProfile?.constraintSketch)) requiredFormatVersion = LYL_CONSTRAINED_SKETCH_FORMAT_VERSION;
+    shape.groupedShapes?.forEach(includeShapeVersion);
+    shape.edgeTreatmentHistory?.forEach(entry => includeShapeVersion(entry.before));
+  }
+  hydrated.entries.forEach(entry => entry.shapes.forEach(includeShapeVersion));
   const document: Omit<LylProjectDocumentV1, "states"> & { states: typeof STATES_PLACEHOLDER } = {
     schema: LYL_SCHEMA_ID,
     // Only a design that has attachments is a version 3 package, or version 4 when one of them is of a
@@ -1886,6 +1891,8 @@ async function validateDocumentAndAssets(raw: unknown, files: ArchiveFiles) {
       if (nodeById.has(nodeId)) throw new Error(`State '${stateId}' contains duplicate node ID '${nodeId}'`);
       const definition = objectRecord(node.definition, `node '${nodeId}'.definition`);
       const constrainedSource=definition.sketchOnly===true||(definition.sketchProfile&&typeof definition.sketchProfile==="object"&&(definition.sketchProfile as Record<string,unknown>).constraintSketch!==undefined);
+      const source = (definition.sketchProfile as {constraintSketch?: {featureHistory?: unknown}} | undefined)?.constraintSketch;
+      if (source?.featureHistory !== undefined && (document.formatVersion < 6 || document.minimumReaderVersion < 6)) throw Error("Feature history requires project reader version 6");
       if(constrainedSource&&(document.formatVersion<LYL_CONSTRAINED_SKETCH_FORMAT_VERSION||document.minimumReaderVersion<LYL_CONSTRAINED_SKETCH_FORMAT_VERSION))throw new Error("Constrained sketches require project format and reader version 5");
       if(definition.sketchOnly&&((definition.sketchProfile as Record<string,unknown>|undefined)?.constraintSketch===undefined||node.cadBrepAssetId))throw new Error("A planar sketch requires editable source and cannot contain a solid BREP");
       const objectId = validateShapeDefinition(definition, `node '${nodeId}'`);

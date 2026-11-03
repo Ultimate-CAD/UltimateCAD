@@ -23,3 +23,17 @@ it("round trips editable planar sketches, exact arc data and undo states without
   const copy=cloneSketchProfile(first.sketchProfile!);copy.constraintSketch!.constraints[0].value=99;copy.segments.find(s=>s.analyticMidpoint)!.analyticMidpoint!.x=123;
   expect(first.sketchProfile?.constraintSketch?.constraints[0].value).toBe(40);expect(first.sketchProfile!.segments.find(s=>s.analyticMidpoint)!.analyticMidpoint!.x).not.toBe(123);
 });
+import {createSketchPadHistory} from "@/lib/sketchPadHistory";
+
+it("requires a feature-aware reader even when only an undo state carries the named pad",async()=>{
+  const sketch=mountingPlateSketch();
+  sketch.featureHistory=createSketchPadHistory(5);
+  sketch.featureHistory.parameters=[{name:"stock",unit:"mm",expression:"2.5 mm"},{name:"depth",unit:"mm",expression:"stock * 2"}];
+  const first=constraintSketchShape(sketch,"stable");
+  const plain=constraintSketchShape(mountingPlateSketch(),"stable",first);
+  const bytes=await exportLylProject({projectId:"feature17",projectName:"History",createdAt:1,modifiedAt:2,shapes:[plain],history:[editorHistoryEntry([first],[]),editorHistoryEntry([plain],[])],historyIndex:1,assets:[],workspace:DEFAULT_WORKPLANE_WORKSPACE,snapGrid:DEFAULT_SNAP_GRID,placementElevation:0});
+  const doc=JSON.parse(strFromU8(unzipSync(bytes)["project.json"]));
+  expect([doc.formatVersion,doc.minimumReaderVersion]).toEqual([6,6]);
+  const restored=await importLylProject(bytes);
+  expect(restored.history?.[0].shapes[0].sketchProfile?.constraintSketch?.featureHistory).toEqual(sketch.featureHistory);
+});

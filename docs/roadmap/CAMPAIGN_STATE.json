@@ -1,0 +1,9 @@
+{
+  "milestone": ".17",
+  "status": "in_progress",
+  "baselineTag": "checkpoint-ultimate16-sketcher",
+  "verified": ["hole rim lineage under suppression", "typed parameter DAG", "editable sketch and expression-driven pad", "LYL reader 6 round trip including undo history", "GUI pad rebuild, invalid edit, global undo/redo and reopening"],
+  "evidence": ".codex-run/sketch16/dev-2026-11-03T05-28-22.847Z/report.json",
+  "nextAction": "Add an editable dependent hole operation to the pad, run the actual OCCT worker against a two-hole suppression fixture and verify preserved output and diagnostics through LYL reopening.",
+  "pending": ["dependent solid operations", "feature-level caching and branching", "suppression and broken-reference repair UI", ".17 packaged acceptance", ".18", ".19", ".20", "lithophane", "bounded optional GPU", "final installation verification"]
+}

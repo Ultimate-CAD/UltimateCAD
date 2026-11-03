@@ -1,5 +1,5 @@
 {
-  "milestone": ".18",
+  "milestone": ".20",
   "status": "packaged_acceptance_pending",
   "baselineTag": "checkpoint-ultimate16-sketcher",
   "verified": [
@@ -15,10 +15,13 @@
     "constrained secondary pocket profile, editable blind depth, exact volume and LYL reopen",
     "GUI full and partial revolve, analytic volume, zero-angle rejection, Undo and exact LYL reopening",
     ".17 packaged offline feature V1 (27 checks), manufacturing and OpenSCAD regressions",
-    "Assembly GUI fixed/revolute/slider, hierarchical numerical constraints, independent component geometry, Undo/reopen and real overlap/no-overlap checks"
+    "Assembly GUI fixed/revolute/slider, hierarchical numerical constraints, independent component geometry, Undo/reopen and real overlap/no-overlap checks",
+    ".18 packaged assembly joint tree and exact intersection checks",
+    ".19 packaged native CAD meshing, SI solve/results, visualization, reopening and cancellation",
+    "Offline library development GUI: STL/OBJ/STEP/LYL originals, hashes, thumbnails, dedup aliases, metadata filtering, reload and normal model reopening"
   ],
-  "evidence": ".codex-run/sketch16/dev-2026-11-03T08-11-18.114Z/report.json",
-  "nextAction": "Package .18 and validate Assembly workspace offline; stage verified Gmsh and CalculiX runtimes for .19.",
+  "evidence": ".codex-run/library20/gui-final.log",
+  "nextAction": "Build and verify offline library in packaged .20; then integrate the editable image-to-solid workbench and run final consolidated offline acceptance.",
   "pending": [
     "dependent solid operations",
     "feature-level caching and branching",

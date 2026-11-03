@@ -370,3 +370,70 @@ export async function restoreCustomShapesFromBackup(bytes: Uint8Array): Promise<
   }
   return { added, skipped, unlisted };
 }
+
+export interface LocalLibraryMeta {
+ id:string; name:string; format:string; byteLength:number; importedAt:number;
+ tags:string[]; category:string; provenance:string; thumbnail?:string; aliases?:string[];
+ status:"indexing"|"ready"|"error"; diagnostic?:string;
+}
+// Raw original files have a separate schema so older releases can still open
+// the existing v2 My Shapes database after a rollback.
+function openLibraryDatabase():Promise<IDBDatabase> {
+ return new Promise((resolve,reject)=>{
+  const request=indexedDB.open("layerling-offline-library",1);
+  request.onupgradeneeded=()=>{
+   const db=request.result;
+   db.createObjectStore("library-meta",{keyPath:"id"});
+   db.createObjectStore("library-files",{keyPath:"id"});
+  };
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error??new Error("Could not open original-file library"));
+  request.onblocked=()=>reject(new Error("Library is open in another application window"));
+ });
+}
+async function libraryTransaction<T>(mode:IDBTransactionMode, work:(meta:IDBObjectStore,files:IDBObjectStore,set:(result:T)=>void)=>void):Promise<T> {
+ const db=await openLibraryDatabase();
+ try{
+  return await new Promise<T>((resolve,reject)=>{
+   const transaction=db.transaction(["library-meta","library-files"],mode);
+   let value:T;
+   transaction.oncomplete=()=>resolve(value);
+   transaction.onerror=()=>reject(transaction.error??new Error("Library storage failed"));
+   transaction.onabort=()=>reject(transaction.error??new Error("Library storage cancelled"));
+   try{work(transaction.objectStore("library-meta"),transaction.objectStore("library-files"),result=>{value=result;});}
+   catch(error){transaction.abort();reject(error);}
+  });
+ }finally{db.close();}
+}
+export function listLibraryFiles():Promise<LocalLibraryMeta[]> {
+ return libraryTransaction("readonly",(meta,_files,set)=>{const r=meta.getAll();r.onsuccess=()=>set(r.result);});
+}
+export function readLibraryFile(id:string):Promise<Uint8Array> {
+ return libraryTransaction("readonly",(_meta,files,set)=>{const r=files.get(id);r.onsuccess=()=>set(r.result?.bytes);});
+}
+export function addLibraryFile(record:LocalLibraryMeta,bytes:Uint8Array):Promise<boolean> {
+ return libraryTransaction("readwrite",(meta,files,set)=>{
+  const query=meta.get(record.id);
+  query.onsuccess=()=>{
+   if(query.result){
+    const existing=query.result as LocalLibraryMeta;
+    if(record.name!==existing.name) meta.put({...existing,aliases:[...new Set([...(existing.aliases??[]),record.name])]});
+    set(false);return;
+   }
+   meta.put(record);files.put({id:record.id,bytes});set(true);
+  };
+ });
+}
+export function updateLibraryMeta(record:LocalLibraryMeta):Promise<void> {
+ return libraryTransaction("readwrite",(meta,_files,set)=>{meta.put(record);set();});
+}
+
+export function patchLibraryMeta(id:string,patch:Partial<LocalLibraryMeta>):Promise<void> {
+ return libraryTransaction("readwrite",(meta,_files,set)=>{
+  const request=meta.get(id);
+  request.onsuccess=()=>{
+   if(!request.result)return set();
+   meta.put({...request.result,...patch,id});set();
+  };
+ });
+}

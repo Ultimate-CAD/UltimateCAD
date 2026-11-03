@@ -528,6 +528,43 @@ async function verifyFem() {
   pass("Bundled CAD meshing and CalculiX solve produce verified SI displacement/stress, render, save/reopen and cancel without losing saved results",{nodes:study.result.nodes,displacementM:study.result.maxDisplacementM,forceResidualN:study.result.forceResidualN});
 }
 
+async function verifyLibrary() {
+  await page.getByRole("button",{name:"Offline design library",exact:true}).click();
+  const panel=page.getByRole("region",{name:"Offline design library"});
+  const fixtures=process.env.LAYERLING_LIBRARY_FIXTURES.split("|");
+  await panel.getByLabel("Bulk library import",{exact:true}).setInputFiles(fixtures);
+  await panel.getByRole("status").filter({hasText:"Indexing finished"}).waitFor({timeout:120000});
+  const count=await panel.locator("article").count();
+  assert.equal(count,4);
+  assert.equal(await panel.locator("article img").count(),4);
+  const stl=panel.getByRole("article",{name:"library-tetra.stl",exact:true});
+  await stl.getByLabel("Tags library-tetra.stl",{exact:true}).fill("Tinkercad, bracket");
+  await stl.getByLabel("Category library-tetra.stl",{exact:true}).fill("Mechanical");
+  await panel.getByLabel("Search library",{exact:true}).fill("bracket");
+  assert.equal(await panel.locator("article").count(),1);
+  await page.reload({waitUntil:"domcontentloaded"});
+  await page.getByRole("button",{name:"Offline design library",exact:true}).click();
+  await panel.getByLabel("Search library",{exact:true}).fill("Mechanical");
+  await panel.getByRole("article",{name:"library-tetra.stl",exact:true}).waitFor();
+  assert.equal(await panel.locator("article").count(),1);
+  const verification=await page.evaluate(async()=>{
+    const db=await new Promise((resolve,reject)=>{const q=indexedDB.open("layerling-offline-library",1);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+    const tx=db.transaction(["library-meta","library-files"],"readonly");
+    const get=(store)=>new Promise((resolve,reject)=>{const q=tx.objectStore(store).getAll();q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+    const [records,files]=await Promise.all([get("library-meta"),get("library-files")]);db.close();
+    for(const f of files){
+      const hash=[...new Uint8Array(await crypto.subtle.digest("SHA-256",f.bytes))].map(n=>n.toString(16).padStart(2,"0")).join("");
+      if(hash!==f.id)throw Error("Original library bytes changed");
+    }
+    return {count:files.length,ready:records.every(r=>r.status==="ready"),tags:records.find(r=>r.name==="library-tetra.stl").tags};
+  });
+  assert.equal(verification.count,4);assert.equal(verification.ready,true);assert.deepEqual(verification.tags,["Tinkercad","bracket"]);
+  await panel.getByRole("button",{name:"Open model",exact:true}).click();
+  await editorReady();
+  assert.ok((await command("list_objects")).objects.length>0);
+  pass("Bulk STL/OBJ/STEP/LYL originals preserve hashes, deduplicate, thumbnail, filter metadata, persist and open through normal import");
+}
+
 let originalId, cancelExperiment = "not-run";
 try {
   await launch();
@@ -539,6 +576,7 @@ try {
     assert.equal(actualVersion, expectedVersion, "Packaged app version does not match requested acceptance version");
     pass("Packaged app version matches acceptance expectation", actualVersion);
   }
+  if(process.env.LAYERLING_TEST_LIBRARY==="1"){await verifyLibrary();}else{
   await page.getByRole("button", { name: "Create new 3D design", exact: true }).click();
   await editorReady();
   if(process.env.LAYERLING_TEST_FEM === "1") { await verifyFem(); } else if(process.env.LAYERLING_TEST_ASSEMBLY === "1") { await verifyAssembly(); } else {
@@ -646,6 +684,7 @@ try {
   pass("Captured mixed project viewport", pageScreenshot);
   await runCancellationAndRetry();
   if (process.env.LAYERLING_TEST_FEATURE_HISTORY === "1") { await verifyNamedPad(); await verifyRevolve(); }
+  }
   }
   assert.deepEqual(pageErrors, [], `Renderer page errors: ${pageErrors.join(" | ")}`);
   assert.deepEqual(externalResponses, [], "External endpoint responded");

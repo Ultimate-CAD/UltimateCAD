@@ -1,4 +1,5 @@
 "use client";
+import { OfflineLibrary } from "@/components/OfflineLibrary";
 
 import { requestPersistentStorage } from "@/lib/persistentStorage";
 import { PRODUCT_BRANDING } from "@/lib/productBranding";
@@ -976,6 +977,7 @@ function projectNameFromFileName(fileName: string) {
 }
 
 export default function Home() {
+  const [libraryOpen,setLibraryOpen]=useState(false);
   useLanguage();
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<AppView>("dashboard");
@@ -2795,6 +2797,8 @@ export default function Home() {
       <pre data-codex-projects hidden>
         {JSON.stringify(projectDebugSummary)}
       </pre>
+      <button onClick={()=>setLibraryOpen(true)} aria-label="Offline design library">Design library</button>
+      {libraryOpen && <OfflineLibrary onClose={()=>setLibraryOpen(false)} onOpen={async(file)=>{await importFilesFromDashboard([file]);setLibraryOpen(false);}}/>}
       <input
         ref={dashboardImportInputRef}
         className="hidden-file-input"

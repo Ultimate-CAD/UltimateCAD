@@ -19,7 +19,7 @@ Private, single-user Windows workstation. No push, publication, cloud runtime, o
 | --- | --- | --- | --- |
 | A / .13 dense manufacturing certification | validated | Complete cached native/STL/3MF contact verdict; explicit outcomes, range profiling, Float32 loss diagnosis; 59 packaged checks and independent downloaded 3MF check pass; wall concern remains | .12 above; .13 preserved separately |
 | B / .14 sparse OpenVDB | closed; evaluated, not adopted | Isolated Windows prototype benchmarked; fast variant has true crossings, valid cone variant slower/higher RSS, organic fails accuracy; native/WASM retained; allocator-event peak and Bunny not measured | validated .13 |
-| D / .16 constrained Sketcher | in progress; no new release validated | Research PlaneGCS/reference FreeCAD when useful; points/lines/circles/arcs and complete initial constraint subset, DOF/conflicts, interactive editing; OCCT/Undo/LYL mounting-plate acceptance offline without FreeCAD | latest validated release |
+| D / .16 constrained Sketcher | validated in packaged GUI | Research PlaneGCS/reference FreeCAD when useful; points/lines/circles/arcs and complete initial constraint subset, DOF/conflicts, interactive editing; OCCT/Undo/LYL mounting-plate acceptance offline without FreeCAD | latest validated release |
 | E / .17 feature history | next; planned after .16 validation | Persistent graph, stable IDs, named equations, incremental recomputation; sketch/pad/pocket/revolve/hole/pattern/edge features; tree/errors/suppression/Undo/LYL; explicit topology-reference failures | validated .16 |
 | F / .18 assembly | planned after .17 validation | Independent components/frames, fixed/revolute/slider joints, evaluation/transforms/interference and motion preview; hinge/linkage example; local persistence, no false dynamic-physics claim | validated .17 |
 | G / .19 FEM | planned after .18 validation | Evaluate established local solver; bounded isolated linear-static pipeline with materials/BCs/forces/displacement/stress/convergence and persistence; cantilever analytical verification; no generic FDM strength claim | latest validated geometry |
@@ -27,7 +27,7 @@ Private, single-user Windows workstation. No push, publication, cloud runtime, o
 | I / Native Lithophane and Bas-Relief Designer | planned after .20, before final GPU evaluation | Offline PNG/JPEG/WebP, flat closed manifold solids; editable luminance/thickness/elevation and image adjustments, bounded cancellable sampling, smoothing/borders, interactive and simulated backlit preview, original images/settings in LYL, existing validated STL/3MF pipeline; validate flat before curved/cylindrical | latest validated release |
 | C / .15 CUDA/OptiX | planned last, after .20 | Isolated pilot against latest validated CPU; include transfers/setup/sign/distance/sync/VRAM/cancellation and numerical error; mandatory CPU fallback; reject unsupported speed claims | latest validated CPU |
 
-Current user-directed core order is **.16 → .17 → .18 → .19 → .20 → .15**. The additional Native Lithophane and Bas-Relief Designer milestone is scheduled after .20 and before .15. Milestone .14 is closed after evaluation and was not adopted. Milestone .16 is in progress; no new release has been validated.
+Current user-directed core order is **.16 → .17 → .18 → .19 → .20 → .15**. The additional Native Lithophane and Bas-Relief Designer milestone is scheduled after .20 and before .15. Milestone .14 is closed after evaluation and was not adopted. Milestone .16 passed 16 packaged GUI checks. The .16 rollback is preserved; .17 is next.
 
 ## A: investigation and implementation record
 
@@ -60,3 +60,11 @@ Latest verified packaged build: .13 runtime `811ddc16936593e08a3c551565a374acf69
 Earlier campaign branch `codex/sparse-volume-14`, derived from .13 verification `7b7d49fe7fbc68f713fdb4ca6d1cec88b50af994` / tag `checkpoint-ultimate13-certified`, is retained. Current branch is `codex/constrained-sketcher-16`, based on completed isolated follow-up `9ab6ab7923d6750f3980cd76045a49ede17a3ea2`. Finish .16, then .17, .18, .19, .20 and the added image workbench; run .15 afterward against the latest validated CPU. Do not advertise RT-core closest-distance capability or install a large SDK blindly. Repeat full contact checks for any future .14 experiment; never substitute a valid raw audit for complete manufacturing checks. Repeatable A/B commands are in their reports; do not repeat expensive hollowing merely to recertify A.
 
 At every release boundary: focused tests → relevant integration checks → clean runtime commit → Windows build → isolated offline packaged acceptance → evidence/report/verification commit → preserved rollback. Do not overwrite the installed release. Do not mark an incomplete result PASS or a committed but unverified feature validated.
+
+## .16 GUI verification and rollback
+
+Runtime da185c36d5602ed57e6a7017275a23e3dc13d10b. Evidence: .codex-run/sketch16/packaged-2026-11-03T04-21-36.192Z/report.json. The test exited 0. Existing .13 and independent .16 rollback copies reside in .codex-run/preserved-ultimate13 and .codex-run/preserved-ultimate16. The final production install and clean-machine pass remain outstanding.
+
+## Deferred research
+
+Coarse-to-fine narrow-band cavity reconstruction is an unverified optimization candidate, outside roadmap completion. Use a coarse volume to estimate cavity topology, identify a conservative region around the inner offset, then evaluate source-mesh distances with the native BVH/libigl path. A future investigation must measure missed narrow features, topology changes, self-intersections, wall thickness, sampled versus continuous error, peak memory and total runtime. No implementation, timing or performance target is established.

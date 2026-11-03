@@ -1,5 +1,14 @@
 # Codex continuation checkpoint
 
+Current checkpoint: packaged .16 verified. Runtime da185c36d5602ed57e6a7017275a23e3dc13d10b; branch codex/constrained-sketcher-16. Earlier permission and reopening failures below are historical. Git metadata write probe succeeded. The packaging directory alone received the inheritable ALL APPLICATION PACKAGES read/execute grant. Prior directory DACL is recorded in .codex-run/sketch16/gui-package-acl-before.txt.
+
+The corrected project transition wait passed. Reloaded source/constraints, zero DOF, dimensions, original identity and exact B-rep bytes matched. Independently reimported volume 30960.39560112742 mm³ (expected 30960.395601127413). Standalone point sketch and solid coexist after reload. Cancellation intercepted the actual constrained CAD request, verified termination of that worker, confirmed unchanged B-rep and retried successfully. Two workstation AdGuard injector requests failed, zero external responses, zero renderer errors. Final packaged suite exit 0, 16 checks. Report: .codex-run/sketch16/packaged-2026-11-03T04-21-36.192Z/report.json. Existing focused .16 solver/persistence and packaged OpenSCAD, native and manufacturing regression evidence is recorded below.
+
+Preserved .16 installer (283849035 bytes), unpacked application, legal/source and metadata under .codex-run/preserved-ultimate16. SHA256 installer ED241528204E56433321437DEBCFB0E38CFFA5E762359003A87CA70A82657A30, executable 67EA4CD1C8A63497D8A5006E1D3897B501B0C667C1989EC08C2C54661A5025D7. Existing installation and .13 rollback preserved. Use git rev-parse checkpoint-ultimate16-sketcher for verification revision. Next: .17 feature history. Later assembly, FEM, offline library, lithophane, optional GPU and final installation verification remain outstanding.
+
+## Historical implementation record
+
+
 Updated 2026-11-02 during .16 implementation. This record captures the live state; continue execution from it rather than stopping after this plan.
 
 ## User directive and ordered campaign
@@ -21,7 +30,7 @@ Do not push or publish. Preserve the installed application, personal files and r
 
 - Repository: `C:\Users\Justin\layerling-desktop`.
 - Branch: `codex/constrained-sketcher-16`.
-- Base/current HEAD at checkpoint: `9ab6ab7923d6750f3980cd76045a49ede17a3ea2`.
+- Runtime HEAD: `da185c36d5602ed57e6a7017275a23e3dc13d10b` (base `9ab6ab7923d6750f3980cd76045a49ede17a3ea2`).
 - The working tree contains active, uncommitted .16 changes from the root agent. Continue in place and preserve them; do not reset, revert or overwrite them.
 - Latest validated baseline is the .13 runtime `811ddc16936593e08a3c551565a374acf69bd800`, verification commit `7b7d49fe7fbc68f713fdb4ca6d1cec88b50af994`, installer SHA-256 `f9438e5435b8ea6e3c040ccb7cb6ad079e8bd1eb1e1599b34aedb8770b54cae8`. Rollback copy: `.codex-run/preserved-ultimate13`; prior installer manifest: `dist/ultimate/windows/release-verification.json`.
 - .14 OpenVDB was evaluated and not adopted. It is closed; do not restart its benchmarks or integrate it absent a demonstrated dependency.
@@ -78,3 +87,44 @@ Do not replace the installed app during this checkpoint. Record development test
 - Final integrated release verification is **not started**. Recheck packaged workflows and offline behavior after the feature sequence.
 
 Keep this continuation record and `PLAN.md` current at milestone boundaries and before interruption. If one capability is blocked, record evidence and continue independent work rather than stopping the entire campaign.
+
+## Live checkpoint 2026-11-02, after .16 build
+
+Runtime commit `da185c36d5602ed57e6a7017275a23e3dc13d10b`; product version `1.114.0-ultimate.16`. Windows installer build completed successfully (build log `.codex-run/sketch16/build.log`). Existing installed profile and preserved .13/.12 copies untouched. New exe `dist/ultimate/windows/win-unpacked/Layerling Ultimate.exe`; installer `dist/ultimate/windows/Ultimate-CAD-Setup-x64.exe`. .16 is NOT fully validated yet.
+
+Focused results: 6 actual WASM/OCCT tests (`solver-final.log`), 47 persistence/legacy/worker cancellation/deadline tests (`unit-final.log`), 88 localization/existing sketch tests (`ui-regression.log`), typecheck pass (`typecheck-final.log`). Development full workflow including injected CAD-worker stall cancellation/retry passes: `.codex-run/sketch16/dev-2026-11-03T01-47-23.113Z/report.json`. Independent edited volume 30960.39560112742 vs expected30960.395601127413 mm3. New solver source/LICENSE/metadata bundled and verified in packaged harness.
+
+Packaged main sketch harness was started in exec session68962, log `.codex-run/sketch16/packaged-workflow.log`: passes solver metadata, .16 version, defaultDOF0, initial build, dimensionchanges/volume and UndoRedo; then delayed at project import/reopen. Agent `/root/vdb_api_audit` owns harness investigation/rerun. Fix acceptance harness tab/MCP selection if needed; do not assume product is broken or mark PASS prematurely. Last root harness-only correction matches actual notice text `GNU LGPL 2.1` instead of `Version 2.1`. It is uncommitted verification work.
+
+Packaged branding regression passes: `.codex-run/sketch16/packaged-branding/results.json`; log `packaged-branding.log`; offline restricted PATH/network, native helper/geometry, local licenses/docs/source, project reload. Next run relevant OpenSCAD and seven-hole export regressions with `LAYERLING_EXPECTED_APP_VERSION=1.114.0-ultimate.16`; avoid organic benchmarks. Finish packaged sketch cancellation/retry. Record exact hashes, verification commit/tag, preserve full .16 copy, then continue .17. Runtime build source archive references runtime commit; verification-only harness/docs edits need no runtime rebuild.
+
+No .17 code yet. Agent `/root/solver_inventory` maps .17 APIs and added image-workbench reuse inventory. Authoritative sketch->pad graph is first vertical slice, followed by required pocket/revolve/hole/pattern/semantic edge features; existing LYL feature list is derived metadata, not execution. Never call scalar DAG or snapshot history feature-history completion. New image milestone is recorded above, not implemented.
+
+Packaged regressions have now completed: export reliability artifacts `.codex-run/export11/packaged-1793672412663` (strict STL/3MF topology across quality/cache transitions; genuine intersections remain blocked), OpenSCAD report `dist/ultimate/windows/validation/results.json` (scripts/MCAD/missing library/cancel/native coexistence/offline), branding `.codex-run/sketch16/packaged-branding/results.json`. Owned test sessions28568/70746 may alreadyfinished; poll only asneeded. Sketch16 session68962 is still hung afterUndoRedo; Lunaagent notified to diagnose stalewindow/MCP or excessivepolling. .16 cannot be markedvalidated untilthisacceptancepasses.
+
+Packaged reopening failure isolated to test harness: explicit navigation to dashboard was aborted by Electron before the import step (`.codex-run/sketch16/packaged-2026-11-03T02-18-38.597Z/failure.json`). Agent correcting harness to use existing import input. No finding of geometry/project failure from this event. Build hashes: installer SHA256 ED241528204E56433321437DEBCFB0E38CFFA5E762359003A87CA70A82657A30; unpacked exe SHA256 67EA4CD1C8A63497D8A5006E1D3897B501B0C667C1989EC08C2C54661A5025D7. Do not call .16 validated until corrected full acceptance completes.
+
+Image-workbench inventory: `referenceImage.ts` and `LayerlingEditor.tsx` support existing guide images but downsample/re-encode large inputs; preserve original source bytes separately via LYL asset builder (`lylProject.ts` image assets). Use cancellable geometry worker (`geometryWorker.ts`) for bounded sampling and a closed mesh body, not a non-solid imagePlate; existing precision export then handles the result. No heightfield or optical simulation exists. Additional milestone remains unimplemented.
+
+A second packaged harness attempt removed the navigation failure but timed out selecting the reopened editor (`select_objects`, editor 27792, `.codex-run/sketch16/packaged-workflow.log`). MCP editor/window selection remains unresolved; this is a test-harness integration problem until evidenced otherwise. The .16 release remains unverified. Retain the .13 rollback and do not present .16 installer as validated. Harness changes and this continuation record are uncommitted.
+
+## Resume checkpoint 2026-11-02, 23:02 local
+
+The current user explicitly requests finishing .16 first, then the remaining campaign, with local commits and no installed-app replacement. Ask about switching to High only when a complex numerical/architectural/geometry problem warrants it; High would not resolve the permission blocker below.
+
+Source inspection confirms editor LYL import switches projects in the same page (`app/page.tsx`, `openLylProjectFromFile` / `openEditor`), remounts the editor subtree, and retains the tab's session-scoped MCP identity. The prior harness could issue commands before the import completed because project names match. `desktop/validate-sketcher16.mjs` now waits for the project URL to change and for a fresh matching heartbeat whose project ID agrees with that URL. This is a candidate race fix, not a verified resolution. It also checks restored full definition/entities/constraints, exact B-Rep bytes, independent OCCT volume and zero DOF. Missing observation of the CAD worker now fails acceptance rather than silently skipping required cancellation.
+
+Current checks: `resume-solver.log` = 6 actual PlaneGCS/OCCT tests passed; `resume-unit.log` = 47 persistence/legacy/worker tests passed; `resume-typecheck.log` = TypeScript exit 0; `node --check desktop/validate-sketcher16.mjs` and `git diff --check` pass. Use `npm.cmd` from this PowerShell environment (the npm.ps1 entrypoint is disabled). Existing runtime was not changed or rebuilt.
+
+**Packaged acceptance blocked by current Windows permissions before application startup.** Attempt `.codex-run/sketch16/packaged-2026-11-03T03-59-37.146Z/failure.json`, log `packaged-resume.log`: Electron's `install_dir_access.cc:52` reports that sandboxed processes cannot read the unpacked application directory because of an AppContainer ACL entry without ALL APPLICATION PACKAGES read access. The exact read-only directory grant requested by Electron (`icacls dist/ultimate/windows/win-unpacked /grant '*S-1-15-2-1:(OI)(CI)(RX)'`) was denied. No permission change succeeded. Do not disable Chromium sandboxing or substitute source tests for packaged evidence. This session has no escalation permission.
+
+Once the launch permission issue is resolved in an appropriately permitted environment, rerun:
+
+```powershell
+$env:LAYERLING_EXPECTED_APP_VERSION = '1.114.0-ultimate.16'
+node desktop/validate-sketcher16.mjs
+```
+
+Do not advance the release ledger or tag .16 validated until this corrected packaged harness genuinely completes. Then record evidence, preserve a full .16 rollback, commit validation and continue .17. No later milestone implementation was started during this blocked resume.
+
+Local checkpoint commit was attempted with the three changed files (`desktop/validate-sketcher16.mjs`, this continuation record, `PLAN.md`) but both `git add` and `git commit` failed: `Unable to create .../.git/index.lock: Permission denied`. The active permission profile exposes `.git` read-only. Changes remain preserved in the working tree, unstaged and uncommitted; runtime HEAD remains `da185c36`. Resume requires Git metadata write access as well as the packaged launch permission correction. No push or installation was attempted.

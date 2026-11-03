@@ -1,5 +1,16 @@
 # Ultimate CAD master campaign â€” .16 Constrained Sketcher in progress
 
+Current checkpoint: packaged .16 verified. Runtime da185c36d5602ed57e6a7017275a23e3dc13d10b; branch codex/constrained-sketcher-16. Earlier permission and reopening failures below are historical. Git metadata write probe succeeded. The packaging directory alone received the inheritable ALL APPLICATION PACKAGES read/execute grant. Prior directory DACL is recorded in .codex-run/sketch16/gui-package-acl-before.txt.
+
+The corrected project transition wait passed. Reloaded source/constraints, zero DOF, dimensions, original identity and exact B-rep bytes matched. Independently reimported volume 30960.39560112742 mm³ (expected 30960.395601127413). Standalone point sketch and solid coexist after reload. Cancellation intercepted the actual constrained CAD request, verified termination of that worker, confirmed unchanged B-rep and retried successfully. Two workstation AdGuard injector requests failed, zero external responses, zero renderer errors. Final packaged suite exit 0, 16 checks. Report: .codex-run/sketch16/packaged-2026-11-03T04-21-36.192Z/report.json. Existing focused .16 solver/persistence and packaged OpenSCAD, native and manufacturing regression evidence is recorded below.
+
+Preserved .16 installer (283849035 bytes), unpacked application, legal/source and metadata under .codex-run/preserved-ultimate16. SHA256 installer ED241528204E56433321437DEBCFB0E38CFFA5E762359003A87CA70A82657A30, executable 67EA4CD1C8A63497D8A5006E1D3897B501B0C667C1989EC08C2C54661A5025D7. Existing installation and .13 rollback preserved. Use git rev-parse checkpoint-ultimate16-sketcher for verification revision. Next: .17 feature history. Later assembly, FEM, offline library, lithophane, optional GPU and final installation verification remain outstanding.
+
+## Historical implementation record
+
+
+Resume 2026-11-02 23:02 local: candidate packaged reopening harness race fix is in place; current 6 solver/OCCT tests, 47 persistence/worker tests and TypeScript pass. Packaged rerun is blocked before startup by Electron AppContainer directory read permissions; its requested read-only ACL grant was denied. .16 stays unverified. See the latest section of `docs/roadmap/CODEX_CONTINUATION.md` for exact evidence and rerun command. Do not disable Chromium sandboxing or advance the release ledger from source-test success.
+
 The latest user directive (see `docs/roadmap/CODEX_CONTINUATION.md`) supersedes the earlier isolated-OpenVDB handoff. Continue autonomously through integrated, validated features in this order: **.16 Sketcher -> .17 Feature History -> .18 Assemblies -> .19 FEM -> .20 Offline Library/Migration -> .15 GPU evaluation -> final integrated verification**.
 
 ## Verified baseline and guardrails

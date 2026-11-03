@@ -14,6 +14,7 @@ const exe = path.resolve(process.argv.slice(2).find((s) => s.endsWith(".exe")) |
 const output = path.resolve(`.codex-run/sketch16/${mode}-${new Date().toISOString().replaceAll(":", "-")}`);
 const profile = path.join(output, "profile");
 mkdirSync(profile, { recursive: true });
+const failedExternal = new Set(), externalResponses = [];
 const checks = [], pageErrors = [], externalRequests = new Set(), workerUrls = new Set(), trackedPages = [];
 let app, browser, context, page, connection, editorId, expectedProjectName, acceptanceCompleted = false;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,6 +25,10 @@ function trackPage(target) {
   target.setDefaultTimeout(30000);
   target.on("pageerror", (error) => pageErrors.push(error.message));
   target.on("request", (request) => { if (/^https?:/i.test(request.url()) && !isLocal(request.url())) externalRequests.add(request.url()); });
+  target.on("requestfailed", request => failedExternal.add(request.url()));
+  target.on("response", response => {
+    if (/^https?:/i.test(response.url()) && !isLocal(response.url())) externalResponses.push(response.url());
+  });
   target.on("worker", (worker) => workerUrls.add(worker.url()));
   target.route("**/*", (route) => /^https?:/i.test(route.request().url()) && !isLocal(route.request().url()) ? route.abort() : route.continue());
 }
@@ -58,13 +63,24 @@ async function editorReady(projectName = expectedProjectName, minLastSeen = 0) {
   for (let i = 0; i < 150; i++) {
     const editors = (await getEditors()).filter((e) => Date.now() - e.lastSeen < 10000 && e.lastSeen >= minLastSeen && isExpectedName(e.projectName)).sort((a, b) => b.lastSeen - a.lastSeen);
     for (const editor of editors) {
-      const matchingPage = trackedPages.find((candidate) => !candidate.isClosed() && candidate.url() === editor.url);
+      const matchingPage = trackedPages.find((candidate) => !candidate.isClosed() && candidate.url() === editor.url
+        && new URL(candidate.url()).searchParams.get("project") === editor.projectId);
       if (matchingPage) { editorId = editor.editorId; page = matchingPage; return editor; }
     }
     await pause(200);
   }
   const available = (await getEditors()).map((e) => ({ editorId: e.editorId, projectName: e.projectName, url: e.url, lastSeen: e.lastSeen }));
   throw new Error(`No recently seen Layerling editor has a live matching page${projectName ? ` for '${projectName}'` : ""} after ${minLastSeen}; editors: ${JSON.stringify(available)}; pages: ${JSON.stringify(trackedPages.filter((candidate) => !candidate.isClosed()).map((candidate) => candidate.url()))}`);
+}
+async function reopenProject(file, projectName) {
+  const previousUrl = page.url();
+  const started = Date.now();
+  expectedProjectName = projectName;
+  await page.locator('input[type="file"][accept*=".lyl"]').first().setInputFiles(file);
+  await page.waitForURL((url) => url.href !== previousUrl);
+  const restored = await editorReady(projectName, started);
+  await page.bringToFront();
+  pass("Imported project switched to its restored editor", { editorId: restored.editorId, url: restored.url, previousUrl });
 }
 async function command(action, params = {}, timeoutMs = 60000) {
   await editorReady();
@@ -182,50 +198,66 @@ function assertPackagedSolverNotices() {
   const license = readFileSync(path.join(legalRoot, "PlaneGCS-LICENSE.txt"), "utf8");
   const notice = readFileSync(path.join(legalRoot, "PlaneGCS-NOTICE.txt"), "utf8");
   assert.ok(license.includes("GNU LESSER GENERAL PUBLIC LICENSE") && license.includes("Version 2.1"), "Packaged legal license is not the preserved LGPL 2.1 text");
-  assert.ok(notice.includes("LGPL-2.0-or-later") && notice.includes("Version 2.1") && notice.includes(expected.gitHead), "Packaged solver notice is missing the upstream license or source declarations");
+  assert.ok(notice.includes("LGPL-2.0-or-later") && notice.includes("GNU LGPL 2.1") && notice.includes(expected.gitHead), "Packaged solver notice is missing the upstream license or source declarations");
   pass("Packaged PlaneGCS metadata, license text, notice and source archive verified", { version: runtimeMetadata.version, packageLicenseMetadata: runtimeMetadata.packageLicenseMetadata, gitHead: runtimeMetadata.gitHead });
 }
 async function runCancellationAndRetry() {
-  const cadWorkerUrl = [...workerUrls].find((url) => /sketchCad.*worker/i.test(url));
-  if (!cadWorkerUrl) { cancelExperiment = "not-run: no sketch CAD worker URL observed"; return; }
-  const reloadStarted = Date.now();
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await editorReady(expectedProjectName, reloadStarted);
   await command("select_objects", { ids: [originalId] });
   const before = await waitSavedGeometry(originalId, 45, 16, 3, 5);
   const beforeDefinition = JSON.stringify(before.node.definition);
   const beforeBrep = brepAssetBytes(before.current, before.node);
-  await page.route(cadWorkerUrl, (route) => route.fulfill({ status: 200, contentType: "text/javascript", body: "self.onmessage = () => {};" }));
-  let routeActive = true;
+  // Intercept the actual CAD protocol in this isolated test page. Production
+  // worker chunk names are hashed and cannot identify a particular job.
+  await page.evaluate(() => {
+    const send = Worker.prototype.postMessage;
+    const terminate = Worker.prototype.terminate;
+    const probe = window.sketchCancelProbe = { held: null, terminated: false };
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message?.type === "build" && message.profile?.constraintSketch) {
+        probe.held = this;
+        return;
+      }
+      return send.call(this, message, ...args);
+    };
+    Worker.prototype.terminate = function () {
+      if (this === probe.held) probe.terminated = true;
+      return terminate.call(this);
+    };
+    probe.restore = () => {
+      Worker.prototype.postMessage = send;
+      Worker.prototype.terminate = terminate;
+    };
+  });
   try {
     const panel = await openSketcher();
     await setDimension("Plate radius", 46);
     await panel.getByRole("button", { name: "Build solid", exact: true }).click();
     const cancelButton = panel.locator("footer").getByRole("button", { name: "Close", exact: true });
     await cancelButton.waitFor({ state: "visible", timeout: 30000 });
+    await page.waitForFunction(() => Boolean(window.sketchCancelProbe.held));
     await cancelButton.click();
+    assert.equal(await page.evaluate(() => window.sketchCancelProbe.terminated), true);
     await cancelButton.waitFor({ state: "detached", timeout: 30000 });
     await pause(500);
     const canceled = await expectSavedGeometry(originalId, 45, 16, 3, 5);
     assert.equal(JSON.stringify(canceled.node.definition), beforeDefinition, "Canceled worker changed saved sketch or body definition");
     assert.equal(brepAssetBytes(canceled.current, canceled.node), beforeBrep, "Canceled worker changed exact B-Rep bytes");
-    pass("Injected nonresponsive CAD worker canceled without partial scene mutation", { workerUrl: cadWorkerUrl, objectId: originalId });
+    pass("Injected nonresponsive CAD worker canceled without partial scene mutation", { objectId: originalId });
 
-    await page.unroute(cadWorkerUrl);
-    routeActive = false;
+    await page.evaluate(() => window.sketchCancelProbe.restore());
     const retryPanel = await openSketcher();
     await setDimension("Plate radius", 46);
     await retryPanel.getByRole("button", { name: "Build solid", exact: true }).click();
     const rebuilt = await waitSavedGeometry(originalId, 46, 16, 3, 5);
     assert.equal(rebuilt.node.objectId, originalId, "Retry replaced the original solid ID");
-    pass("Removing the worker stall allowed a fresh build retry", { workerUrl: cadWorkerUrl, objectId: originalId });
+    pass("Removing the worker stall allowed a fresh build retry", { objectId: originalId });
 
     await setDimension("Plate radius", 45);
     await retryPanel.getByRole("button", { name: "Build solid", exact: true }).click();
     await waitSavedGeometry(originalId, 45, 16, 3, 5);
     cancelExperiment = "passed: stalled-worker cancellation, unchanged source/B-Rep, real-worker retry, restored radius 45";
   } finally {
-    if (routeActive) await page.unroute(cadWorkerUrl).catch(() => {});
+    await page.evaluate(() => { window.sketchCancelProbe.restore(); delete window.sketchCancelProbe; });
   }
 }
 
@@ -281,21 +313,23 @@ try {
   const changedArchive = await saveProject();
   const file = path.join(output, "edited-mounting-plate.lyl");
   writeFileSync(file, Buffer.from(changedArchive.saved.base64, "base64"));
-  await page.goto(new URL("/", connection.url).href, { waitUntil: "domcontentloaded" });
-  await page.locator('input[type="file"][accept*=".lyl"]').first().setInputFiles(file);
-  await page.getByRole("button", { name: "Create new 3D design", exact: true }).waitFor();
-  expectedProjectName = changedArchive.project.metadata?.projectName;
-  await editorReady();
+  await reopenProject(file, changedArchive.project.metadata?.projectName);
   objects = (await command("list_objects")).objects;
   assert.ok(byId(objects, originalId), "Imported project lost the source solid ID");
+  const restored = await waitSavedGeometry(originalId, 45, 16, 3, 5);
+  assert.deepEqual(restored.node.definition, changed.node.definition, "Reopen changed the sketch entities, constraints or body definition");
+  assert.equal(brepAssetBytes(restored.current, restored.node), brepAssetBytes(changed.current, changed.node), "Reopen changed the exact B-Rep asset");
+  const restoredVolume = await independentVolume(restored.current.archive, restored.current.project, restored.node);
+  assert.ok(Math.abs(restoredVolume - expectedVolume) <= 1e-6, "Restored OCCT geometry differs from the edited plate");
   await command("select_objects", { ids: [originalId] });
   const reopenedPanel = await openSketcher();
   assert.equal(await reopenedPanel.getByLabel("Plate radius", { exact: true }).first().inputValue(), "45");
   assert.equal(await reopenedPanel.getByLabel("Bolt circle radius", { exact: true }).first().inputValue(), "16");
   assert.equal(await reopenedPanel.getByLabel("Hole radius", { exact: true }).first().inputValue(), "3");
+  assert.match(await reopenedPanel.locator(".constraint-sketch-status").innerText(), /Degrees of freedom:\s*0/);
   assert.equal((await saveProject()).state.nodes.filter((node) => node.definition?.sketchProfile?.constraintSketch).length, 1);
   await closeSketcher(reopenedPanel);
-  pass("Saved LYL reopens with original sketch ID and edited dimensions");
+  pass("Saved LYL reopens with original sketch ID, entities, constraints, dimensions and exact geometry", { restoredVolume, expectedVolume });
 
   const beforeInvalid = JSON.stringify((await saveProject()).state.nodes.find((node) => node.objectId === originalId)?.definition);
   const invalidPanel = await openSketcher();
@@ -331,12 +365,7 @@ try {
   assert.equal(JSON.stringify(mixed.state.nodes.find((node) => node.objectId === originalId)?.definition), JSON.stringify(changed.node.definition), "Saving sketch-only object changed the existing solid");
   const mixedFile = path.join(output, "mixed-solid-and-sketch.lyl");
   writeFileSync(mixedFile, Buffer.from(mixed.saved.base64, "base64"));
-  await page.goto(new URL("/", connection.url).href, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Create new 3D design", exact: true }).waitFor();
-  await page.locator('input[type="file"][accept*=".lyl"]').first().setInputFiles(mixedFile);
-  await page.getByRole("button", { name: "Create new 3D design", exact: true }).waitFor();
-  expectedProjectName = mixed.project.metadata?.projectName;
-  await editorReady();
+  await reopenProject(mixedFile, mixed.project.metadata?.projectName);
   objects = (await command("list_objects")).objects;
   const reopenedMixed = await saveProject();
   const reopenedSolid = reopenedMixed.state.nodes.find((node) => node.objectId === originalId);
@@ -349,15 +378,22 @@ try {
   pass("Captured mixed project viewport", pageScreenshot);
   await runCancellationAndRetry();
   assert.deepEqual(pageErrors, [], `Renderer page errors: ${pageErrors.join(" | ")}`);
-  assert.deepEqual([...externalRequests], [], `Unexpected external requests: ${[...externalRequests].join(", ")}`);
-  pass("No renderer errors or external network requests", { blockedExternalRequests: externalRequests.size, workers: [...workerUrls] });
+  assert.deepEqual(externalResponses, [], "External endpoint responded");
+  for (const address of externalRequests) {
+    const url = new URL(address);
+    assert.ok(url.hostname === "local.adguard.org" && ["user-script","content-script"].includes(url.searchParams.get("type")) && failedExternal.has(address), "Unexpected or unblocked external request: " + address);
+  }
+  pass("No renderer errors or successful external requests", { deniedWorkstationInjectorRequests: [...externalRequests], workers: [...workerUrls] });
   acceptanceCompleted = true;
 } catch (error) {
   writeFileSync(path.join(output, "failure.json"), JSON.stringify({ error: error?.stack ?? String(error), checks, pageErrors, externalRequests: [...externalRequests], cancelExperiment }, null, 2));
   throw error;
 } finally {
   writeFileSync(path.join(output, "report.json"), JSON.stringify({ mode, executable: mode === "packaged" ? exe : null, output, originalId, checks, pageErrors, externalRequests: [...externalRequests], cancelExperiment, complete: acceptanceCompleted }, null, 2));
-  if (app) await app.close().catch(() => {});
+  if (app) {
+    await app.evaluate(({app}) => { setInterval(() => app.quit(), 1000).unref(); });
+    await app.close();
+  }
   if (context) await context.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
 }

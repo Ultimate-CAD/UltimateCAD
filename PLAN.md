@@ -154,3 +154,5 @@ Loopback requests require a random per-launch secret. Existing authenticated MCP
 COMPLETE. Final runtime source commit 38c5c1008bac232eac28be89e6993bc49b8f5446.
 Installed app: %LOCALAPPDATA%/Programs/Layerling Desktop/Layerling Desktop.exe.
 Release artifacts: dist/windows. See docs/desktop/BUILD_REPORT.md and validation-final evidence.
+
+Current .17 checkpoint: edge 9 switched from the suppressed hole to its surviving neighbor in the OCCT replay probe. See the latest CODEX_CONTINUATION.md section before designing durable references.

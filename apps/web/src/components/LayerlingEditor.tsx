@@ -4443,7 +4443,7 @@ export function LayerlingEditor({
     const base=constraintSketchShape(solved.document,previous?.id??createLocalId("constraint-sketch"),previous);
     let next=base;
     const abort=()=>cancelSketchCadBuilds();
-    if(build){signal.addEventListener("abort",abort,{once:true});try{next=await cadShapeFromSketchProfile(base.sketchProfile!,solved.document.extrusionMm,base);next={...next,sketchOnly:undefined,name:document.title,x:base.x,z:base.z,elevation:base.elevation,rotation:base.rotation,rotationX:base.rotationX,rotationZ:base.rotationZ,mirrorX:base.mirrorX,mirrorY:base.mirrorY,mirrorZ:base.mirrorZ};}finally{signal.removeEventListener("abort",abort);}}
+    if(build){signal.addEventListener("abort",abort,{once:true});try{next=await cadShapeFromSketchProfile(base.sketchProfile!,solved.document.extrusionMm,base);next={...next,sketchOnly:undefined,name:document.title,x:solved.document.featureHistory?.pad.kind==="revolve"?(previous?.x??0):base.x,z:solved.document.featureHistory?.pad.kind==="revolve"?(previous?.z??0):base.z,elevation:base.elevation,rotation:base.rotation,rotationX:base.rotationX,rotationZ:base.rotationZ,mirrorX:base.mirrorX,mirrorY:base.mirrorY,mirrorZ:base.mirrorZ};}finally{signal.removeEventListener("abort",abort);}}
     if(signal.aborted)throw new DOMException("Cancelled","AbortError");
     if(projectInfoRef.current.projectId!==project)throw new Error("Project changed; sketch result discarded");
     if(previous&&JSON.stringify(shapesRef.current.find(s=>s.id===previous.id))!==sourceRevision)throw new Error("Sketch changed while building; retry the current revision");

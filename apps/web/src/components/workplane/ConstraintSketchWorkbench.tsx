@@ -72,7 +72,24 @@ export function ConstraintSketchWorkbench({shape,onApply,onClose,profileOnly=fal
     </details>
     {current.featureHistory ? <details open>
       <summary>Feature history</summary>
-      <ol><li>Sketch · {current.title}</li><li>Pad · {current.featureHistory.pad.depthParameter}</li></ol>
+      <ol><li>Sketch · {current.title}</li><li>{current.featureHistory.pad.kind==="revolve"?"Revolve":"Pad"} · {current.featureHistory.pad.id}</li></ol>
+      <label>Base operation <select aria-label="Base operation" value={current.featureHistory.pad.kind} onChange={e=>change(d=>{
+        const h=d.featureHistory!;
+        h.pad.kind=e.target.value as "pad"|"revolve";
+        if(h.pad.kind==="revolve" && !h.pad.angleParameter){
+          let name="sweepAngle";
+          while(h.parameters.some(p=>p.name===name)) name+="_";
+          h.parameters.push({name,expression:"360 deg",unit:"deg"});
+          h.pad.angleParameter=name;
+          h.pad.startAngle=0;
+        }
+      })}><option value="pad">Pad</option><option value="revolve">Revolve</option></select></label>
+      {current.featureHistory.pad.kind==="revolve" && <>
+        <p>Draw the cross-section to the left of X = 0. Revolve turns it around the vertical axis.</p>
+        <label>Revolve angle parameter <input value={current.featureHistory.pad.angleParameter??""} onChange={e=>change(d=>{d.featureHistory!.pad.angleParameter=e.target.value;})}/></label>
+        {num("Revolve start (deg)",current.featureHistory.pad.startAngle??0,v=>change(d=>{d.featureHistory!.pad.startAngle=v;}))}
+      </>}
+
       {current.featureHistory.parameters.map((param,index)=><div key={index}>
         <label>Name <input value={param.name} onChange={e=>change(d=>{d.featureHistory!.parameters[index].name=e.target.value;})}/></label>
         <label>Expression <input value={param.expression} onChange={e=>change(d=>{d.featureHistory!.parameters[index].expression=e.target.value;})}/></label>

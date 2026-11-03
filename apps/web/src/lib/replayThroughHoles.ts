@@ -3,8 +3,10 @@ import { cutWithNamedFaces, resolveFeatureEdge, type NamedFaces } from "@/lib/fe
 import { holeInstance, resolvePadDepth, type SketchPadHistory } from "@/lib/sketchPadHistory";
 
 /** Through all of this pad along its local extrusion axis, before object placement. */
-export function replayThroughHoles(kernel:OcctKernel, pad:ShapeHandle, history:SketchPadHistory):ShapeHandle {
-  const height = resolvePadDepth(history);
+export function replayThroughHoles(kernel:OcctKernel, pad:ShapeHandle, history:SketchPadHistory, actualHeight?:number):ShapeHandle {
+  const depth = resolvePadDepth(history);
+  const height = actualHeight ?? depth;
+  if (!Number.isFinite(height) || height<=0) throw Error("Invalid feature height");
   let solid = pad;
   const finish = history.rimFinish;
   const track = finish && !finish.suppressed;

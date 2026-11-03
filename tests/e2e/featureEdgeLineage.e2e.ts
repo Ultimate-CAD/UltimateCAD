@@ -90,3 +90,23 @@ it("cuts both pattern types and blocks a removed instance referenced by a rim tr
     expect(()=>replayThroughHoles(cad,pad,h)).toThrow(/Missing feature face/);
   }finally{cad.releaseAll();}
 });
+import {buildRevolvedSketchSolid} from "@/lib/cadSketchRevolve";
+import {resolveRevolveAngle} from "@/lib/sketchPadHistory";
+import {constraintSketchProfile, type ConstraintSketch} from "@/lib/constraintSketch";
+it("builds exact named full and partial revolutions and rejects an invalid angular dimension",async()=>{
+  const cad=await OcctKernel.init({wasm:"node_modules/occt-wasm/dist/occt-wasm.wasm"});
+  try{
+    const profile:ConstraintSketch={schema:1,title:"Torus",extrusionMm:5,entities:[{id:"c",kind:"point",x:-10,y:0,fixed:true},{id:"ring",kind:"circle",center:"c",radius:3}],constraints:[]};
+    const h=createSketchPadHistory(5);
+    h.pad.kind="revolve";h.pad.angleParameter="angle";
+    h.parameters.push({name:"angle",expression:"360 deg",unit:"deg"});
+    for(const angle of [360,90,-90]){
+      h.parameters[1].expression=angle+" deg";
+      const shape=buildRevolvedSketchSolid(cad,constraintSketchProfile(profile),15,resolveRevolveAngle(h));
+      expect(cad.isValid(shape)).toBe(true);
+      expect(cad.getVolume(shape)).toBeCloseTo(180*Math.PI**2*Math.abs(angle)/360,6);
+    }
+    h.parameters[1].expression="1 mm";
+    expect(()=>resolveRevolveAngle(h)).toThrow(/angle/);
+  }finally{cad.releaseAll();}
+});

@@ -1,6 +1,6 @@
 {
   "milestone": ".17",
-  "status": "in_progress",
+  "status": "packaged_acceptance_pending",
   "baselineTag": "checkpoint-ultimate16-sketcher",
   "verified": [
     "hole rim lineage under suppression",
@@ -12,10 +12,11 @@
     "surviving hole fillet and chamfer; removed rim diagnostics preserve last-good body",
     "linear and circular hole patterns; missing instance detection",
     "bounded exact pad geometry cache",
-    "constrained secondary pocket profile, editable blind depth, exact volume and LYL reopen"
+    "constrained secondary pocket profile, editable blind depth, exact volume and LYL reopen",
+    "GUI full and partial revolve, analytic volume, zero-angle rejection, Undo and exact LYL reopening"
   ],
-  "evidence": ".codex-run/sketch16/dev-2026-11-03T05-41-11.236Z/report.json",
-  "nextAction": "Integrate the existing analytic revolve constructor as an editable history operation, verify profile axis, pose and angular dimensions against an independent solid, then exercise failed edits and LYL reopening.",
+  "evidence": ".codex-run/sketch16/dev-2026-11-03T07-58-48.289Z/report.json",
+  "nextAction": "Build .17, run the feature history GUI suite on the packaged executable offline; preserve its rollback, then implement the independent-component assembly workspace.",
   "pending": [
     "dependent solid operations",
     "feature-level caching and branching",

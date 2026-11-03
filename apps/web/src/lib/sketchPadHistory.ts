@@ -37,7 +37,7 @@ export function holeInstance(hole:ThroughHoleFeature,index:number) {
 export interface SketchPadHistory {
   schema: 1;
   sketch: { id: string; kind: "sketch" };
-  pad: { id: string; kind: "pad"; profileId: string; depthParameter: string };
+  pad: { id: string; kind: "pad" | "revolve"; profileId: string; depthParameter: string; angleParameter?: string; startAngle?: number };
   parameters: FeatureParameter[];
   pocket?: { id:string; sketchId:string; inputId:string; profile:ConstraintSketch; depthMm:number; suppressed:boolean };
   holes?: ThroughHoleFeature[];
@@ -55,7 +55,7 @@ export function createSketchPadHistory(depth: number): SketchPadHistory {
 }
 
 export function resolvePadDepth(history: SketchPadHistory): number {
-  if (history?.schema !== 1 || history.sketch?.kind !== "sketch" || history.pad?.kind !== "pad") throw Error("Unsupported feature history");
+  if (history?.schema !== 1 || history.sketch?.kind !== "sketch" || !["pad","revolve"].includes(history.pad?.kind)) throw Error("Unsupported feature history");
   const { sketch, pad } = history;
   if (![sketch.id,pad.id].every(id => typeof id === "string" && id.length > 0 && id.length <= 160) ||
       sketch.id === pad.id || pad.profileId !== sketch.id) throw Error("Broken pad profile reference");
@@ -93,9 +93,20 @@ export function resolvePadDepth(history: SketchPadHistory): number {
         !history.holes?.some(h=>h.id === finish.holeId) || !(Number.isFinite(finish.sizeMm) && finish.sizeMm > 0 && finish.sizeMm <= 1e6))
       throw Error("Broken rim treatment definition");
   }
-  const result = evaluateFeatureParameters(history.parameters).cache.get(pad.depthParameter);
+  const values = evaluateFeatureParameters(history.parameters).cache;
+  if (pad.kind === "revolve") resolveRevolveAngle(history);
+  const result = values.get(pad.depthParameter);
   if (!result || result.unit !== "mm" || result.value < 0.01 || result.value > 1e6) {
     throw Error("Pad depth requires a length parameter between 0.01 and 1000000 mm");
   }
   return result.value;
+}
+
+
+export function resolveRevolveAngle(history:SketchPadHistory):number {
+  const op=history.pad;
+  const angle=evaluateFeatureParameters(history.parameters).cache.get(op.angleParameter ?? "");
+  if (!angle || angle.unit!=="deg" || !(Math.abs(angle.value)>1e-6 && Math.abs(angle.value)<=360) ||
+      !(Number.isFinite(op.startAngle ?? 0) && Math.abs(op.startAngle ?? 0)<=360000)) throw Error("Revolve needs a finite angle from -360 to 360 deg, excluding zero");
+  return angle.value;
 }

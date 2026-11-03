@@ -395,6 +395,52 @@ async function verifyNamedPad() {
 
 }
 
+async function verifyRevolve() {
+  const panel=await openSketcher();
+  await panel.getByRole("button",{name:"New sketch",exact:true}).click();
+  await panel.locator("summary").filter({hasText:"Geometry"}).click();
+  await panel.getByRole("button",{name:"Circle",exact:true}).click();
+  await panel.getByLabel("X (mm)",{exact:true}).fill("-10");
+  await panel.getByLabel("Radius (mm)",{exact:true}).fill("3");
+  await panel.getByRole("button",{name:"Drive pad with parameters"}).click();
+  await panel.getByLabel("Base operation",{exact:true}).selectOption("revolve");
+  await panel.locator('.constraint-sketch-status[data-solve-valid="true"]').waitFor();
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  let built;
+  const deadline=Date.now()+30000;
+  while(Date.now()<deadline){
+    const data=await saveProject();
+    const node=data.state.nodes.find(n=>n.definition?.sketchProfile?.constraintSketch?.featureHistory?.pad.kind==="revolve");
+    if(node?.cadBrepAssetId){built={data,node};break;}
+    await pause(100);
+  }
+  assert.ok(built,"Revolve did not build");
+  const identity=built.node.objectId;
+  assert.ok(Math.abs(await independentVolume(built.data.archive,built.data.project,built.node)-180*Math.PI**2)<1e-6);
+  await panel.getByLabel("Expression",{exact:true}).nth(1).fill("90 deg");
+  await panel.locator('.constraint-sketch-status[data-solve-valid="true"]').waitFor();
+  await panel.getByRole("button",{name:"Build solid",exact:true}).click();
+  await panel.getByText("Sketch solid built",{exact:true}).waitFor();
+  const partial=await saveProject();
+  const partialNode=sketchNode(partial.state,identity);
+  assert.ok(Math.abs(await independentVolume(partial.archive,partial.project,partialNode)-45*Math.PI**2)<1e-6);
+  await panel.getByLabel("Expression",{exact:true}).nth(1).fill("0 deg");
+  await panel.getByRole("alert").filter({hasText:"Revolve needs"}).waitFor();
+  assert.ok(await panel.getByRole("button",{name:"Build solid",exact:true}).isDisabled());
+  await closeSketcher(panel);
+  await page.keyboard.press("Control+z");
+  const undone=await saveProject();
+  assert.ok(Math.abs(await independentVolume(undone.archive,undone.project,sketchNode(undone.state,identity))-180*Math.PI**2)<1e-6);
+  await page.keyboard.press("Control+y");
+  const file=path.join(output,"revolve.lyl");
+  writeFileSync(file,Buffer.from(partial.saved.base64,"base64"));
+  await reopenProject(file,partial.project.metadata?.projectName);
+  const reopened=await saveProject();
+  assert.deepEqual(sketchNode(reopened.state,identity).definition,partialNode.definition);
+  assert.equal(brepAssetBytes(reopened,sketchNode(reopened.state,identity)),brepAssetBytes(partial,partialNode));
+  pass("Editable full and partial revolve match analytic volume, reject zero sweep, undo and reopen with stable identity");
+}
+
 let originalId, cancelExperiment = "not-run";
 try {
   await launch();
@@ -511,7 +557,7 @@ try {
   await page.screenshot({ path: pageScreenshot, fullPage: false });
   pass("Captured mixed project viewport", pageScreenshot);
   await runCancellationAndRetry();
-  if (process.env.LAYERLING_TEST_FEATURE_HISTORY === "1") await verifyNamedPad();
+  if (process.env.LAYERLING_TEST_FEATURE_HISTORY === "1") { await verifyNamedPad(); await verifyRevolve(); }
   assert.deepEqual(pageErrors, [], `Renderer page errors: ${pageErrors.join(" | ")}`);
   assert.deepEqual(externalResponses, [], "External endpoint responded");
   for (const address of externalRequests) {

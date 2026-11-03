@@ -8,6 +8,7 @@ import { buildRevolvedSketchSolid } from "@/lib/cadSketchRevolve";
 import { buildStrokedSketchSolid } from "@/lib/cadSketchStroke";
 import { buildSweptSketchSolid } from "@/lib/cadSketchSweep";
 import { buildInsetSketchSolid } from "@/lib/cadSketchInset";
+import { resolveRevolveAngle } from "@/lib/sketchPadHistory";
 import { FeatureSolidCache } from "@/lib/featureSolidCache";
 import { replaySketchPocket } from "@/lib/replaySketchPocket";
 import { replayThroughHoles } from "@/lib/replayThroughHoles";
@@ -54,7 +55,10 @@ self.onmessage = async (event: MessageEvent<SketchCadBuildRequest>) => {
     cad = await kernel();
     cad.releaseAll();
     let result: ShapeHandle;
-    if (request.revolve) {
+    const baseHistory=request.profile.constraintSketch?.featureHistory;
+    if (baseHistory?.pad.kind === "revolve") {
+      result = buildRevolvedSketchSolid(cad,request.profile,baseHistory.pad.startAngle ?? 0,resolveRevolveAngle(baseHistory));
+    } else if (request.revolve) {
       result = buildRevolvedSketchSolid(cad, request.profile, request.revolve.startAngle, request.revolve.sweepAngle);
     } else if (request.sweep) {
       result = buildSweptSketchSolid(cad, request.profile);
@@ -92,10 +96,11 @@ self.onmessage = async (event: MessageEvent<SketchCadBuildRequest>) => {
       } else result = buildPad();
     }
     const history = request.profile.constraintSketch?.featureHistory;
-    if (history?.pocket && !history.pocket.suppressed) result = replaySketchPocket(cad,result,history.pocket,request.height);
+    const featureHeight=baseHistory?.pad.kind==="revolve" ? cad.getBoundingBox(result).ymax : request.height;
+    if (history?.pocket && !history.pocket.suppressed) result = replaySketchPocket(cad,result,history.pocket,featureHeight);
     if (history?.holes?.length) {
       if (request.revolve || request.sweep || request.stroke || request.inset) throw Error("Hole history requires its original pad");
-      result = replayThroughHoles(cad,result,history);
+      result = replayThroughHoles(cad,result,history,featureHeight);
     }
     const deflection = sketchCadDeflection(request.profile);
     const mesh = cad.tessellate(result, { linearDeflection: deflection.linear, angularDeflection: deflection.angular });

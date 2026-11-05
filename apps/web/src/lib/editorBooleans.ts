@@ -1133,14 +1133,14 @@ async function unionOverlappingExportMeshesRaw(shapes: WorkplaneShape[], meshes:
  * already did. Only the holes that go along count: with a selection, the selected ones.
  * A body cut away entirely drops out; one whose cut fails stays whole and is counted.
  */
-export async function exportBodiesWithLooseHoles(visible: readonly WorkplaneShape[]) {
+export async function exportBodiesWithLooseHoles(visible: readonly WorkplaneShape[], meshForExport: (shape: WorkplaneShape) => MeshData | Promise<MeshData> = meshForShape) {
   const solids = visible.filter((shape) => !shape.hole && !isNonSolidShape(shape));
-  const meshes = solids.map(meshForShape);
+  const meshes = await Promise.all(solids.map(meshForExport));
   const holes = visible.filter((shape) => shape.hole && !isNonSolidShape(shape));
   const untouched = { solids, meshes, cut: solids.map(() => false), holeCutsFailed: 0 };
   if (holes.length === 0 || solids.length === 0) return untouched;
   // Padded like a grouped cut, so a hole flush with a face goes cleanly through it.
-  const cutters = holes.map((hole) => meshForShape(paddedCutterShape(hole)));
+  const cutters = await Promise.all(holes.map((hole) => meshForExport(paddedCutterShape(hole))));
   const cutterBounds = cutters.map((mesh) => meshBounds(mesh.vertices));
   const reaching = meshes.map((mesh) => {
     const bounds = meshBounds(mesh.vertices);
@@ -1488,8 +1488,9 @@ function withoutSplinters<T extends { meshes: MeshData[]; gestutzt: boolean[] }>
   return { ...result, meshes, splinters };
 }
 
-export async function unionOverlappingExportMeshes(shapes: WorkplaneShape[], meshes: MeshData[], cut?: readonly boolean[]) {
-  return withoutSplinters(await unionOverlappingExportMeshesRaw(shapes, meshes, cut));
+export async function unionOverlappingExportMeshes(shapes: WorkplaneShape[], meshes: MeshData[], cut?: readonly boolean[], preserveAllPieces = false) {
+  const result = await unionOverlappingExportMeshesRaw(shapes, meshes, cut);
+  return preserveAllPieces ? { ...result, splinters: 0 } : withoutSplinters(result);
 }
 
 /**

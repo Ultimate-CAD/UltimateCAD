@@ -536,8 +536,9 @@ export async function exportShapesToStep(shapes: WorkplaneShape[]): Promise<Step
   return { blob: result.value, exportedCount: parts.length, skipped };
 }
 
-/** Same exact-body construction and placement as STEP; export tessellation never changes the model. */
-export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: number, angleDeg: number, progress:(text:string)=>void=()=>{},triangleBudget=12_000_000) {
+/** Same exact-body construction and placement as STEP. measure=false performs only
+ * one tessellation pass, without certification probes or mesh conditioning. */
+export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: number, angleDeg: number, progress:(text:string)=>void=()=>{},triangleBudget=12_000_000, measure=true) {
   if(!Number.isFinite(triangleBudget)||triangleBudget<1)throw new Error("No triangle working budget remains for analytic tessellation");
   if (!hasWholeAnalyticSource(shape)) {
     if (needsBakedMeshGroup(shape)) throw new Error("Mixed mesh group has an unevaluated Boolean operation; regenerate the group before export so no cuts or members are lost");
@@ -562,6 +563,7 @@ export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: 
         progress(`Analytic pass ${pass+1}: ${mesh.triangleCount} triangles`);
         if(mesh.triangleCount+faces.length>triangleBudget)throw new Error(`Analytic tessellation exceeds the remaining ${triangleBudget.toLocaleString()} triangle working budget; source preserved`);
         let distance=0,normalAngle=0,count=0;
+        if (measure) {
         const subfaces=kernel.getSubShapes(body,"face");
         try{for(const face of subfaces){
           const m=kernel.tessellate(face,options);
@@ -582,9 +584,10 @@ export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: 
           }
         }}finally{subfaces.forEach(f=>kernel.release(f));}
         progress(`Analytic samples: ${distance} mm, ${normalAngle} degrees`);
+        }
         const angleStalled=pass>0&&normalAngle>=previousAngle*.99;
         previousAngle=normalAngle;
-        if(distance>deviationMm||(normalAngle>angleDeg&&!angleStalled)){if(pass===5)throw new Error(`Exact tessellation did not achieve sampled tolerances (${distance} mm, ${normalAngle} degrees)`);continue;}
+        if(measure && (distance>deviationMm||(normalAngle>angleDeg&&!angleStalled))){if(pass===5)throw new Error(`Exact tessellation did not achieve sampled tolerances (${distance} mm, ${normalAngle} degrees)`);continue;}
         const offset=vertices.length;
         for(let i=0;i<mesh.positions.length;i+=3)vertices.push([mesh.positions[i],mesh.positions[i+1],mesh.positions[i+2]]);
         for(let i=0;i<mesh.indices.length;i+=3)faces.push([mesh.indices[i]+offset,mesh.indices[i+1]+offset,mesh.indices[i+2]+offset]);
@@ -593,7 +596,7 @@ export async function analyticMeshForExport(shape: WorkplaneShape, deviationMm: 
       if(!accepted)throw new Error("Exact export tessellation failed");
     }finally{kernel.release(body);}
   }
-  const stitched=stitchAnalyticNumericalEdges({vertices,faces},Math.min(1e-9,deviationMm/1000));
+  const stitched=measure ? stitchAnalyticNumericalEdges({vertices,faces},Math.min(1e-9,deviationMm/1000)) : {mesh:{vertices,faces},movedMm:0,removedFacets:0};
   return {mesh:{name:shape.name,...stitched.mesh},sampledDeviationMm:sampledDeviationMm+stitched.movedMm,sampledNormalDeviationDeg,samples,numericalStitchMm:stitched.movedMm,numericalFacetsRemoved:stitched.removedFacets};
   } finally {
     // These are local export construction handles; cached exports retain only meshes.

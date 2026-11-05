@@ -81,6 +81,8 @@ async function ready(projectName) {
 }
 async function openStudio() {
   await page.keyboard.press("Control+e");
+  const advanced = page.getByText("Advanced / Analyze (optional)", {exact:true});
+  if (await advanced.evaluate(el => !el.parentElement.open)) await advanced.click();
   await page.getByRole("region", { name: "Precision Mesh Studio" }).waitFor();
 }
 async function waitObject(id, predicate) {

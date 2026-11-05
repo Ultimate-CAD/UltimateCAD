@@ -426,3 +426,10 @@ export function assemblyOverlapOffThread(selected:WorkplaneShape[], signal:Abort
     ()=>buildIntersectionShapeFromSelection(selected,2_000_000),
     ()=>({group:null,empty:false,failureNotice:"Interference check timed out"}),signal);
 }
+
+/** Ordinary STL conversion shares one worker-backed path between UI and local MCP. */
+export function exportStlDesignOffThread(shapes: readonly WorkplaneShape[], quality?: import("@/lib/stlQuality").StlQuality) {
+  return runGeometryTask("exportStl", { shapes: [...shapes], quality },
+    () => import("@/lib/stlDesignExport").then(({exportStlDesign}) => exportStlDesign(shapes, quality)),
+    () => { throw new Error("STL conversion timed out; no file was written"); });
+}

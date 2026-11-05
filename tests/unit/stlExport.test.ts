@@ -10,6 +10,15 @@ function readPoint(view: DataView, offset: number) {
 }
 
 describe("binary STL export", () => {
+  it("ordinary unverified encoding retains degenerate facets and reports actual encoding errors only", () => {
+    const mesh = { vertices: [[0,0,0],[1,0,0],[0,1,0]] as [number,number,number][], faces: [[0,1,2],[0,1,1]] as [number,number,number][] };
+    const bytes = exportMeshesToStl([mesh], { preserveFacets: true, unverified: true });
+    expect(new DataView(bytes).getUint32(80,true)).toBe(2);
+    expect(bytes.byteLength).toBe(184);
+    expect(new TextDecoder().decode(bytes.slice(0,80))).toContain("UNVERIFIED");
+    expect(() => exportMeshesToStl([{...mesh,faces:[[0,1,9]]}],{preserveFacets:true})).toThrow(/indices/);
+    expect(() => exportMeshesToStl([{...mesh,vertices:[[Infinity,0,0],[1,0,0],[0,1,0]]}],{preserveFacets:true})).toThrow(/non-finite/);
+  });
   it("omits collapsed seam facets without removing any material from a closed tetrahedron", () => {
     const stl=exportMeshesToStl([{
       vertices:[[0,0,0],[10,0,0],[0,10,0],[0,0,10]],

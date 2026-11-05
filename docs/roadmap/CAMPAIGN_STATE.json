@@ -38,5 +38,12 @@
   "deferred": [
     "Optional CUDA evaluation; no production integration",
     "General feature DAG, closed-loop assembly/dynamics, general nonlinear/contact FEM, curved image solids"
-  ]
+  ],
+  "followup": {
+    "name": "ordinary-stl-export",
+    "branch": "codex/simple-stl-export",
+    "status": "source_and_browser_verified",
+    "evidence": "docs/desktop/SIMPLE_STL_EXPORT.md",
+    "nextAction": "No further source work required. Packaged rollout is outside this scoped change; preserve original .21 installer and rollbacks."
+  }
 }

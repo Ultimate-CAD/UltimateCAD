@@ -148,7 +148,8 @@ import { isBuildMessage, reportWorkerBuild } from "@/lib/buildStamp";
 import { ensureLylFileWritable, forgetLylFile, forgetStlFile, linkedLylFile, linkedStlFile, lylFileAccessSupported, pickLylFileToOpen, pickLylFileToSave, pickStlFileToSave, rememberLylFile, rememberStlFile, writeLylFile, type LylFileHandle } from "@/lib/lylFileAccess";
 import { clipboardShape, displayShapeName, iconTagAsset, qrCodeAsset, makeShapeFromAsset, nameTagAsset, shapeAssetLabel, toolbarShapeAssets } from "@/lib/shapeCatalog";
 import { importedShapeFromStl } from "@/lib/stlImport";
-import { exportMeshesToStl } from "@/lib/stlExport";
+import { exportStlDesignOffThread } from "@/lib/geometryWorker";
+import type { StlQuality } from "@/lib/stlQuality";
 import { exportMeshesTo3mfAsync, THREE_MF_MEDIA_TYPE } from "@/lib/threemfExport";
 import { importedShapeFromSvg, invalidSvgMeshReason } from "@/lib/svgImport";
 import { toSvgProjection, toSvgTopEdges, type SvgProjectionLayer } from "@/lib/svgExport";
@@ -11558,8 +11559,8 @@ export function LayerlingEditor({
 
       if (command.action === "export_mesh") {
         // The file the export window writes as STL, 3MF or OBJ, from the same bodies: visible solids only, loose
-        // holes taken off, overlapping bodies merged (STL) or separated by colour (3MF, OBJ), and the tiny loose
-        // pieces left out. ids limit it to those objects (holes still cut). SVG is the top view the window writes:
+        // holes taken off, overlapping bodies merged (STL) or separated by colour (3MF, OBJ). Ordinary STL
+        // preserves all pieces and is unverified; analysis remains an explicit optional operation. ids limit it to those objects (holes still cut). SVG is the top view the window writes:
         // the silhouette from above, with view "footprint" only the outlines standing on the workplane (#692), or with
         // view "edges" the edges seen from above (#591); a design with too many of them gets the silhouette, and
         // the answer says `fellBack`.
@@ -11575,8 +11576,8 @@ export function LayerlingEditor({
         const scoped = ids.length ? [...chosen, ...all.filter((shape) => shape.hole && !chosen.some((picked) => picked.id === shape.id))] : chosen;
         const { visible, hiddenNote } = visibleExportShapes(scoped);
         if (!visible.some((shape) => !shape.hole && !isNonSolidShape(shape))) throw new Error(t(hiddenNote ? "status.exportOnlyHidden" : "status.addSolidBeforeExport"));
-        const invalidSvg = visible.map(invalidSvgMeshReason).find((reason): reason is string => Boolean(reason));
-        if (invalidSvg) throw new Error(t("status.svgInvalid", { reason: invalidSvg }));
+        const invalidSvg = format === "stl" ? undefined : visible.map(invalidSvgMeshReason).find((reason): reason is string => Boolean(reason));
+        if (invalidSvg && format !== "stl") throw new Error(t("status.svgInvalid", { reason: invalidSvg }));
         if (format === "dxf") {
           // For a laser cutting shop (#774): layer 0, colour 7, millimetres, the round parts as arcs and circles.
           const result = await exportDxf(visible, svgView === "footprint" ? "footprint" : "silhouette");
@@ -11610,8 +11611,17 @@ export function LayerlingEditor({
           for (let index = 0; index < svgBytes.length; index += 8192) svgBinary += String.fromCharCode(...svgBytes.subarray(index, index + 8192));
           return { format, view: svgView, fileName: projectExportFileName(projectName, "svg"), bytes: svgBytes.length, ...(outlines === undefined ? {} : { outlines }), ...(fellBack ? { fellBack } : {}), base64: btoa(svgBinary) };
         }
+        if (format === "stl") {
+          const result = await exportStlDesignOffThread(visible, params.stlQuality as StlQuality | undefined);
+          let binary = "";
+          for (let i = 0; i < result.bytes.length; i += 8192) binary += String.fromCharCode(...result.bytes.subarray(i, i + 8192));
+          return { format, fileName: projectExportFileName(projectName, "stl"), bytes: result.bytes.length,
+            bodies: result.bodies, triangles: result.triangles, mergedBodies: result.mergedBodies,
+            failedMerges: result.failedMerges, loosePiecesLeftOut: 0, verified: false,
+            warnings: result.warnings, quality: result.quality, base64: btoa(binary) };
+        }
         const { solids: cutSolids, meshes, cut: wasCut, holeCutsFailed } = await exportBodiesWithLooseHoles(visible);
-        const joined = await (format === "stl" ? unionOverlappingExportMeshes(cutSolids, meshes, wasCut) : colorSeparatedExportMeshes(cutSolids, meshes, wasCut));
+        const joined = await colorSeparatedExportMeshes(cutSolids, meshes, wasCut);
         // A group showing its parts in their own colours keeps them in 3MF and OBJ (#153).
         const partFaceColors = (mesh: MeshData, sourceIndex: number) => {
           const source = cutSolids[sourceIndex];
@@ -11626,9 +11636,7 @@ export function LayerlingEditor({
           return colors;
         };
         let bytes: Uint8Array;
-        if (format === "stl") {
-          bytes = new Uint8Array(exportMeshesToStl(joined.meshes));
-        } else {
+        {
           const bodies = joined.meshes.map((mesh, index) => ({
             ...mesh,
             ...(format === "3mf" ? { name: cutSolids[joined.quellen[index]]?.name || mesh.name } : {}),
@@ -12132,7 +12140,7 @@ export function LayerlingEditor({
   }, [hasSelection, selectedShapes, shapes]);
 
   /** `chooseFile` asks for a new STL even when the design already has one (Save as). `svgView` picks what an SVG shows (#692). */
-  const exportDesign = useCallback(async (format: DirectExportFormat, exportName: string, chooseFile = false, svgView: SvgExportView = "silhouette", toServer = false, bridges: StencilBridgeOptions | null = null) => {
+  const exportDesign = useCallback(async (format: DirectExportFormat, exportName: string, chooseFile = false, svgView: SvgExportView = "silhouette", toServer = false, bridges: StencilBridgeOptions | null = null, stlQuality?: StlQuality) => {
     const source = exportSource();
     const selectionScoped = source.selection;
     // Ausgeblendetes bleibt draussen, wie bei vergleichbaren Programmen: ein beiseitegelegtes
@@ -12143,8 +12151,8 @@ export function LayerlingEditor({
       setNotice(hiddenNote ? t("status.exportOnlyHidden") : selectionScoped ? t("status.selectSolidBeforeExport") : t("status.addSolidBeforeExport"));
       return;
     }
-    const invalidSvg = exportable.map(invalidSvgMeshReason).find((reason): reason is string => Boolean(reason));
-    if (invalidSvg) {
+    const invalidSvg = format === "stl" ? undefined : exportable.map(invalidSvgMeshReason).find((reason): reason is string => Boolean(reason));
+    if (invalidSvg && format !== "stl") {
       setNotice(t("status.svgInvalid", { reason: invalidSvg }), true);
       return;
     }
@@ -12260,26 +12268,31 @@ export function LayerlingEditor({
       }
     }
     const savedFile = target === "download" ? null : target;
+    if (format === "stl") {
+      try {
+        const result = await exportStlDesignOffThread(sourceShapes, stlQuality);
+        if (target === "download") {
+          await deliver(projectExportFileName(exportName, "stl"), new Blob([result.bytes as BlobPart], { type: "model/stl" }), "model/stl");
+        } else {
+          await writeLylFile(target, result.bytes).catch(() => {
+            forgetStlFile(designId);
+            throw new Error(t("status.exportFileFailed", { name: target.name }));
+          });
+          rememberStlFile(designId, target);
+        }
+        finishNotice("STL", t("status.stlUnverified") + (result.warnings.length ? ` ${result.warnings.join(" ")}` : ""));
+      } catch (error) { failNotice("STL", error); }
+      return;
+    }
+
     void exportBodiesWithLooseHoles(sourceShapes)
       .then(async ({ solids: cutSolids, meshes, cut: wasCut, holeCutsFailed }) => {
         bodiesWritten = cutSolids;
-        const joined = await (format === "stl" ? unionOverlappingExportMeshes(cutSolids, meshes, wasCut) : colorSeparatedExportMeshes(cutSolids, meshes, wasCut));
+        const joined = await colorSeparatedExportMeshes(cutSolids, meshes, wasCut);
         return { ...joined, gescheitert: joined.gescheitert + holeCutsFailed };
       })
       .then(async ({ meshes: fertig, quellen, verschmolzen, gescheitert, splinters }) => {
-        if (format === "stl") {
-          const bytes = new Uint8Array(exportMeshesToStl(fertig));
-          if (target === "download") {
-            await deliver(projectExportFileName(exportName, "stl"), new Blob([bytes], { type: "model/stl" }), "model/stl");
-          } else {
-            await writeLylFile(target, bytes).catch(() => {
-              // Gone, moved or locked: the next STL export asks for a file again.
-              forgetStlFile(designId);
-              throw new Error(t("status.exportFileFailed", { name: target.name }));
-            });
-            rememberStlFile(designId, target);
-          }
-        } else if (format === "3mf") {
+        if (format === "3mf") {
           const bodies = fertig.map((mesh, index) => {
             const source = bodiesWritten[quellen[index]];
             return { ...mesh, name: source?.name || mesh.name, color: source?.color, faceColors: partFaceColors(mesh, quellen[index]) };
@@ -14468,7 +14481,7 @@ export function LayerlingEditor({
           estimateShapes={exportTargetShapes}
           onEstimatePrint={exportSolidVolumeOffThread}
           onClose={() => setTopPanel(null)}
-          onExport={(format, exportName, chooseFile, svgView, toServer, bridges) => void exportDesign(format, exportName, chooseFile, svgView, toServer, bridges)}
+          onExport={(format, exportName, chooseFile, svgView, toServer, bridges, stlQuality) => void exportDesign(format, exportName, chooseFile, svgView, toServer, bridges, stlQuality)}
           onPrecisionDeliver={async(name,bytes,type)=>{await deliverExportFile(name,new Blob([bytes as BlobPart],{type}),type,false);}}
           stlFileName={topPanel === "export" && !workspaceSettings.stlAsDownload ? linkedStlFile(projectId ?? "")?.name ?? null : null}
           onExportLyl={exportLylDesign}

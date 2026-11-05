@@ -1,3 +1,13 @@
+# STL workflow simplification - 2026-11-04
+
+Branch codex/simple-stl-export restores ordinary Standard binary STL without engineering validation. UI/Save as/download/server and local MCP share one worker-backed exporter. Optional High/Ultra/Custom tessellate exact sources. Advanced / Analyze is collapsed; normal export ignores its verdicts. All shells/components/source facets retained; warnings never initiate repair. Evidence: docs/desktop/SIMPLE_STL_EXPORT.md.
+
+Validation: TypeScript passed; 3557 unit passes (7 existing skips); 10 export regression passes (1 opt-in density benchmark skipped); 4 extended ordinary passes; actual browser picker-handle/download/MCP acceptance passes, zero renderer errors. Existing .21 installer/runtime/rollbacks and projects preserved. No FEM or installer work touched.
+
+NEXT_ACTION: No further source work required. If a packaged rollout is requested, assign its version and build separately from preserved .21 artifacts; the original .21 installer does not contain this follow-up.
+
+## Historical release record
+
 # Final .21 release checkpoint — 2026-11-03
 
 Final runtime: 910b1b92f81608f179737eb34c4459c537d7556b; branch codex/image-relief-21; release tag checkpoint-ultimate21-release. This record supersedes the historical next actions below. No feature development or optional GPU work remains authorized in this final verification task.

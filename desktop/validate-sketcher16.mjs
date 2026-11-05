@@ -638,6 +638,8 @@ async function verifyImageRelief() {
     });
     for(const format of ["stl","3mf"]){
       if(format==="stl") await page.keyboard.press("Control+e");
+      const advanced = page.getByText("Advanced / Analyze (optional)", {exact:true});
+      if (await advanced.evaluate(el => !el.parentElement.open)) await advanced.click();
       const studio=page.getByRole("region",{name:"Precision Mesh Studio"});
       await studio.waitFor();
       await page.getByRole("radio",{name:new RegExp("^"+format.toUpperCase()+":")}).click();

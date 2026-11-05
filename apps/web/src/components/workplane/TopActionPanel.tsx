@@ -16,6 +16,8 @@ import { lylFileAccessSupported } from "@/lib/lylFileAccess";
 import { hasOwnShapeName } from "@/lib/shapeCatalog";
 import type { ProjectAttachment, WorkplaneShape } from "@/types/layerling";
 import { type ExportSolidVolume, PRINT_MATERIAL_STORAGE_KEY, PRINT_INFILL_STORAGE_KEY, PRINT_WALLS_STORAGE_KEY, formatEstimateNumber } from "@/lib/editorBooleans";
+import { StlQualityControls } from "./StlQualityControls";
+import { DEFAULT_STL_QUALITY, type StlQuality } from "@/lib/stlQuality";
 import { PrecisionMeshStudio } from "./PrecisionMeshStudio";
 
 
@@ -80,7 +82,7 @@ export function TopActionPanel({
   estimateShapes: readonly WorkplaneShape[];
   onEstimatePrint: (shapes: readonly WorkplaneShape[]) => Promise<ExportSolidVolume>;
   onClose: () => void;
-  onExport: (format: DirectExportFormat, exportName: string, chooseFile?: boolean, svgView?: SvgExportView, toServer?: boolean, bridges?: StencilBridgeOptions | null) => void;
+  onExport: (format: DirectExportFormat, exportName: string, chooseFile?: boolean, svgView?: SvgExportView, toServer?: boolean, bridges?: StencilBridgeOptions | null, stlQuality?: StlQuality) => void;
   onPrecisionDeliver?: (name:string,bytes:Uint8Array,type:string)=>Promise<void>;
   /** The STL file this design exports into, once one was chosen (Chrome and Edge). */
   stlFileName?: string | null;
@@ -112,6 +114,7 @@ export function TopActionPanel({
   // The width a picture or an SVG comes in at; empty keeps its own size, and it counts for the next import only.
   const [svgWidthText, setSvgWidthText] = useState(() => { const width = readImportSvgWidth(); return width ? String(width) : ""; });
   const [exportFormat, setExportFormat] = useState<ExportFormat>("stl");
+  const [stlQuality, setStlQuality] = useState<StlQuality>(DEFAULT_STL_QUALITY);
   const [drawingFormat, setDrawingFormat] = useState<"svg" | "pdf">("pdf");
   const [svgView, setSvgView] = useState<SvgExportView>("silhouette");
   const [dxfView, setDxfView] = useState<DxfExportView>("silhouette");
@@ -284,7 +287,7 @@ export function TopActionPanel({
       const view = exportFormat === "dxf" ? dxfView : svgView;
       // Bridges go into a cut outline: the DXF, or the SVG's silhouette.
       const withBridges = bridgesOn && (exportFormat === "dxf" || (exportFormat === "svg" && svgView === "silhouette"));
-      onExport(exportFormat, exportName, false, view, toServer, withBridges ? bridges : null);
+      onExport(exportFormat, exportName, false, view, toServer, withBridges ? bridges : null, stlQuality);
     }
   };
 
@@ -629,8 +632,9 @@ export function TopActionPanel({
             <p>{selectedExport.note}</p>
           </div>
 
-          {onPrecisionDeliver&&(exportFormat==="stl"||exportFormat==="3mf")?<PrecisionMeshStudio shapes={estimateShapes} format={exportFormat} name={exportName} onDeliver={onPrecisionDeliver}/>:null}
-          <footer className="export-dialog-footer" hidden={Boolean(onPrecisionDeliver&&(exportFormat==="stl"||exportFormat==="3mf"))}>
+          {exportFormat === "stl" ? <StlQualityControls value={stlQuality} onChange={setStlQuality}/> : null}
+          {onPrecisionDeliver&&(exportFormat==="stl"||exportFormat==="3mf")?<details><summary>{t("export.advancedAnalyze")}</summary><PrecisionMeshStudio shapes={estimateShapes} format={exportFormat} name={exportName} onDeliver={onPrecisionDeliver}/></details>:null}
+          <footer className="export-dialog-footer">
             {exportFormat === "stl" && stlFileName ? (
               stlNameAsksForNewFile(exportName, projectName, stlFileName)
                 ? <span className="export-linked-file" title={exportName}>{t("export.stlNewFile", { name: projectExportFileName(exportName.trim().replace(/\.stl$/i, ""), "stl") })}</span>
@@ -638,7 +642,7 @@ export function TopActionPanel({
             ) : null}
             <div>
               {exportFormat === "stl" && stlFileName ? (
-                <button className="export-shared-button" type="button" onClick={() => onExport("stl", exportName, true)} disabled={shapeCount === 0}>
+                <button className="export-shared-button" type="button" onClick={() => onExport("stl", exportName, true, undefined, false, null, stlQuality)} disabled={shapeCount === 0}>
                   <span>{t("export.stlSaveAs")}</span>
                 </button>
               ) : null}

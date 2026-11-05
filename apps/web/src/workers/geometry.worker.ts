@@ -34,7 +34,11 @@ self.onmessage = async (event: MessageEvent<GeometryWorkerRequest>) => {
     const received = new Map<unknown[], number>();
     const args = unpackValue(request.payload, request.buffers, [], received);
     let result: unknown;
-    if (request.task === "group") {
+    if (request.task === "exportStl") {
+      const { shapes, quality } = args as { shapes: WorkplaneShape[]; quality: import("@/lib/stlQuality").StlQuality };
+      const { exportStlDesign } = await import("@/lib/stlDesignExport");
+      result = await exportStlDesign(shapes, quality);
+    } else if (request.task === "group") {
       const { selected, triangleLimit } = args as { selected: WorkplaneShape[]; triangleLimit: number };
       result = await buildGroupedShapeFromSelection(selected, triangleLimit);
     } else if (request.task === "intersection") {
@@ -68,6 +72,7 @@ self.onmessage = async (event: MessageEvent<GeometryWorkerRequest>) => {
     const packed = packValue(result, received);
     // The view's geometry of what was made, so the page does not work it out after the answer.
     const transfer: Transferable[] = packedTransfer(packed);
+    if (request.task === "exportStl") transfer.push((result as { bytes: Uint8Array }).bytes.buffer as ArrayBuffer);
     const displays = resultMeshes(request.task, result).map((mesh) => {
       if (!mesh || mesh.positions.length < 9) return null;
       const prepared = prepareImportedMeshDisplay(mesh);

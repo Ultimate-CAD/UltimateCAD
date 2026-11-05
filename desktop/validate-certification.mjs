@@ -102,6 +102,8 @@ async function selectedSnapshot(id) {
 async function openStudio() {
   if (!(await page.getByRole("region", { name: "Precision Mesh Studio" }).count()))
     await page.keyboard.press("Control+e");
+  const advanced = page.getByText("Advanced / Analyze (optional)", {exact:true});
+  if (await advanced.evaluate(el => !el.parentElement.open)) await advanced.click();
   await page.getByRole("region", { name: "Precision Mesh Studio" }).waitFor();
 }
 

@@ -619,6 +619,8 @@ try {
   pass("Distinct-project LYL save and reopen preserve finished mesh and identity");
   await command("select_objects",{ids:[sourceObject.id]});
   await page.keyboard.press("Control+e");
+  const advanced = page.getByText("Advanced / Analyze (optional)", {exact:true});
+  if (await advanced.evaluate(el => !el.parentElement.open)) await advanced.click();
   const studio=page.getByRole("region",{name:"Precision Mesh Studio"}); await studio.waitFor();
   await studio.getByRole("button",{name:"Generate export preview",exact:true}).click();
   await page.waitForFunction(()=>{

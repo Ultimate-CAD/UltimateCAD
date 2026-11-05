@@ -31,13 +31,15 @@ function writePoint(view: DataView, offset: number, point: MeshPoint) {
   return offset + 12;
 }
 
-export function exportMeshesToStl(meshes: readonly StlExportMesh[]): ArrayBuffer {
+export function exportMeshesToStl(meshes: readonly StlExportMesh[], options: { preserveFacets?: boolean; unverified?: boolean } = {}): ArrayBuffer {
   // OCCT can emit collapsed seam facets. Also a nonzero double-precision
   // triangle can collapse when encoded as STL float32. Such facets add zero
   // material but make an otherwise closed surface look non-manifold.
   const printable = meshes.map(mesh => ({ ...mesh, faces: mesh.faces.filter(([ai, bi, ci]) => {
+    if (![ai,bi,ci].every(i => Number.isInteger(i) && i >= 0 && i < mesh.vertices.length)) throw new Error("STL export contains invalid face indices");
     const [a,b,c] = [ai,bi,ci].map(index => mesh.vertices[index].map(Math.fround));
     if (![...a,...b,...c].every(Number.isFinite)) throw new Error("STL export contains non-finite coordinates");
+    if (options.preserveFacets) return true;
     const ux=b[0]-a[0], uy=b[1]-a[1], uz=b[2]-a[2];
     const vx=c[0]-a[0], vy=c[1]-a[1], vz=c[2]-a[2];
     return uy*vz-uz*vy !== 0 || uz*vx-ux*vz !== 0 || ux*vy-uy*vx !== 0;
@@ -49,7 +51,7 @@ export function exportMeshesToStl(meshes: readonly StlExportMesh[]): ArrayBuffer
 
   const buffer = new ArrayBuffer(STL_PREFIX_BYTES + triangleCount * STL_TRIANGLE_BYTES);
   const bytes = new Uint8Array(buffer);
-  const header = new TextEncoder().encode("Binary STL (Z-up coordinates)");
+  const header = new TextEncoder().encode(options.unverified ? "Binary STL - UNVERIFIED (Z-up coordinates, millimeters)" : "Binary STL (Z-up coordinates)");
   bytes.set(header.subarray(0, STL_HEADER_BYTES));
 
   const view = new DataView(buffer);

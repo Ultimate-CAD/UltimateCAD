@@ -1,3 +1,4 @@
+import { STL_QUALITY_PRESETS } from "@/lib/stlQuality";
 import type { StlExportMesh } from "@/lib/stlExport";
 import { indexManufacturingMesh } from "@/lib/manufacturingMesh";
 
@@ -16,9 +17,9 @@ export type PrecisionSettings = {
   selfIntersections: boolean;
 };
 export const PRECISION_PRESETS = {
-  standard: { deviationMm: 0.1, angleDeg: 15, maxEdgeMm: 0, aspectTarget: 10 },
-  high: { deviationMm: 0.025, angleDeg: 8, maxEdgeMm: 0, aspectTarget: 8 },
-  ultra: { deviationMm: 0.005, angleDeg: 7.5, maxEdgeMm: 0, aspectTarget: 6 },
+  standard: { ...STL_QUALITY_PRESETS.standard, maxEdgeMm: 0, aspectTarget: 10 },
+  high: { ...STL_QUALITY_PRESETS.high, maxEdgeMm: 0, aspectTarget: 8 },
+  ultra: { ...STL_QUALITY_PRESETS.ultra, maxEdgeMm: 0, aspectTarget: 6 },
 };
 export const DEFAULT_PRECISION: PrecisionSettings = {
   preset: "high",

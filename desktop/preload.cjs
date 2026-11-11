@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('layerlingGeometry',{
 });
 
 contextBridge.exposeInMainWorld('layerlingFem',{
+ getGmshStatus:()=>ipcRenderer.invoke('fem:gmsh-status'),
+ chooseGmsh:()=>ipcRenderer.invoke('fem:gmsh-choose'),
  run:(id,request)=>ipcRenderer.invoke('fem:run',id,request),
  cancel:id=>ipcRenderer.send('fem:cancel',id),
  onProgress:(id,callback)=>{const listener=(_event,job,text)=>{if(job===id)callback(text);};ipcRenderer.on('fem:progress',listener);return ()=>ipcRenderer.removeListener('fem:progress',listener);}

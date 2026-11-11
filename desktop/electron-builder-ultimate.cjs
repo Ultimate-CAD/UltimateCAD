@@ -8,10 +8,16 @@ module.exports = {
     const fs = require('node:fs'), path = require('node:path');
     fs.cpSync(path.resolve('dist/ultimate-stage/runtime'), path.join(context.appOutDir, 'resources/runtime'), { recursive: true });
     fs.cpSync(path.resolve('dist/ultimate-engine'), path.join(context.appOutDir, 'resources/openscad'), { recursive: true });
-    fs.cpSync(path.resolve('dist/ultimate-fem'), path.join(context.appOutDir, 'resources/fem'), { recursive: true });
+    const femOut=path.join(context.appOutDir,'resources/fem');
+    fs.mkdirSync(femOut,{recursive:true});
+    for(const name of ['ccx.exe','libgcc_s_seh-1.dll','libgfortran-3.dll','libgomp-1.dll','libquadmath-0.dll','libstdc++-6.dll','libwinpthread-1.dll','pthreadGC2.dll']){
+      const source=path.resolve('dist/ultimate-fem',name);
+      if(fs.existsSync(source))fs.copyFileSync(source,path.join(femOut,name));
+    }
     fs.cpSync(path.resolve('dist/ultimate-native'), path.join(context.appOutDir, 'resources/geometry'), { recursive: true });
   },
   extraResources: [
+    { from: 'THIRD_PARTY_NOTICES.md', to: 'THIRD_PARTY_NOTICES.md' },
     { from: publicAsset(brand.icon), to: 'icon.png' },
     { from: 'dist/ultimate/windows/legal', to: 'legal' },
     { from: 'dist/ultimate/windows/sources', to: 'sources' },

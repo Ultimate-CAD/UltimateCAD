@@ -12,6 +12,21 @@ export async function femFingerprint(shape:WorkplaneShape){
  const hash=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(geometry)));
  return [...new Uint8Array(hash)].map(n=>n.toString(16).padStart(2,"0")).join("");
 }
+type GmshConfigStatus = {
+ ok: boolean;
+ configured?: boolean;
+ exists?: boolean;
+ path?: string;
+ mode?: string;
+ cancelled?: boolean;
+ version?: string;
+ message?: string;
+};
+
+type ConfigurableFemBridge = FemBridge & {
+ getGmshStatus?: () => Promise<GmshConfigStatus>;
+ chooseGmsh?: () => Promise<GmshConfigStatus>;
+};
 export function FemWorkbench({shapes,selected,onSave,onClose}:{shapes:WorkplaneShape[];selected?:string;onSave:(id:string,study:FemStudy)=>void;onClose:()=>void}){
  const bodies=shapes.filter(s=>!isNonSolidShape(s));
  const [id,setId]=useState(selected??bodies[0]?.id??"");
@@ -20,12 +35,47 @@ export function FemWorkbench({shapes,selected,onSave,onClose}:{shapes:WorkplaneS
  const [study,setStudy]=useState<FemStudy|undefined>(shape?.femStudy),[message,setMessage]=useState(""),[running,setRunning]=useState(false),[stale,setStale]=useState(false);
  const [scale,setScale]=useState(1),[field,setField]=useState<"stress"|"displacement">("stress");
  const active=useRef<{id:string;bridge:FemBridge;aborted:boolean}|null>(null);
+ const [gmshStatus,setGmshStatus]=useState<GmshConfigStatus|null>(null);
+ const [choosingGmsh,setChoosingGmsh]=useState(false);
  useEffect(()=>{
   setStudy(shape?.femStudy);
   if(shape?.femStudy)setSettings(structuredClone(shape.femStudy.settings));
  },[id,shape?.femStudy]);
  useEffect(()=>{let live=true;if(shape&&study)void femFingerprint(shape).then(fp=>{if(live)setStale(fp!==study.sourceFingerprint);});return()=>{live=false;};},[shape,study]);
  useEffect(()=>()=>{if(active.current){active.current.aborted=true;active.current.bridge.cancel(active.current.id);}},[]);
+ useEffect(()=>{
+  const bridge=(window as unknown as {layerlingFem?:ConfigurableFemBridge}).layerlingFem;
+  if(!bridge?.getGmshStatus)return;
+  let live=true;
+  void bridge.getGmshStatus()
+   .then(status=>{if(live)setGmshStatus(status);})
+   .catch(error=>{
+    if(live)setGmshStatus({ok:false,exists:false,message:String(error)});
+   });
+  return()=>{live=false;};
+ },[]);
+
+ async function chooseGmsh(){
+  const bridge=(window as unknown as {layerlingFem?:ConfigurableFemBridge}).layerlingFem;
+  if(!bridge?.chooseGmsh||!bridge?.getGmshStatus){
+   setMessage("Gmsh configuration requires the Windows desktop application");
+   return;
+  }
+  setChoosingGmsh(true);
+  try{
+   const selected=await bridge.chooseGmsh();
+   if(selected.cancelled)return;
+   if(!selected.ok)throw Error(selected.message??"Gmsh selection failed");
+   const status=await bridge.getGmshStatus();
+   setGmshStatus(status);
+   if(!status.ok||!status.exists)throw Error("Configured Gmsh is unavailable");
+   setMessage("Gmsh "+(selected.version??"4.15.2")+" configured successfully");
+  }catch(error){
+   setMessage(error instanceof Error?error.message:String(error));
+  }finally{
+   setChoosingGmsh(false);
+  }
+ }
  async function run(){
   if(!shape)return;
   const bridge=(window as unknown as {layerlingFem?:FemBridge}).layerlingFem;
@@ -51,7 +101,24 @@ export function FemWorkbench({shapes,selected,onSave,onClose}:{shapes:WorkplaneS
  const number=(label:string,value:number,change:(v:number)=>void)=><label>{label}<MeasurementInput aria-label={label} step="any" value={value} onValueChange={change}/></label>;
  return <section className="constraint-sketch-workbench" aria-label="Structural analysis">
   <header><strong>Structural analysis</strong><button aria-label="Close analysis" onClick={onClose}>×</button></header>
-  <fieldset disabled={running}>
+  <p>External CalculiX / CCX solver <small>(Experimental)</small></p>
+  {gmshStatus&&<div role="group" aria-label="Gmsh configuration">
+   <p>
+    <strong>Gmsh: </strong>
+    {gmshStatus.exists
+     ? gmshStatus.mode==="external"
+       ? "External executable available"
+       : "Bundled executable available"
+     : "Executable not found"}
+   </p>
+   <button
+    type="button"
+    disabled={running||choosingGmsh}
+    onClick={()=>void chooseGmsh()}>
+    {choosingGmsh?"Validating Gmsh...":"Browse for gmsh.exe"}
+   </button>
+   <a href="https://gmsh.info/" target="_blank" rel="noreferrer">Download official Gmsh 4.15.2</a>
+  </div>}  <fieldset disabled={running}>
    <label>Body <select aria-label="Analysis body" value={id} onChange={e=>setId(e.target.value)}>{bodies.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
    <p>Linear elastic isotropic material. Analysis axes follow the exported CAD Z-up frame. Fix one outer planar end and apply a uniform traction on the opposite outer planar end. Mesh and solve use SI meters, newtons and pascals.</p>
    {number("Young modulus (GPa)",settings.young/1e9,v=>setSettings({...settings,young:v*1e9}))}
@@ -60,7 +127,7 @@ export function FemWorkbench({shapes,selected,onSave,onClose}:{shapes:WorkplaneS
    <label>End axis <select aria-label="End axis" value={settings.axis} onChange={e=>setSettings({...settings,axis:Number(e.target.value)})}>{["X","Y","Z"].map((a,i)=><option key={a} value={i}>{a}</option>)}</select></label>
    <label><input type="checkbox" checked={settings.supportMax} onChange={e=>setSettings({...settings,supportMax:e.target.checked})}/>Fix maximum end</label>
    {settings.force.map((f,i)=>number("Force "+["X","Y","Z"][i]+" (N)",f,v=>{const force=[...settings.force] as [number,number,number];force[i]=v;setSettings({...settings,force});}))}
-   <button onClick={()=>void run()}>Mesh and solve</button>
+   <button disabled={gmshStatus!==null&&!gmshStatus.exists} onClick={()=>void run()}>Mesh and solve</button>
   </fieldset>
   {running&&<button onClick={()=>{if(active.current){active.current.aborted=true;active.current.bridge.cancel(active.current.id);}setMessage("Cancelling analysis");}}>Cancel analysis</button>}
   <p role="status">{message}</p>

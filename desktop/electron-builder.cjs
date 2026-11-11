@@ -3,7 +3,7 @@ module.exports = {
   appId: 'org.layerling.desktop', productName: brand.name,
   executableName: 'Layerling Desktop',
   directories: { app: 'dist/desktop-stage/app', output: 'dist/windows' },
-  files: ['main.cjs', 'server.cjs', 'preload.cjs', 'fem-*.cjs', 'branding.json', 'mcp-client.mjs', 'native-geometry*.cjs', 'mcp/**/*', 'package.json', '!node_modules/**/*'], asar: true, npmRebuild: false,
+  files: ['main.cjs', 'server.cjs', 'preload.cjs', 'fem-*.cjs', 'gmsh-executable.cjs', 'branding.json', 'mcp-client.mjs', 'native-geometry*.cjs', 'mcp/**/*', 'package.json', '!node_modules/**/*'], asar: true, npmRebuild: false,
   // Builder's dependency collector omits node_modules inside extraResources. Copy the
   // complete Next traced tree verbatim after packing, including its runtime dependencies.
   afterPack: async context => {

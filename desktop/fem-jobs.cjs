@@ -1,7 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
 const {parseMesh,prepareDeck,parseResults}=require('./fem-deck.cjs');
 class FemJobs {
- constructor(runtime,root){this.runtime=runtime;this.root=root;this.jobs=new Map();}
+ constructor(runtime,root,options={}){this.runtime=runtime;this.root=root;this.jobs=new Map();this.gmshExecutable=options.gmshExecutable??null;}
  cancel(id){const job=this.jobs.get(id);if(job){job.cancelled=true;job.child?.kill();}}
  cancelAll(){for(const id of this.jobs.keys())this.cancel(id);}
  async run(id,request,progress=()=>{}){
@@ -16,7 +16,7 @@ class FemJobs {
   const run=(exe,args)=>new Promise((resolve,reject)=>{
     if(job.cancelled)return reject(Error('Analysis cancelled'));
     let log='';
-    const child=spawn(path.join(this.runtime,exe),args,{cwd:dir,windowsHide:true,env:{SystemRoot:process.env.SystemRoot,PATH:path.join(process.env.SystemRoot,'System32'),OMP_NUM_THREADS:'4'}});
+    const child=spawn(exe==='gmsh.exe'?this.gmshExecutable:path.join(this.runtime,exe),args,{cwd:dir,windowsHide:true,env:{SystemRoot:process.env.SystemRoot,PATH:path.join(process.env.SystemRoot,'System32'),OMP_NUM_THREADS:'4'}});
     job.child=child;
     const timer=setTimeout(()=>{job.cancelled=true;child.kill();},600000);
     const data=b=>{const text=b.toString();log=(log+text).slice(-200000);progress(text.slice(-2000));};
@@ -29,6 +29,9 @@ class FemJobs {
     });
   });
   try{
+    const verified=await require('./gmsh-executable.cjs').verifyGmsh(this.gmshExecutable);
+    if(job.cancelled)throw Error('Analysis cancelled');
+    this.gmshExecutable=verified.path;
     await fs.promises.mkdir(this.root,{recursive:true});
     dir=await fs.promises.mkdtemp(path.join(this.root,'study-'));
     await fs.promises.writeFile(path.join(dir,'model.step'),request.step);

@@ -71,7 +71,84 @@ async function start() {
     ipcMain.handle('geometry:run',async(event,id,bytes)=>{trusted(event);try{return {ok:true,...await geometryJobs.run(id,bytes,text=>{if(!event.sender.isDestroyed())event.sender.send('geometry:progress',id,text);})};}catch(error){return {ok:false,message:error.message,code:error.code};}});
     ipcMain.on('geometry:cancel',(event,id)=>{try{trusted(event);geometryJobs.cancel(id);}catch{ /* Ignore frames that do not own the editor. */ }});
     const {FemJobs}=require('./fem-jobs.cjs');
-    femJobs=new FemJobs(path.join(resources,'fem'),path.join(profile,'fem-jobs'));
+    const savedGmsh = readJson('fem-gmsh.json', {});
+const configuredGmsh =
+  typeof savedGmsh.gmshExecutable === 'string' &&
+  path.isAbsolute(savedGmsh.gmshExecutable) &&
+  path.basename(savedGmsh.gmshExecutable).toLowerCase() === 'gmsh.exe'
+    ? savedGmsh.gmshExecutable
+    : undefined;
+
+femJobs = new FemJobs(
+  path.join(resources, 'fem'),
+  path.join(profile, 'fem-jobs'),
+  { gmshExecutable: configuredGmsh ?? null }
+);
+
+ipcMain.handle('fem:gmsh-status', async event => {
+  trusted(event);
+  let executable = femJobs.gmshExecutable;
+  return {
+    ok: true,
+    configured: Boolean(executable),
+    exists: await require('./gmsh-executable.cjs').verifyGmsh(executable).then(()=>true,()=>false),
+    path: executable,
+    mode: 'external'
+  };
+});
+
+ipcMain.handle('fem:gmsh-choose', async event => {
+  trusted(event);
+
+  if (femJobs.jobs.size) {
+    return { ok: false, message: 'Finish or cancel the current FEM study first.' };
+  }
+
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(window, {
+    title: 'Select Gmsh 4.15.2 executable',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Windows executables', extensions: ['exe'] }
+    ]
+  });
+
+  if (result.canceled || !result.filePaths.length) {
+    return { ok: true, cancelled: true };
+  }
+
+  try {
+    const selected = result.filePaths[0];
+    const executable = fs.realpathSync(selected);
+
+    if (path.basename(executable).toLowerCase() !== 'gmsh.exe' ||
+        !fs.statSync(executable).isFile()) {
+      return { ok: false, message: 'Select the official gmsh.exe executable.' };
+    }
+
+    const verified = await require('./gmsh-executable.cjs').verifyGmsh(executable);
+    if (femJobs.jobs.size) return { ok: false, message: 'Finish or cancel the current FEM study first.' };
+    writeJson('fem-gmsh.json', {
+      gmshExecutable: executable,
+      version: verified.version
+    });
+
+    femJobs.gmshExecutable = executable;
+
+    return {
+      ok: true,
+      configured: true,
+      path: executable,
+      version: verified.version
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Could not validate Gmsh: ${error.message}`
+    };
+  }
+});
+
     ipcMain.handle('fem:run',async(event,id,request)=>{trusted(event);try{return {ok:true,result:await femJobs.run(id,request,text=>{if(!event.sender.isDestroyed())event.sender.send('fem:progress',id,text);})};}catch(error){return {ok:false,message:error.message};}});
     ipcMain.on('fem:cancel',(event,id)=>{try{trusted(event);femJobs.cancel(id);}catch{}});
 
